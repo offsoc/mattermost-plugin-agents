@@ -11,36 +11,38 @@ import (
 	"github.com/mattermost/mattermost/server/public/shared/mlog"
 )
 
-// TokenAuthenticationProvider provides authentication using tokens (PAT or OAuth)
+// AuthenticationProvider handles authentication for MCP requests
+type AuthenticationProvider interface {
+	// ValidateAuth validates authentication from context and returns user ID
+	ValidateAuth(ctx context.Context) (string, error)
+
+	// GetAuthenticatedMattermostClient returns an authenticated Mattermost client
+	GetAuthenticatedMattermostClient(ctx context.Context) (*model.Client4, error)
+}
+
+// TokenAuthenticationProvider provides PAT token authentication for STDIO transport
 type TokenAuthenticationProvider struct {
-	serverURL    string
-	defaultToken string // For stdio mode
-	logger       mlog.LoggerIFace
+	serverURL string
+	token     string
+	logger    mlog.LoggerIFace
 }
 
-// NewTokenAuthenticationProvider creates a new token authentication provider
-func NewTokenAuthenticationProvider(serverURL, defaultToken string, logger mlog.LoggerIFace) *TokenAuthenticationProvider {
+// NewTokenAuthenticationProvider creates a new PAT token authentication provider for STDIO transport
+func NewTokenAuthenticationProvider(serverURL, token string, logger mlog.LoggerIFace) *TokenAuthenticationProvider {
 	return &TokenAuthenticationProvider{
-		serverURL:    serverURL,
-		defaultToken: defaultToken,
-		logger:       logger,
+		serverURL: serverURL,
+		token:     token,
+		logger:    logger,
 	}
 }
 
-// ValidateAuth validates a token and returns the associated user ID
-func (p *TokenAuthenticationProvider) ValidateAuth(ctx context.Context, token string) (string, error) {
-	// Use default token if none provided (for stdio mode)
-	if token == "" {
-		token = p.defaultToken
+// ValidateAuth validates authentication and returns user ID
+func (p *TokenAuthenticationProvider) ValidateAuth(ctx context.Context) (string, error) {
+	// Get authenticated client (reuses the authentication logic)
+	client, err := p.GetAuthenticatedMattermostClient(ctx)
+	if err != nil {
+		return "", err
 	}
-
-	if token == "" {
-		return "", fmt.Errorf("no authentication token provided")
-	}
-
-	// Create client and validate token once
-	client := model.NewAPIv4Client(p.serverURL)
-	client.SetToken(token)
 
 	// Get current user to validate token
 	user, _, err := client.GetMe(ctx, "")
@@ -54,22 +56,16 @@ func (p *TokenAuthenticationProvider) ValidateAuth(ctx context.Context, token st
 	return user.Id, nil
 }
 
-// GetMattermostClient returns an authenticated Mattermost client for a user
-func (p *TokenAuthenticationProvider) GetMattermostClient(ctx context.Context, userID string, token string) (*model.Client4, error) {
-	// Use default token if none provided (for stdio mode)
-	if token == "" {
-		token = p.defaultToken
+// GetAuthenticatedMattermostClient returns an authenticated Mattermost client
+func (p *TokenAuthenticationProvider) GetAuthenticatedMattermostClient(ctx context.Context) (*model.Client4, error) {
+	if p.token == "" {
+		return nil, fmt.Errorf("no authentication token available")
 	}
 
-	if token == "" {
-		return nil, fmt.Errorf("no authentication token provided")
-	}
-
-	// Create a fresh client for each request - no caching
+	// Create client with configured token
 	client := model.NewAPIv4Client(p.serverURL)
-	client.SetToken(token)
+	client.SetToken(p.token)
 
-	// For standalone mode, return the client4 directly - no wrapper needed!
 	return client, nil
 }
 
@@ -95,14 +91,14 @@ func NewOAuthAuthenticationProvider(clientID, clientSecret, redirectURL, serverU
 	}
 }
 
-// ValidateAuth validates OAuth token and returns user ID
+// ValidateAuth validates OAuth authentication from context and returns user ID
 // TODO: Implement when HTTP transport is added
-func (p *OAuthAuthenticationProvider) ValidateAuth(ctx context.Context, token string) (string, error) {
+func (p *OAuthAuthenticationProvider) ValidateAuth(ctx context.Context) (string, error) {
 	return "", fmt.Errorf("OAuth authentication not yet implemented")
 }
 
-// GetMattermostClient returns an OAuth-authenticated Mattermost client
+// GetAuthenticatedMattermostClient returns an OAuth-authenticated Mattermost client
 // TODO: Implement when HTTP transport is added
-func (p *OAuthAuthenticationProvider) GetMattermostClient(ctx context.Context, userID string, token string) (*model.Client4, error) {
+func (p *OAuthAuthenticationProvider) GetAuthenticatedMattermostClient(ctx context.Context) (*model.Client4, error) {
 	return nil, fmt.Errorf("OAuth authentication not yet implemented")
 }

@@ -5,14 +5,21 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
-	"os"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
-	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/shared/mlog"
+)
+
+// Option defines a function that configures a MattermostMCPServer
+type Option func(*MattermostMCPServer) error
+
+const (
+	defaultTimeout = 30 * time.Second
 )
 
 // MattermostMCPServer provides a high-level interface for creating an MCP server
@@ -20,34 +27,59 @@ import (
 type MattermostMCPServer struct {
 	mcpServer    *server.MCPServer
 	authProvider AuthenticationProvider
-	logger       mlog.LoggerIFace
+	logger       *mlog.Logger
 	config       Config
 }
 
-// NewMattermostMCPServer creates a new Mattermost MCP server with the specified configuration
-func NewMattermostMCPServer(config Config, authProvider AuthenticationProvider, logger mlog.LoggerIFace) (*MattermostMCPServer, error) {
-	// Create the mcp-go server directly
-	mcpServer := server.NewMCPServer(
-		"mattermost-mcp-server",
-		"0.1.0",
-		server.WithToolCapabilities(true), // Enable tool list changed notifications
-		server.WithLogging(),              // Enable logging capabilities
-	)
-
-	mattermostServer := &MattermostMCPServer{
-		mcpServer:    mcpServer,
-		authProvider: authProvider,
-		logger:       logger,
-		config:       config,
+// NewMattermostStdioMCPServer creates a new Mattermost MCP server using STDIO transport with Personal Access Token authentication
+func NewMattermostStdioMCPServer(serverURL, token string, opts ...Option) (*MattermostMCPServer, error) {
+	// Validate required parameters
+	if serverURL == "" {
+		return nil, fmt.Errorf("server URL cannot be empty")
+	}
+	if token == "" {
+		return nil, fmt.Errorf("personal access token cannot be empty")
 	}
 
-	// For standalone mode (stdio with PAT), validate token at startup
-	if config.Transport == "stdio" {
-		ctx := context.Background()
-		_, err := authProvider.ValidateAuth(ctx, config.PersonalAccessToken)
-		if err != nil {
-			return nil, fmt.Errorf("startup token validation failed: %w", err)
+	// Create default logger with reasonable configuration
+	defaultLogger, err := createDefaultLogger()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create default logger: %w", err)
+	}
+
+	// Initialize server with defaults
+	mattermostServer := &MattermostMCPServer{
+		logger: defaultLogger,
+		config: Config{
+			ServerURL:           serverURL,
+			PersonalAccessToken: token,
+			RequestTimeout:      defaultTimeout,
+			Transport:           "stdio", // Always STDIO for this constructor
+			DevMode:             false,
+		},
+	}
+
+	// Apply all options
+	for _, opt := range opts {
+		if err := opt(mattermostServer); err != nil {
+			return nil, fmt.Errorf("failed to apply option: %w", err)
 		}
+	}
+
+	// Create PAT authentication provider (after options are applied so it uses the correct logger)
+	mattermostServer.authProvider = NewTokenAuthenticationProvider(serverURL, token, mattermostServer.logger)
+
+	// Create the mcp-go server
+	mattermostServer.mcpServer = server.NewMCPServer(
+		"mattermost-mcp-server",
+		"0.1.0",
+		server.WithToolCapabilities(false),
+		server.WithLogging(), // Enable logging capabilities
+	)
+
+	// For STDIO transport, always validate token at startup
+	if _, err := mattermostServer.authProvider.ValidateAuth(context.Background()); err != nil {
+		return nil, fmt.Errorf("startup token validation failed: %w", err)
 	}
 
 	// Register all Mattermost tools
@@ -59,7 +91,7 @@ func NewMattermostMCPServer(config Config, authProvider AuthenticationProvider, 
 // Serve starts the server using the configured transport
 func (s *MattermostMCPServer) Serve() error {
 	switch s.config.Transport {
-	case "stdio", "": // default to stdio for backward compatibility
+	case "stdio":
 		return s.serveStdio()
 	case "http":
 		return s.serveHTTP()
@@ -70,14 +102,8 @@ func (s *MattermostMCPServer) Serve() error {
 
 // serveStdio starts the server using stdio transport
 func (s *MattermostMCPServer) serveStdio() error {
-	// Configure error logger to use our mlog logger if available
-	var errorLogger *log.Logger
-	if s.logger != nil {
-		// Create a custom writer that forwards to mlog
-		errorLogger = log.New(&mlogWriter{logger: s.logger}, "", 0)
-	} else {
-		errorLogger = log.New(os.Stderr, "", log.LstdFlags)
-	}
+	// Configure error logger to use our mlog logger
+	errorLogger := log.New(&mlogWriter{logger: s.logger}, "", 0)
 
 	return server.ServeStdio(s.mcpServer, server.WithErrorLogger(errorLogger))
 }
@@ -247,8 +273,12 @@ func (s *MattermostMCPServer) registerDevTools() {
 
 func (s *MattermostMCPServer) createToolHandler(toolName string) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		// Get authenticated client
-		client, _, err := s.getAuthenticatedClient(ctx)
+		// Apply configured timeout to the context
+		ctx, cancel := context.WithTimeout(ctx, s.config.RequestTimeout)
+		defer cancel()
+
+		// Get authenticated client (timeout is already applied in base context)
+		client, err := s.authProvider.GetAuthenticatedMattermostClient(ctx)
 		if err != nil {
 			s.logger.Debug("Tool call failed",
 				mlog.String("tool", toolName),
@@ -264,9 +294,6 @@ func (s *MattermostMCPServer) createToolHandler(toolName string) func(context.Co
 			}, nil
 		}
 
-		// No need for user context - Mattermost gets userID from session
-		ctxWithUser := ctx
-
 		// Use our existing tool provider to execute the tool
 		toolProvider := NewMattermostToolProvider(s.authProvider, s.logger)
 
@@ -277,25 +304,25 @@ func (s *MattermostMCPServer) createToolHandler(toolName string) func(context.Co
 		var result *mcp.CallToolResult
 		switch toolName {
 		case "read_post":
-			result, err = toolProvider.readPost(ctxWithUser, client, request.Params.Arguments)
+			result, err = toolProvider.readPost(ctx, client, request.Params.Arguments)
 		case "read_channel":
-			result, err = toolProvider.readChannel(ctxWithUser, client, request.Params.Arguments)
+			result, err = toolProvider.readChannel(ctx, client, request.Params.Arguments)
 		case "search_posts":
-			result, err = toolProvider.searchPosts(ctxWithUser, client, request.Params.Arguments)
+			result, err = toolProvider.searchPosts(ctx, client, request.Params.Arguments)
 		case "create_post":
-			result, err = toolProvider.createPost(ctxWithUser, client, request.Params.Arguments)
+			result, err = toolProvider.createPost(ctx, client, request.Params.Arguments)
 		case "create_channel":
-			result, err = toolProvider.createChannel(ctxWithUser, client, request.Params.Arguments)
+			result, err = toolProvider.createChannel(ctx, client, request.Params.Arguments)
 		case "get_channel_info":
-			result, err = toolProvider.getChannelInfo(ctxWithUser, client, request.Params.Arguments)
+			result, err = toolProvider.getChannelInfo(ctx, client, request.Params.Arguments)
 		case "get_team_info":
-			result, err = toolProvider.getTeamInfo(ctxWithUser, client, request.Params.Arguments)
+			result, err = toolProvider.getTeamInfo(ctx, client, request.Params.Arguments)
 		case "search_users":
-			result, err = toolProvider.searchUsers(ctxWithUser, client, request.Params.Arguments)
+			result, err = toolProvider.searchUsers(ctx, client, request.Params.Arguments)
 		case "get_channel_members":
-			result, err = toolProvider.getChannelMembers(ctxWithUser, client, request.Params.Arguments)
+			result, err = toolProvider.getChannelMembers(ctx, client, request.Params.Arguments)
 		case "get_team_members":
-			result, err = toolProvider.getTeamMembers(ctxWithUser, client, request.Params.Arguments)
+			result, err = toolProvider.getTeamMembers(ctx, client, request.Params.Arguments)
 		// Development tools (only available in dev mode)
 		case "create_user":
 			if !s.config.DevMode {
@@ -311,7 +338,7 @@ func (s *MattermostMCPServer) createToolHandler(toolName string) func(context.Co
 					IsError: true,
 				}, nil
 			}
-			result, err = devToolProvider.createUser(ctxWithUser, client, request.Params.Arguments)
+			result, err = devToolProvider.createUser(ctx, client, request.Params.Arguments)
 		case "create_team":
 			if !s.config.DevMode {
 				s.logger.Debug("Tool call failed - dev mode required",
@@ -326,7 +353,7 @@ func (s *MattermostMCPServer) createToolHandler(toolName string) func(context.Co
 					IsError: true,
 				}, nil
 			}
-			result, err = devToolProvider.createTeam(ctxWithUser, client, request.Params.Arguments)
+			result, err = devToolProvider.createTeam(ctx, client, request.Params.Arguments)
 		case "add_user_to_team":
 			if !s.config.DevMode {
 				s.logger.Debug("Tool call failed - dev mode required",
@@ -341,7 +368,7 @@ func (s *MattermostMCPServer) createToolHandler(toolName string) func(context.Co
 					IsError: true,
 				}, nil
 			}
-			result, err = devToolProvider.addUserToTeam(ctxWithUser, client, request.Params.Arguments)
+			result, err = devToolProvider.addUserToTeam(ctx, client, request.Params.Arguments)
 		case "add_user_to_channel":
 			if !s.config.DevMode {
 				s.logger.Debug("Tool call failed - dev mode required",
@@ -356,7 +383,7 @@ func (s *MattermostMCPServer) createToolHandler(toolName string) func(context.Co
 					IsError: true,
 				}, nil
 			}
-			result, err = devToolProvider.addUserToChannel(ctxWithUser, client, request.Params.Arguments)
+			result, err = devToolProvider.addUserToChannel(ctx, client, request.Params.Arguments)
 		case "create_post_as_user":
 			if !s.config.DevMode {
 				s.logger.Debug("Tool call failed - dev mode required",
@@ -371,7 +398,7 @@ func (s *MattermostMCPServer) createToolHandler(toolName string) func(context.Co
 					IsError: true,
 				}, nil
 			}
-			result, err = devToolProvider.createPostAsUser(ctxWithUser, request.Params.Arguments)
+			result, err = devToolProvider.createPostAsUser(ctx, request.Params.Arguments)
 		default:
 			s.logger.Debug("Tool call failed - unknown tool",
 				mlog.String("tool", toolName))
@@ -416,38 +443,102 @@ func (s *MattermostMCPServer) createToolHandler(toolName string) func(context.Co
 	}
 }
 
-// getAuthenticatedClient gets an authenticated client for the request
-func (s *MattermostMCPServer) getAuthenticatedClient(ctx context.Context) (*model.Client4, string, error) {
-	// For OAuth mode, token must come from request context (set by HTTP transport)
-	// For PAT mode, token can come from context or fall back to config
-	var token string
-	if ctxToken, ok := ctx.Value(TokenKey).(string); ok && ctxToken != "" {
-		token = ctxToken
-	} else if s.config.PersonalAccessToken != "" {
-		// Fall back to config token for PAT mode
-		token = s.config.PersonalAccessToken
-	}
-
-	if token == "" {
-		return nil, "", fmt.Errorf("no authentication token available - ensure token is provided via context for OAuth or config for PAT")
-	}
-
-	// Create client directly - no validation needed since Mattermost APIs will validate
-	client := model.NewAPIv4Client(s.config.ServerURL)
-	client.SetToken(token)
-
-	return client, "", nil // userID not needed - Mattermost gets it from session
+// createDefaultLogger creates a logger with sensible defaults for the MCP server
+func createDefaultLogger() (*mlog.Logger, error) {
+	// Use the same configuration helper for consistency
+	return CreateLoggerWithOptions(false, "") // No debug, no file logging
 }
 
-// mlogWriter adapts mlog.LoggerIFace to io.Writer for the mcp-go error logger
+// CreateLoggerWithOptions creates a logger with debug and file logging options
+// This function sets up a fully configured logger and enables std log redirection
+func CreateLoggerWithOptions(enableDebug bool, logFile string) (*mlog.Logger, error) {
+	logger, err := mlog.NewLogger()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new logger: %w", err)
+	}
+
+	// Start with default levels - Info and above for production use
+	levels := []mlog.Level{mlog.LvlInfo, mlog.LvlWarn, mlog.LvlError}
+	if enableDebug {
+		// Prepend debug level to ensure it's first in the list
+		levels = append([]mlog.Level{mlog.LvlDebug}, levels...)
+	}
+
+	cfg := make(mlog.LoggerConfiguration)
+
+	// Console logging configuration
+	cfg["console"] = mlog.TargetCfg{
+		Type:          "console",
+		Levels:        levels,
+		Format:        "plain",
+		FormatOptions: json.RawMessage(`{"enable_color": false, "delim": " "}`),
+		Options:       json.RawMessage(`{"out": "stderr"}`),
+		MaxQueueSize:  1000,
+	}
+
+	// Add file logging if requested
+	if logFile != "" {
+		cfg["file"] = mlog.TargetCfg{
+			Type:         "file",
+			Levels:       levels,
+			Format:       "json", // JSON format for file logs (better for parsing)
+			Options:      json.RawMessage(fmt.Sprintf(`{"compress": false, "filename": "%s"}`, logFile)),
+			MaxQueueSize: 1000,
+		}
+	}
+
+	err = logger.ConfigureTargets(cfg, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to configure logger targets: %w", err)
+	}
+
+	// Enable std log redirection - this ensures third-party libraries
+	// using Go's standard log package route through our structured logger
+	logger.RedirectStdLog(mlog.LvlInfo) // Redirect std logs at Info level
+
+	return logger, nil
+}
+
+// Option functions for configuring MattermostMCPServer
+
+// WithLogger configures the server to use a specific logger
+func WithLogger(logger *mlog.Logger) Option {
+	return func(s *MattermostMCPServer) error {
+		if logger == nil {
+			return fmt.Errorf("logger cannot be nil")
+		}
+		s.logger = logger
+		return nil
+	}
+}
+
+// WithDevMode enables or disables development mode (enables additional tools for testing)
+func WithDevMode(enabled bool) Option {
+	return func(s *MattermostMCPServer) error {
+		s.config.DevMode = enabled
+		return nil
+	}
+}
+
+// WithRequestTimeout sets the timeout for requests to Mattermost
+func WithRequestTimeout(timeout time.Duration) Option {
+	return func(s *MattermostMCPServer) error {
+		if timeout <= 0 {
+			return fmt.Errorf("request timeout must be positive, got: %v", timeout)
+		}
+		s.config.RequestTimeout = timeout
+		return nil
+	}
+}
+
+// mlogWriter adapts *mlog.Logger to io.Writer for the mcp-go error logger
 type mlogWriter struct {
-	logger mlog.LoggerIFace
+	logger *mlog.Logger
 }
 
 func (w *mlogWriter) Write(p []byte) (n int, err error) {
-	if w.logger != nil {
-		w.logger.Error(string(p))
-	}
+	// Logger is guaranteed to be non-nil by constructor
+	w.logger.Error(string(p))
 	return len(p), nil
 }
 

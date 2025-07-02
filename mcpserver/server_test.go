@@ -23,7 +23,7 @@ type TestSuite struct {
 	container  *mmcontainer.MattermostContainer
 	serverURL  string
 	adminToken string
-	logger     mlog.LoggerIFace
+	logger     *mlog.Logger
 	mcpServer  *mcpserver.MattermostMCPServer
 	devMode    bool
 }
@@ -99,17 +99,11 @@ func (suite *TestSuite) CreateMCPServer(devMode bool) {
 	require.NotEmpty(suite.t, suite.serverURL, "Server URL must be set")
 	require.NotEmpty(suite.t, suite.adminToken, "Admin token must be set")
 
-	config := mcpserver.Config{
-		ServerURL:           suite.serverURL,
-		PersonalAccessToken: suite.adminToken,
-		RequestTimeout:      30 * time.Second,
-		Transport:           "stdio",
-		DevMode:             devMode,
-	}
-
-	authProvider := mcpserver.NewTokenAuthenticationProvider(suite.serverURL, suite.adminToken, suite.logger)
-
-	mcpServer, err := mcpserver.NewMattermostMCPServer(config, authProvider, suite.logger)
+	mcpServer, err := mcpserver.NewMattermostStdioMCPServer(suite.serverURL, suite.adminToken,
+		mcpserver.WithLogger(suite.logger),
+		mcpserver.WithDevMode(devMode),
+		mcpserver.WithRequestTimeout(30*time.Second),
+	)
 	require.NoError(suite.t, err, "Failed to create MCP server")
 
 	suite.mcpServer = mcpServer
@@ -138,103 +132,72 @@ func TestMCPServerConfiguration(t *testing.T) {
 	defer suite.TearDown()
 
 	t.Run("ValidConfiguration", func(t *testing.T) {
-		config := mcpserver.Config{
-			ServerURL:           suite.serverURL,
-			PersonalAccessToken: suite.adminToken,
-			RequestTimeout:      30 * time.Second,
-			Transport:           "stdio",
-			DevMode:             false,
-		}
-
-		authProvider := mcpserver.NewTokenAuthenticationProvider(suite.serverURL, suite.adminToken, suite.logger)
-		mcpServer, err := mcpserver.NewMattermostMCPServer(config, authProvider, suite.logger)
+		mcpServer, err := mcpserver.NewMattermostStdioMCPServer(suite.serverURL, suite.adminToken,
+			mcpserver.WithLogger(suite.logger),
+			mcpserver.WithDevMode(false),
+			mcpserver.WithRequestTimeout(30*time.Second),
+		)
 
 		require.NoError(t, err, "Valid configuration should not return error")
 		assert.NotNil(t, mcpServer, "MCP server should be created with valid config")
 	})
 
 	t.Run("InvalidServerURL", func(t *testing.T) {
-		config := mcpserver.Config{
-			ServerURL:           "http://invalid-server-url:9999",
-			PersonalAccessToken: suite.adminToken,
-			RequestTimeout:      30 * time.Second,
-			Transport:           "stdio",
-			DevMode:             false,
-		}
-
-		authProvider := mcpserver.NewTokenAuthenticationProvider("http://invalid-server-url:9999", suite.adminToken, suite.logger)
-		_, err := mcpserver.NewMattermostMCPServer(config, authProvider, suite.logger)
+		_, err := mcpserver.NewMattermostStdioMCPServer("http://invalid-server-url:9999", suite.adminToken,
+			mcpserver.WithLogger(suite.logger),
+			mcpserver.WithDevMode(false),
+			mcpserver.WithRequestTimeout(30*time.Second),
+		)
 
 		assert.Error(t, err, "Invalid server URL should return error")
 		assert.Contains(t, err.Error(), "startup token validation failed", "Error should mention token validation failure")
 	})
 
 	t.Run("InvalidToken", func(t *testing.T) {
-		config := mcpserver.Config{
-			ServerURL:           suite.serverURL,
-			PersonalAccessToken: "invalid-token-12345",
-			RequestTimeout:      30 * time.Second,
-			Transport:           "stdio",
-			DevMode:             false,
-		}
-
-		authProvider := mcpserver.NewTokenAuthenticationProvider(suite.serverURL, "invalid-token-12345", suite.logger)
-		_, err := mcpserver.NewMattermostMCPServer(config, authProvider, suite.logger)
+		_, err := mcpserver.NewMattermostStdioMCPServer(suite.serverURL, "invalid-token-12345",
+			mcpserver.WithLogger(suite.logger),
+			mcpserver.WithDevMode(false),
+			mcpserver.WithRequestTimeout(30*time.Second),
+		)
 
 		assert.Error(t, err, "Invalid token should return error")
 		assert.Contains(t, err.Error(), "startup token validation failed", "Error should mention token validation failure")
 	})
 
 	t.Run("EmptyToken", func(t *testing.T) {
-		config := mcpserver.Config{
-			ServerURL:           suite.serverURL,
-			PersonalAccessToken: "",
-			RequestTimeout:      30 * time.Second,
-			Transport:           "stdio",
-			DevMode:             false,
-		}
+		_, err := mcpserver.NewMattermostStdioMCPServer(suite.serverURL, "",
+			mcpserver.WithLogger(suite.logger),
+			mcpserver.WithDevMode(false),
+			mcpserver.WithRequestTimeout(30*time.Second),
+		)
 
-		authProvider := mcpserver.NewTokenAuthenticationProvider(suite.serverURL, "", suite.logger)
-		_, err := mcpserver.NewMattermostMCPServer(config, authProvider, suite.logger)
-
-		// Empty token should fail validation for stdio transport
+		// Empty token should fail option validation
 		assert.Error(t, err, "Empty token should fail validation")
-		assert.Contains(t, err.Error(), "startup token validation failed", "Error should mention startup validation failure")
+		assert.Contains(t, err.Error(), "personal access token cannot be empty", "Error should mention empty token")
 	})
 
 	t.Run("DevModeConfiguration", func(t *testing.T) {
-		config := mcpserver.Config{
-			ServerURL:           suite.serverURL,
-			PersonalAccessToken: suite.adminToken,
-			RequestTimeout:      30 * time.Second,
-			Transport:           "stdio",
-			DevMode:             true,
-		}
-
-		authProvider := mcpserver.NewTokenAuthenticationProvider(suite.serverURL, suite.adminToken, suite.logger)
-		mcpServer, err := mcpserver.NewMattermostMCPServer(config, authProvider, suite.logger)
+		mcpServer, err := mcpserver.NewMattermostStdioMCPServer(suite.serverURL, suite.adminToken,
+			mcpserver.WithLogger(suite.logger),
+			mcpserver.WithDevMode(true),
+			mcpserver.WithRequestTimeout(30*time.Second),
+		)
 
 		require.NoError(t, err, "Dev mode configuration should not return error")
 		assert.NotNil(t, mcpServer, "MCP server should be created with dev mode")
 	})
 
-	t.Run("HTTPTransportConfiguration", func(t *testing.T) {
-		config := mcpserver.Config{
-			ServerURL:           suite.serverURL,
-			PersonalAccessToken: suite.adminToken,
-			RequestTimeout:      30 * time.Second,
-			Transport:           "http",
-			DevMode:             false,
-		}
+	t.Run("StdioTransportFixed", func(t *testing.T) {
+		// STDIO constructor always uses stdio transport
+		mcpServer, err := mcpserver.NewMattermostStdioMCPServer(suite.serverURL, suite.adminToken,
+			mcpserver.WithLogger(suite.logger),
+			mcpserver.WithDevMode(false),
+			mcpserver.WithRequestTimeout(30*time.Second),
+		)
 
-		authProvider := mcpserver.NewTokenAuthenticationProvider(suite.serverURL, suite.adminToken, suite.logger)
-		mcpServer, err := mcpserver.NewMattermostMCPServer(config, authProvider, suite.logger)
-
-		require.NoError(t, err, "HTTP transport configuration should not fail at creation")
-		assert.NotNil(t, mcpServer, "MCP server should be created with HTTP transport config")
-
-		// Note: HTTP transport serving will fail since it's not implemented yet
-		// but configuration creation should succeed
+		require.NoError(t, err, "STDIO server should be created successfully")
+		assert.NotNil(t, mcpServer, "MCP server should be created")
+		// Transport is always stdio for this constructor
 	})
 }
 
@@ -247,25 +210,19 @@ func TestAuthentication(t *testing.T) {
 		authProvider := mcpserver.NewTokenAuthenticationProvider(suite.serverURL, suite.adminToken, suite.logger)
 		assert.NotNil(t, authProvider, "Token authentication provider should be created")
 
-		// Test token validation
-		ctx := context.Background()
-		userID, err := authProvider.ValidateAuth(ctx, suite.adminToken)
-		require.NoError(t, err, "Should validate authentication")
+		// Test token validation with configured token
+		userID, err := authProvider.ValidateAuth(context.Background())
+		require.NoError(t, err, "Should validate authentication with configured token")
 		assert.NotEmpty(t, userID, "User ID should not be empty")
 	})
 
 	t.Run("TokenValidationAtStartup", func(t *testing.T) {
 		// This tests the startup token validation that happens in NewMattermostMCPServer
-		config := mcpserver.Config{
-			ServerURL:           suite.serverURL,
-			PersonalAccessToken: suite.adminToken,
-			RequestTimeout:      30 * time.Second,
-			Transport:           "stdio",
-			DevMode:             false,
-		}
-
-		authProvider := mcpserver.NewTokenAuthenticationProvider(suite.serverURL, suite.adminToken, suite.logger)
-		mcpServer, err := mcpserver.NewMattermostMCPServer(config, authProvider, suite.logger)
+		mcpServer, err := mcpserver.NewMattermostStdioMCPServer(suite.serverURL, suite.adminToken,
+			mcpserver.WithLogger(suite.logger),
+			mcpserver.WithDevMode(false),
+			mcpserver.WithRequestTimeout(30*time.Second),
+		)
 
 		require.NoError(t, err, "Startup token validation should succeed with valid token")
 		assert.NotNil(t, mcpServer, "MCP server should be created after successful token validation")
@@ -275,8 +232,7 @@ func TestAuthentication(t *testing.T) {
 		invalidToken := "invalid-token-xyz"
 		authProvider := mcpserver.NewTokenAuthenticationProvider(suite.serverURL, invalidToken, suite.logger)
 
-		ctx := context.Background()
-		_, err := authProvider.ValidateAuth(ctx, invalidToken)
+		_, err := authProvider.ValidateAuth(context.Background())
 		assert.Error(t, err, "Invalid token should fail validation")
 	})
 }
@@ -287,72 +243,48 @@ func TestMCPServerStartupValidation(t *testing.T) {
 	defer suite.TearDown()
 
 	t.Run("SuccessfulStartupValidation", func(t *testing.T) {
-		config := mcpserver.Config{
-			ServerURL:           suite.serverURL,
-			PersonalAccessToken: suite.adminToken,
-			RequestTimeout:      30 * time.Second,
-			Transport:           "stdio",
-			DevMode:             false,
-		}
-
-		authProvider := mcpserver.NewTokenAuthenticationProvider(suite.serverURL, suite.adminToken, suite.logger)
-
 		// This internally calls validateTokenAtStartup
-		mcpServer, err := mcpserver.NewMattermostMCPServer(config, authProvider, suite.logger)
+		mcpServer, err := mcpserver.NewMattermostStdioMCPServer(suite.serverURL, suite.adminToken,
+			mcpserver.WithLogger(suite.logger),
+			mcpserver.WithDevMode(false),
+			mcpserver.WithRequestTimeout(30*time.Second),
+		)
 
 		require.NoError(t, err, "Startup validation should succeed")
 		assert.NotNil(t, mcpServer, "MCP server should be created after successful validation")
 	})
 
 	t.Run("StartupValidationWithInvalidServer", func(t *testing.T) {
-		config := mcpserver.Config{
-			ServerURL:           "http://nonexistent-server:8065",
-			PersonalAccessToken: suite.adminToken,
-			RequestTimeout:      5 * time.Second, // Shorter timeout for faster test
-			Transport:           "stdio",
-			DevMode:             false,
-		}
-
-		authProvider := mcpserver.NewTokenAuthenticationProvider("http://nonexistent-server:8065", suite.adminToken, suite.logger)
-
-		_, err := mcpserver.NewMattermostMCPServer(config, authProvider, suite.logger)
+		_, err := mcpserver.NewMattermostStdioMCPServer("http://nonexistent-server:8065", suite.adminToken,
+			mcpserver.WithLogger(suite.logger),
+			mcpserver.WithDevMode(false),
+			mcpserver.WithRequestTimeout(5*time.Second), // Shorter timeout for faster test
+		)
 
 		assert.Error(t, err, "Startup validation should fail with invalid server")
 		assert.Contains(t, err.Error(), "startup token validation failed", "Error should mention startup validation failure")
 	})
 
 	t.Run("StartupValidationWithUnauthorizedToken", func(t *testing.T) {
-		config := mcpserver.Config{
-			ServerURL:           suite.serverURL,
-			PersonalAccessToken: "unauthorized-token-123",
-			RequestTimeout:      30 * time.Second,
-			Transport:           "stdio",
-			DevMode:             false,
-		}
-
-		authProvider := mcpserver.NewTokenAuthenticationProvider(suite.serverURL, "unauthorized-token-123", suite.logger)
-
-		_, err := mcpserver.NewMattermostMCPServer(config, authProvider, suite.logger)
+		_, err := mcpserver.NewMattermostStdioMCPServer(suite.serverURL, "unauthorized-token-123",
+			mcpserver.WithLogger(suite.logger),
+			mcpserver.WithDevMode(false),
+			mcpserver.WithRequestTimeout(30*time.Second),
+		)
 
 		assert.Error(t, err, "Startup validation should fail with unauthorized token")
 		assert.Contains(t, err.Error(), "startup token validation failed", "Error should mention startup validation failure")
 	})
 
-	t.Run("NoStartupValidationForEmptyToken", func(t *testing.T) {
-		// When transport is not stdio or token is empty, startup validation is skipped
-		config := mcpserver.Config{
-			ServerURL:           suite.serverURL,
-			PersonalAccessToken: "",
-			RequestTimeout:      30 * time.Second,
-			Transport:           "http", // Non-stdio transport
-			DevMode:             false,
-		}
+	t.Run("ValidTokenAlwaysValidated", func(t *testing.T) {
+		// STDIO servers always validate tokens at startup
+		mcpServer, err := mcpserver.NewMattermostStdioMCPServer(suite.serverURL, suite.adminToken,
+			mcpserver.WithLogger(suite.logger),
+			mcpserver.WithDevMode(false),
+			mcpserver.WithRequestTimeout(30*time.Second),
+		)
 
-		authProvider := mcpserver.NewTokenAuthenticationProvider(suite.serverURL, "", suite.logger)
-
-		mcpServer, err := mcpserver.NewMattermostMCPServer(config, authProvider, suite.logger)
-
-		require.NoError(t, err, "Server creation should succeed when startup validation is skipped")
+		require.NoError(t, err, "Server creation should succeed with valid token")
 		assert.NotNil(t, mcpServer, "MCP server should be created")
 	})
 }

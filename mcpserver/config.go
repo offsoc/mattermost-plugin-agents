@@ -4,18 +4,7 @@
 package mcpserver
 
 import (
-	"context"
 	"time"
-
-	"github.com/mattermost/mattermost/server/public/model"
-)
-
-// Context key types
-type contextKey string
-
-const (
-	UserIDKey contextKey = "userID"
-	TokenKey  contextKey = "token"
 )
 
 // Config represents the configuration for the MCP server
@@ -26,10 +15,7 @@ type Config struct {
 	// Personal Access Token for authentication
 	PersonalAccessToken string `json:"personal_access_token"`
 
-	// Optional headers to include in requests
-	Headers map[string]string `json:"headers,omitempty"`
-
-	// Timeout for requests to Mattermost
+	// Timeout for MCP requests
 	RequestTimeout time.Duration `json:"request_timeout"`
 
 	// Transport type (currently only stdio is supported)
@@ -37,13 +23,4 @@ type Config struct {
 
 	// Development mode enables additional tools for setting up test data
 	DevMode bool `json:"dev_mode"`
-}
-
-// AuthenticationProvider handles authentication for MCP requests
-type AuthenticationProvider interface {
-	// ValidateAuth validates the authentication and returns user ID
-	ValidateAuth(ctx context.Context, token string) (string, error)
-
-	// GetMattermostClient returns an authenticated Mattermost client for a user
-	GetMattermostClient(ctx context.Context, userID string, token string) (*model.Client4, error)
 }

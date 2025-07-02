@@ -4,18 +4,12 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/mattermost/mattermost-plugin-ai/mcpserver"
 	"github.com/mattermost/mattermost/server/public/shared/mlog"
-)
-
-const (
-	defaultTimeout = 30 * time.Second
 )
 
 func main() {
@@ -35,45 +29,13 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Set up mlog logger
-	logger, err := mlog.NewLogger()
+	// Create logger with debug and file logging options
+	// This automatically configures std log redirection
+	logger, err := mcpserver.CreateLoggerWithOptions(*debug, *logFile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to create logger: %v\n", err)
 		os.Exit(1)
 	}
-
-	cfg := make(mlog.LoggerConfiguration)
-	levels := []mlog.Level{mlog.LvlInfo, mlog.LvlWarn, mlog.LvlError}
-	if *debug {
-		levels = append(levels, mlog.LvlDebug)
-	}
-	cfg["console"] = mlog.TargetCfg{
-		Type:          "console",
-		Levels:        levels,
-		Format:        "plain",
-		FormatOptions: json.RawMessage(`{"enable_color": false}`),
-		Options:       json.RawMessage(`{"out": "stderr"}`),
-		MaxQueueSize:  1000,
-	}
-
-	// Add file logging if logfile flag is provided
-	if *logFile != "" {
-		cfg["file"] = mlog.TargetCfg{
-			Type:         "file",
-			Levels:       levels,
-			Format:       "json",
-			Options:      json.RawMessage(fmt.Sprintf(`{"compress": false, "filename": "%s"}`, *logFile)),
-			MaxQueueSize: 1000,
-		}
-	}
-
-	err = logger.ConfigureTargets(cfg, nil)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to configure logger: %v\n", err)
-		logger.Flush() // Ensure logs are written before exit
-		os.Exit(1)
-	}
-	logger.RedirectStdLog(mlog.LvlStdLog)
 
 	// Check required parameters
 	if *serverURL == "" {
@@ -106,20 +68,11 @@ func main() {
 		logger.Info("development mode enabled", mlog.Bool("dev_mode", *devMode))
 	}
 
-	// Create server configuration
-	config := mcpserver.Config{
-		ServerURL:           *serverURL,
-		PersonalAccessToken: *token,
-		RequestTimeout:      defaultTimeout,
-		Transport:           "stdio",
-		DevMode:             *devMode,
-	}
-
-	// Create PAT authentication provider
-	authProvider := mcpserver.NewTokenAuthenticationProvider(*serverURL, *token, logger)
-
-	// Create Mattermost MCP server with abstracted interface
-	mcpServer, err := mcpserver.NewMattermostMCPServer(config, authProvider, logger)
+	// Create Mattermost MCP server with STDIO transport and PAT authentication
+	mcpServer, err := mcpserver.NewMattermostStdioMCPServer(*serverURL, *token,
+		mcpserver.WithLogger(logger),
+		mcpserver.WithDevMode(*devMode),
+	)
 	if err != nil {
 		logger.Error("failed to create MCP server", mlog.Err(err))
 		logger.Flush() // Ensure logs are written before exit
