@@ -4,85 +4,104 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
 
 	"github.com/mattermost/mattermost-plugin-ai/mcpserver"
 	"github.com/mattermost/mattermost/server/public/shared/mlog"
+	"github.com/spf13/cobra"
+)
+
+const version = "0.1.0"
+
+var (
+	serverURL string
+	token     string
+	debug     bool
+	logFile   string
+	devMode   bool
 )
 
 func main() {
-	// Parse command line flags
-	var (
-		serverURL = flag.String("server-url", "", "Mattermost server URL (required)")
-		token     = flag.String("token", "", "Personal Access Token (required)")
-		debug     = flag.Bool("debug", false, "Enable debug logging")
-		logFile   = flag.String("logfile", "", "Path to log file (logs to file in addition to stderr)")
-		devMode   = flag.Bool("dev", false, "Enable development mode with additional tools for setting up test data")
-		version   = flag.Bool("version", false, "Show version information")
-	)
-	flag.Parse()
+	rootCmd := &cobra.Command{
+		Use:   "mattermost-mcp-server",
+		Short: "Mattermost Model Context Protocol (MCP) Server",
+		Long: `A Model Context Protocol (MCP) server that provides tools for interacting with Mattermost.
 
-	if *version {
-		fmt.Fprintf(os.Stderr, "Mattermost MCP Server v0.1.0\n")
-		os.Exit(0)
+The server supports reading posts, searching, creating content, and managing teams/channels.
+Authentication is handled via Personal Access Tokens (PAT).`,
+		Version: version,
+		RunE:    runServer,
 	}
 
-	// Create logger with debug and file logging options
-	// This automatically configures std log redirection
-	logger, err := mcpserver.CreateLoggerWithOptions(*debug, *logFile)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to create logger: %v\n", err)
+	// Define flags
+	rootCmd.Flags().StringVarP(&serverURL, "server-url", "s", "", "Mattermost server URL (required, or set MM_SERVER_URL env var)")
+	rootCmd.Flags().StringVarP(&token, "token", "t", "", "Personal Access Token (required, or set MM_ACCESS_TOKEN env var)")
+	rootCmd.Flags().BoolVarP(&debug, "debug", "d", false, "Enable debug logging")
+	rootCmd.Flags().StringVarP(&logFile, "logfile", "l", "", "Path to log file (logs to file in addition to stderr)")
+	rootCmd.Flags().BoolVar(&devMode, "dev", false, "Enable development mode with additional tools for setting up test data")
+
+	// Note: We don't mark flags as required since they can also come from environment variables
+
+	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
+}
 
-	// Check required parameters
-	if *serverURL == "" {
-		// Try environment variable
-		*serverURL = os.Getenv("MM_SERVER_URL")
-		if *serverURL == "" {
-			logger.Error("server URL is required (use -server-url or MM_SERVER_URL environment variable)")
-			logger.Flush() // Ensure logs are written before exit
-			os.Exit(1)
+func runServer(cmd *cobra.Command, args []string) error {
+	// Create logger with debug and file logging options
+	// This automatically configures std log redirection
+	logger, err := mcpserver.CreateLoggerWithOptions(debug, logFile)
+	if err != nil {
+		return fmt.Errorf("failed to create logger: %w", err)
+	}
+
+	// Check for environment variables if flags not provided
+	if serverURL == "" {
+		serverURL = os.Getenv("MM_SERVER_URL")
+		if serverURL == "" {
+			logger.Error("server URL is required (use --server-url or MM_SERVER_URL environment variable)")
+			logger.Flush()
+			return fmt.Errorf("server URL is required")
 		}
 	}
 
-	// Check for PAT token
-	if *token == "" {
-		*token = os.Getenv("MM_ACCESS_TOKEN")
-	}
-	if *token == "" {
-		logger.Error("personal access token is required (use -token or MM_ACCESS_TOKEN environment variable)")
-		logger.Flush() // Ensure logs are written before exit
-		os.Exit(1)
+	if token == "" {
+		token = os.Getenv("MM_ACCESS_TOKEN")
+		if token == "" {
+			logger.Error("personal access token is required (use --token or MM_ACCESS_TOKEN environment variable)")
+			logger.Flush()
+			return fmt.Errorf("personal access token is required")
+		}
 	}
 
 	logger.Debug("starting mattermost mcp server",
-		mlog.String("server_url", *serverURL),
+		mlog.String("server_url", serverURL),
 		mlog.String("transport", "stdio"),
 		mlog.String("auth_mode", "PAT"),
 	)
 
-	if *devMode {
-		logger.Info("development mode enabled", mlog.Bool("dev_mode", *devMode))
+	if devMode {
+		logger.Info("development mode enabled", mlog.Bool("dev_mode", devMode))
 	}
 
 	// Create Mattermost MCP server with STDIO transport and PAT authentication
-	mcpServer, err := mcpserver.NewMattermostStdioMCPServer(*serverURL, *token,
+	mcpServer, err := mcpserver.NewMattermostStdioMCPServer(serverURL, token,
 		mcpserver.WithLogger(logger),
-		mcpserver.WithDevMode(*devMode),
+		mcpserver.WithDevMode(devMode),
 	)
 	if err != nil {
 		logger.Error("failed to create MCP server", mlog.Err(err))
-		logger.Flush() // Ensure logs are written before exit
-		os.Exit(1)
+		logger.Flush()
+		return fmt.Errorf("failed to create MCP server: %w", err)
 	}
 
 	// Start the MCP server
 	if err := mcpServer.Serve(); err != nil {
 		logger.Error("server error", mlog.Err(err))
-		logger.Flush() // Ensure logs are written before exit
-		os.Exit(1)
+		logger.Flush()
+		return fmt.Errorf("server error: %w", err)
 	}
+
+	return nil
 }
