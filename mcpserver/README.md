@@ -5,8 +5,8 @@ A Model Context Protocol (MCP) server that provides AI agents and automation too
 ## Features
 
 - **MCP Protocol Support**: Implements the Model Context Protocol for standardized AI agent communication
-- **Authentication**: Personal Access Token (PAT) authentication with stdio transport
-- **Transport**: stdio JSON-RPC for local desktop clients like Claude Desktop
+- **Authentication**: Personal Access Token (PAT) authentication
+- **Transport**: Configurable transport layer (currently stdio JSON-RPC for local desktop clients like Claude Desktop)
 - **Comprehensive Mattermost Integration**: Read posts, channels, search, create content
 - **Dual Mode Operation**: Runs standalone or embedded in the AI plugin
 
@@ -124,10 +124,13 @@ Create a post as a specific user using username/password login. Simply provide t
 
 ## Transport
 
-### stdio Transport
+The MCP server supports configurable transport layers via the `--transport` flag:
+
+### stdio Transport (Default)
 - **Use case**: Local desktop clients like Claude Desktop
 - **Authentication**: Personal Access Token (PAT)
 - **Protocol**: JSON-RPC over stdin/stdout
+- **Flag**: `--transport stdio` (or omit for default)
 
 ## Installation and Usage
 
@@ -150,48 +153,52 @@ Create a post as a specific user using username/password login. Simply provide t
 
    ```bash
    # Using command line flags
-   ./bin/mattermost-mcp-server -server-url https://your-mattermost.com -token your-pat-token
+   ./bin/mattermost-mcp-server --server-url https://your-mattermost.com --token your-pat-token
 
    # Using environment variables
    export MM_SERVER_URL=https://your-mattermost.com
    export MM_ACCESS_TOKEN=your-pat-token
    ./bin/mattermost-mcp-server
 
+   # Specify transport type (stdio is default)
+   ./bin/mattermost-mcp-server --server-url https://your-mattermost.com --token your-pat-token --transport stdio
+
    # With file logging (logs to both stderr and file)
-   ./bin/mattermost-mcp-server -server-url https://your-mattermost.com -token your-pat-token -logfile /var/log/mcp-server.log
+   ./bin/mattermost-mcp-server --server-url https://your-mattermost.com --token your-pat-token --logfile /var/log/mcp-server.log
 
    # With debug logging for troubleshooting
-   ./bin/mattermost-mcp-server -server-url https://your-mattermost.com -token your-pat-token -debug
+   ./bin/mattermost-mcp-server --server-url https://your-mattermost.com --token your-pat-token --debug
 
    # Development mode with additional tools
-   ./bin/mattermost-mcp-server -server-url https://your-mattermost.com -token your-pat-token -dev
+   ./bin/mattermost-mcp-server --server-url https://your-mattermost.com --token your-pat-token --dev
    ```
 
 4. **Configuration options:**
    
    **Required:**
-   - `-server-url`: Mattermost server URL (or set `MM_SERVER_URL` env var)
-   - `-token`: Personal Access Token (or set `MM_ACCESS_TOKEN` env var)
+   - `--server-url`: Mattermost server URL (or set `MM_SERVER_URL` env var)
+   - `--token`: Personal Access Token (or set `MM_ACCESS_TOKEN` env var)
    
    **Optional:**
-   - `-logfile`: Path to log file (logs to file in addition to stderr, JSON format)
-   - `-debug`: Enable debug logging (recommended for troubleshooting)
-   - `-dev`: Enable development mode with additional tools for setting up test data
-   - `-version`: Show version information
+   - `--transport`: Transport type (currently only 'stdio' is supported, default: 'stdio')
+   - `--logfile`: Path to log file (logs to file in addition to stderr, JSON format)
+   - `--debug`: Enable debug logging (recommended for troubleshooting)
+   - `--dev`: Enable development mode with additional tools for setting up test data
+   - `--version`: Show version information
 
    **Notes**: 
    - Token validation occurs at startup for fast failure detection
    - Logging output goes to stderr to avoid interfering with JSON-RPC communication on stdout
-   - File logging (when `-logfile` is used) outputs structured JSON logs in addition to stderr
+   - File logging (when `--logfile` is used) outputs structured JSON logs in addition to stderr
    - Debug logging includes tool call tracing and detailed operation logs
 
 ### Development Mode
 
-Development mode (`-dev` flag) enables additional tools for setting up realistic test data and user scenarios. This is particularly useful for Mattermost developers who need to bootstrap development environments or create sophisticated test scenarios.
+Development mode (`--dev` flag) enables additional tools for setting up realistic test data and user scenarios. This is particularly useful for Mattermost developers who need to bootstrap development environments or create sophisticated test scenarios.
 
 **Enable development mode:**
 ```bash
-./bin/mattermost-mcp-server -dev -server-url https://your-mattermost.com -token your-admin-pat-token
+./bin/mattermost-mcp-server --dev --server-url https://your-mattermost.com --token your-admin-pat-token
 ```
 
 **Security Note:** Development mode should only be used in development environments with admin-level access tokens, never in production.
@@ -209,7 +216,7 @@ To use with Claude Desktop, add the server to your MCP configuration:
     "mattermost": {
       "command": "/path/to/mattermost-plugin-ai/bin/mattermost-mcp-server",
       "args": [
-        "-debug"
+        "--debug"
       ],
       "env": {
         "MM_SERVER_URL": "https://your-mattermost.com",
