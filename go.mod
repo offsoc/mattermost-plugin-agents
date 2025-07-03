@@ -23,6 +23,7 @@ require (
 	github.com/prometheus/client_golang v1.21.1
 	github.com/sashabaranov/go-openai v1.40.1
 	github.com/sirupsen/logrus v1.9.3
+	github.com/spf13/cobra v1.9.1
 	github.com/stretchr/testify v1.10.0
 	github.com/tmc/langchaingo v0.1.13
 	github.com/wk8/go-ordered-map/v2 v2.1.8
@@ -83,6 +84,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/go-plugin v1.6.3 // indirect
 	github.com/hashicorp/yamux v0.1.2 // indirect
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jonboulle/clockwork v0.5.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
@@ -126,6 +128,7 @@ require (
 	github.com/russellhaering/goxmldsig v1.5.0 // indirect
 	github.com/shirou/gopsutil/v3 v3.23.12 // indirect
 	github.com/shoenig/go-m1cpu v0.1.6 // indirect
+	github.com/spf13/pflag v1.0.6 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/testcontainers/testcontainers-go v0.35.0 // indirect
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.35.0 // indirect

@@ -5,8 +5,12 @@ package testhelpers
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"testing"
 
+	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
 	"github.com/stretchr/testify/require"
 
 	"github.com/mattermost/mattermost/server/public/model"
@@ -113,4 +117,68 @@ func SetupBasicTestData(t *testing.T, client *model.Client4, adminPAT string) *T
 		User:     user,
 		AdminPAT: adminPAT,
 	}
+}
+
+// ExecuteMCPTool calls an MCP tool through the MCP server's message handler
+// This provides true integration testing by using the actual MCP protocol
+func ExecuteMCPTool(t *testing.T, mcpServer *server.MCPServer, toolName string, args map[string]interface{}) *mcp.CallToolResult {
+	require.NotNil(t, mcpServer, "MCP server must be provided")
+
+	ctx := context.Background()
+
+	// Create a proper MCP JSON-RPC request
+	jsonrpcRequest := mcp.JSONRPCRequest{
+		JSONRPC: "2.0",
+		ID:      "test-" + toolName,
+		Request: mcp.Request{
+			Method: "tools/call",
+		},
+		Params: map[string]interface{}{
+			"name":      toolName,
+			"arguments": args,
+		},
+	}
+
+	// Marshal the request to JSON (as it would come over the wire)
+	requestBytes, err := json.Marshal(jsonrpcRequest)
+	require.NoError(t, err, "Failed to marshal MCP request")
+
+	// Send through the MCP server's message handler (same as production)
+	responseMessage := mcpServer.HandleMessage(ctx, json.RawMessage(requestBytes))
+
+	// Parse the response
+	responseBytes, err := json.Marshal(responseMessage)
+	require.NoError(t, err, "Failed to marshal MCP response")
+
+	// Check if it's an error response
+	var errorResponse struct {
+		JSONRPC string      `json:"jsonrpc"`
+		ID      interface{} `json:"id"`
+		Error   *struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(responseBytes, &errorResponse) == nil && errorResponse.Error != nil {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				mcp.TextContent{
+					Type: "text",
+					Text: fmt.Sprintf("Error: %s", errorResponse.Error.Message),
+				},
+			},
+			IsError: true,
+		}
+	}
+
+	// Parse as successful response
+	var successResponse struct {
+		JSONRPC string             `json:"jsonrpc"`
+		ID      interface{}        `json:"id"`
+		Result  mcp.CallToolResult `json:"result"`
+	}
+	err = json.Unmarshal(responseBytes, &successResponse)
+	require.NoError(t, err, "Failed to unmarshal MCP tool response")
+
+	return &successResponse.Result
 }

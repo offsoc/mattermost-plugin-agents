@@ -344,18 +344,8 @@ func TestMCPToolsIntegration(t *testing.T) {
 	})
 }
 
-// executeToolWithMCP calls the actual MCP tool on the real MCP server instance
-// This provides true integration testing by going through the full MCP stack
+// executeToolWithMCP calls the MCP tool through the unified helper
 func executeToolWithMCP(t *testing.T, suite *TestSuite, toolName string, args map[string]interface{}) *mcp.CallToolResult {
 	require.NotNil(t, suite.mcpServer, "MCP server must be created before calling tools")
-
-	ctx := context.Background()
-
-	// Call the tool using the test helper method that goes through the real MCP tool handlers
-	result, err := suite.mcpServer.CallToolForTest(ctx, toolName, args)
-
-	require.NoError(t, err, "Tool handler should not return an error")
-	require.NotNil(t, result, "Tool handler should return a result")
-
-	return result
+	return testhelpers.ExecuteMCPTool(t, suite.mcpServer.GetMCPServer(), toolName, args)
 }

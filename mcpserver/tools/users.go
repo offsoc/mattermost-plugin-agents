@@ -1,0 +1,78 @@
+// Copyright (c) 2023-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
+
+package tools
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/mattermost/mattermost-plugin-ai/llm"
+	"github.com/mattermost/mattermost/server/public/model"
+)
+
+// CreateUserArgs represents arguments for the create_user tool (dev mode only)
+type CreateUserArgs struct {
+	Username  string `jsonschema_description:"Username for the new user"`
+	Email     string `jsonschema_description:"Email address for the new user"`
+	Password  string `jsonschema_description:"Password for the new user"`
+	FirstName string `jsonschema_description:"First name of the user"`
+	LastName  string `jsonschema_description:"Last name of the user"`
+	Nickname  string `jsonschema_description:"Nickname for the user"`
+}
+
+// getDevUserTools returns development user-related tools for MCP
+func (p *MattermostToolRegistry) getDevUserTools() []MCPTool {
+	return []MCPTool{
+		{
+			Name:        "create_user",
+			Description: "Create a new user account (dev mode only)",
+			Schema:      llm.NewJSONSchemaFromStruct(CreateUserArgs{}),
+			Resolver:    p.toolCreateUser,
+		},
+	}
+}
+
+// toolCreateUser implements the create_user tool using the context client
+func (p *MattermostToolRegistry) toolCreateUser(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
+	var args CreateUserArgs
+	err := argsGetter(&args)
+	if err != nil {
+		return "invalid parameters to function", fmt.Errorf("failed to get arguments for tool create_user: %w", err)
+	}
+
+	// Validate required fields
+	if args.Username == "" {
+		return "username is required", fmt.Errorf("username cannot be empty")
+	}
+	if args.Email == "" {
+		return "email is required", fmt.Errorf("email cannot be empty")
+	}
+	if args.Password == "" {
+		return "password is required", fmt.Errorf("password cannot be empty")
+	}
+
+	// Get client from context
+	if mcpContext.Client == nil {
+		return "client not available", fmt.Errorf("client not available in context")
+	}
+	client := mcpContext.Client
+	ctx := context.Background()
+
+	// Create the user
+	user := &model.User{
+		Username:  args.Username,
+		Email:     args.Email,
+		Password:  args.Password,
+		FirstName: args.FirstName,
+		LastName:  args.LastName,
+		Nickname:  args.Nickname,
+	}
+
+	createdUser, _, err := client.CreateUser(ctx, user)
+	if err != nil {
+		return "failed to create user", fmt.Errorf("error creating user: %w", err)
+	}
+
+	return fmt.Sprintf("Successfully created user '%s' with ID: %s", createdUser.Username, createdUser.Id), nil
+}

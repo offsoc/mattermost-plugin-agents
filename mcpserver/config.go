@@ -3,10 +3,6 @@
 
 package mcpserver
 
-import (
-	"time"
-)
-
 // Config represents the configuration for the MCP server
 type Config struct {
 	// Mattermost server URL (e.g., "https://mattermost.company.com")
@@ -14,9 +10,6 @@ type Config struct {
 
 	// Personal Access Token for authentication
 	PersonalAccessToken string `json:"personal_access_token"`
-
-	// Timeout for MCP requests
-	RequestTimeout time.Duration `json:"request_timeout"`
 
 	// Transport type (currently only stdio is supported)
 	Transport string `json:"transport"`
