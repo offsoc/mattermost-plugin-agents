@@ -37,7 +37,7 @@ type CreatePostAsUserArgs struct {
 }
 
 // getPostTools returns all post-related tools
-func (p *MattermostToolRegistry) getPostTools() []MCPTool {
+func (p *MattermostToolProvider) getPostTools() []MCPTool {
 	return []MCPTool{
 		{
 			Name:        "read_post",
@@ -55,7 +55,7 @@ func (p *MattermostToolRegistry) getPostTools() []MCPTool {
 }
 
 // getDevPostTools returns development post-related tools for MCP
-func (p *MattermostToolRegistry) getDevPostTools() []MCPTool {
+func (p *MattermostToolProvider) getDevPostTools() []MCPTool {
 	return []MCPTool{
 		{
 			Name:        "create_post_as_user",
@@ -67,7 +67,7 @@ func (p *MattermostToolRegistry) getDevPostTools() []MCPTool {
 }
 
 // toolReadPost implements the read_post tool
-func (p *MattermostToolRegistry) toolReadPost(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
+func (p *MattermostToolProvider) toolReadPost(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
 	var args ReadPostArgs
 	err := argsGetter(&args)
 	if err != nil {
@@ -148,7 +148,7 @@ func (p *MattermostToolRegistry) toolReadPost(mcpContext *MCPToolContext, argsGe
 }
 
 // toolCreatePost implements the create_post tool
-func (p *MattermostToolRegistry) toolCreatePost(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
+func (p *MattermostToolProvider) toolCreatePost(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
 	var args CreatePostArgs
 	err := argsGetter(&args)
 	if err != nil {
@@ -186,7 +186,7 @@ func (p *MattermostToolRegistry) toolCreatePost(mcpContext *MCPToolContext, args
 }
 
 // toolCreatePostAsUser implements the create_post_as_user tool with custom authentication
-func (p *MattermostToolRegistry) toolCreatePostAsUser(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
+func (p *MattermostToolProvider) toolCreatePostAsUser(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
 	var args CreatePostAsUserArgs
 	err := argsGetter(&args)
 	if err != nil {

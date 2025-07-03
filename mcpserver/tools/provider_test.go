@@ -22,8 +22,8 @@ type TestSchemaArgs struct {
 }
 
 func TestConvertMCPToolToLibMCPTool_WithSchema(t *testing.T) {
-	// Create a mock registry
-	registry := &MattermostToolRegistry{
+	// Create a mock provider
+	provider := &MattermostToolProvider{
 		logger: mlog.CreateTestLogger(t),
 	}
 
@@ -36,7 +36,7 @@ func TestConvertMCPToolToLibMCPTool_WithSchema(t *testing.T) {
 	}
 
 	// Convert to MCP library tool
-	libTool := registry.convertMCPToolToLibMCPTool(testTool)
+	libTool := provider.convertMCPToolToLibMCPTool(testTool)
 
 	// Verify basic properties
 	assert.Equal(t, "test_tool", libTool.Name)
@@ -66,8 +66,8 @@ func TestConvertMCPToolToLibMCPTool_WithSchema(t *testing.T) {
 }
 
 func TestConvertMCPToolToLibMCPTool_WithoutSchema(t *testing.T) {
-	// Create a mock registry
-	registry := &MattermostToolRegistry{
+	// Create a mock provider
+	provider := &MattermostToolProvider{
 		logger: mlog.CreateTestLogger(t),
 	}
 
@@ -80,7 +80,7 @@ func TestConvertMCPToolToLibMCPTool_WithoutSchema(t *testing.T) {
 	}
 
 	// Convert to MCP library tool
-	libTool := registry.convertMCPToolToLibMCPTool(testTool)
+	libTool := provider.convertMCPToolToLibMCPTool(testTool)
 
 	// Verify basic properties
 	assert.Equal(t, "test_tool_no_schema", libTool.Name)
@@ -91,8 +91,8 @@ func TestConvertMCPToolToLibMCPTool_WithoutSchema(t *testing.T) {
 }
 
 func TestConvertMCPToolToLibMCPTool_WithInvalidSchema(t *testing.T) {
-	// Create a mock registry
-	registry := &MattermostToolRegistry{
+	// Create a mock provider
+	provider := &MattermostToolProvider{
 		logger: mlog.CreateTestLogger(t),
 	}
 
@@ -105,7 +105,7 @@ func TestConvertMCPToolToLibMCPTool_WithInvalidSchema(t *testing.T) {
 	}
 
 	// Convert to MCP library tool
-	libTool := registry.convertMCPToolToLibMCPTool(testTool)
+	libTool := provider.convertMCPToolToLibMCPTool(testTool)
 
 	// Verify basic properties
 	assert.Equal(t, "test_tool_invalid_schema", libTool.Name)

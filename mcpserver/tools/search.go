@@ -28,7 +28,7 @@ type SearchUsersArgs struct {
 }
 
 // getSearchTools returns all search-related tools
-func (p *MattermostToolRegistry) getSearchTools() []MCPTool {
+func (p *MattermostToolProvider) getSearchTools() []MCPTool {
 	return []MCPTool{
 		{
 			Name:        "search_posts",
@@ -46,7 +46,7 @@ func (p *MattermostToolRegistry) getSearchTools() []MCPTool {
 }
 
 // toolSearchPosts implements the search_posts tool
-func (p *MattermostToolRegistry) toolSearchPosts(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
+func (p *MattermostToolProvider) toolSearchPosts(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
 	var args SearchPostsArgs
 	err := argsGetter(&args)
 	if err != nil {
@@ -128,7 +128,7 @@ func (p *MattermostToolRegistry) toolSearchPosts(mcpContext *MCPToolContext, arg
 }
 
 // toolSearchUsers implements the search_users tool
-func (p *MattermostToolRegistry) toolSearchUsers(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
+func (p *MattermostToolProvider) toolSearchUsers(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
 	var args SearchUsersArgs
 	err := argsGetter(&args)
 	if err != nil {

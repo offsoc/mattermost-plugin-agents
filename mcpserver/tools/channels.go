@@ -54,7 +54,7 @@ type AddUserToChannelArgs struct {
 }
 
 // getChannelTools returns all channel-related tools
-func (p *MattermostToolRegistry) getChannelTools() []MCPTool {
+func (p *MattermostToolProvider) getChannelTools() []MCPTool {
 	return []MCPTool{
 		{
 			Name:        "read_channel",
@@ -84,7 +84,7 @@ func (p *MattermostToolRegistry) getChannelTools() []MCPTool {
 }
 
 // getDevChannelTools returns development channel-related tools for MCP
-func (p *MattermostToolRegistry) getDevChannelTools() []MCPTool {
+func (p *MattermostToolProvider) getDevChannelTools() []MCPTool {
 	return []MCPTool{
 		{
 			Name:        "add_user_to_channel",
@@ -96,7 +96,7 @@ func (p *MattermostToolRegistry) getDevChannelTools() []MCPTool {
 }
 
 // toolReadChannel implements the read_channel tool
-func (p *MattermostToolRegistry) toolReadChannel(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
+func (p *MattermostToolProvider) toolReadChannel(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
 	var args ReadChannelArgs
 	err := argsGetter(&args)
 	if err != nil {
@@ -168,7 +168,7 @@ func (p *MattermostToolRegistry) toolReadChannel(mcpContext *MCPToolContext, arg
 }
 
 // toolCreateChannel implements the create_channel tool
-func (p *MattermostToolRegistry) toolCreateChannel(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
+func (p *MattermostToolProvider) toolCreateChannel(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
 	var args CreateChannelArgs
 	err := argsGetter(&args)
 	if err != nil {
@@ -220,7 +220,7 @@ func (p *MattermostToolRegistry) toolCreateChannel(mcpContext *MCPToolContext, a
 }
 
 // toolGetChannelInfo implements the get_channel_info tool
-func (p *MattermostToolRegistry) toolGetChannelInfo(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
+func (p *MattermostToolProvider) toolGetChannelInfo(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
 	var args GetChannelInfoArgs
 	err := argsGetter(&args)
 	if err != nil {
@@ -305,7 +305,7 @@ func (p *MattermostToolRegistry) toolGetChannelInfo(mcpContext *MCPToolContext, 
 }
 
 // toolGetChannelMembers implements the get_channel_members tool
-func (p *MattermostToolRegistry) toolGetChannelMembers(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
+func (p *MattermostToolProvider) toolGetChannelMembers(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
 	var args GetChannelMembersArgs
 	err := argsGetter(&args)
 	if err != nil {
@@ -382,7 +382,7 @@ func (p *MattermostToolRegistry) toolGetChannelMembers(mcpContext *MCPToolContex
 }
 
 // toolAddUserToChannel implements the add_user_to_channel tool using the context client
-func (p *MattermostToolRegistry) toolAddUserToChannel(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
+func (p *MattermostToolProvider) toolAddUserToChannel(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
 	var args AddUserToChannelArgs
 	err := argsGetter(&args)
 	if err != nil {

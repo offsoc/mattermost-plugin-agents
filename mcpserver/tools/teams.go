@@ -44,7 +44,7 @@ type AddUserToTeamArgs struct {
 }
 
 // getTeamTools returns all team-related tools
-func (p *MattermostToolRegistry) getTeamTools() []MCPTool {
+func (p *MattermostToolProvider) getTeamTools() []MCPTool {
 	return []MCPTool{
 		{
 			Name:        "get_team_info",
@@ -62,7 +62,7 @@ func (p *MattermostToolRegistry) getTeamTools() []MCPTool {
 }
 
 // getDevTeamTools returns development team-related tools for MCP
-func (p *MattermostToolRegistry) getDevTeamTools() []MCPTool {
+func (p *MattermostToolProvider) getDevTeamTools() []MCPTool {
 	return []MCPTool{
 		{
 			Name:        "create_team",
@@ -80,7 +80,7 @@ func (p *MattermostToolRegistry) getDevTeamTools() []MCPTool {
 }
 
 // toolGetTeamInfo implements the get_team_info tool
-func (p *MattermostToolRegistry) toolGetTeamInfo(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
+func (p *MattermostToolProvider) toolGetTeamInfo(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
 	var args GetTeamInfoArgs
 	err := argsGetter(&args)
 	if err != nil {
@@ -161,7 +161,7 @@ func (p *MattermostToolRegistry) toolGetTeamInfo(mcpContext *MCPToolContext, arg
 }
 
 // toolGetTeamMembers implements the get_team_members tool
-func (p *MattermostToolRegistry) toolGetTeamMembers(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
+func (p *MattermostToolProvider) toolGetTeamMembers(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
 	var args GetTeamMembersArgs
 	err := argsGetter(&args)
 	if err != nil {
@@ -238,7 +238,7 @@ func (p *MattermostToolRegistry) toolGetTeamMembers(mcpContext *MCPToolContext, 
 }
 
 // toolCreateTeam implements the create_team tool using the context client
-func (p *MattermostToolRegistry) toolCreateTeam(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
+func (p *MattermostToolProvider) toolCreateTeam(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
 	var args CreateTeamArgs
 	err := argsGetter(&args)
 	if err != nil {
@@ -285,7 +285,7 @@ func (p *MattermostToolRegistry) toolCreateTeam(mcpContext *MCPToolContext, args
 }
 
 // toolAddUserToTeam implements the add_user_to_team tool using the context client
-func (p *MattermostToolRegistry) toolAddUserToTeam(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
+func (p *MattermostToolProvider) toolAddUserToTeam(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
 	var args AddUserToTeamArgs
 	err := argsGetter(&args)
 	if err != nil {

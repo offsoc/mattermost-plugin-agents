@@ -33,17 +33,21 @@ type MCPTool struct {
 	Resolver    MCPToolResolver
 }
 
-// MattermostToolRegistry provides Mattermost tools following the mmtools pattern
-type MattermostToolRegistry struct {
+type ToolProvider interface {
+	ProvideTools(*server.MCPServer)
+}
+
+// MattermostToolProvider provides Mattermost tools following the mmtools pattern
+type MattermostToolProvider struct {
 	authProvider auth.AuthenticationProvider
 	logger       mlog.LoggerIFace
 	serverURL    string
 	devMode      bool
 }
 
-// NewMattermostToolRegistry creates a new tool registry
-func NewMattermostToolRegistry(authProvider auth.AuthenticationProvider, logger mlog.LoggerIFace, serverURL string, devMode bool) *MattermostToolRegistry {
-	return &MattermostToolRegistry{
+// NewMattermostToolProvider creates a new tool provider
+func NewMattermostToolProvider(authProvider auth.AuthenticationProvider, logger mlog.LoggerIFace, serverURL string, devMode bool) *MattermostToolProvider {
+	return &MattermostToolProvider{
 		authProvider: authProvider,
 		logger:       logger,
 		serverURL:    serverURL,
@@ -51,41 +55,33 @@ func NewMattermostToolRegistry(authProvider auth.AuthenticationProvider, logger 
 	}
 }
 
-// getMCPTools returns all available MCP tools based on configuration
-func (r *MattermostToolRegistry) getMCPTools() []MCPTool {
-	tools := []MCPTool{}
+// ProvideTools provides all tools to the MCP server by registering them
+func (p *MattermostToolProvider) ProvideTools(mcpServer *server.MCPServer) {
+	mcpTools := []MCPTool{}
 
 	// Add regular tools
-	tools = append(tools, r.getPostTools()...)
-	tools = append(tools, r.getChannelTools()...)
-	tools = append(tools, r.getTeamTools()...)
-	tools = append(tools, r.getSearchTools()...)
+	mcpTools = append(mcpTools, p.getPostTools()...)
+	mcpTools = append(mcpTools, p.getChannelTools()...)
+	mcpTools = append(mcpTools, p.getTeamTools()...)
+	mcpTools = append(mcpTools, p.getSearchTools()...)
 
 	// Add dev tools if dev mode is enabled
-	if r.devMode {
-		tools = append(tools, r.getDevUserTools()...)
-		tools = append(tools, r.getDevPostTools()...)
-		tools = append(tools, r.getDevTeamTools()...)
-		tools = append(tools, r.getDevChannelTools()...)
+	if p.devMode {
+		mcpTools = append(mcpTools, p.getDevUserTools()...)
+		mcpTools = append(mcpTools, p.getDevPostTools()...)
+		mcpTools = append(mcpTools, p.getDevTeamTools()...)
+		mcpTools = append(mcpTools, p.getDevChannelTools()...)
 	}
-
-	return tools
-}
-
-// RegisterWithMCPServer registers all tools with the provided MCP server
-func (r *MattermostToolRegistry) RegisterWithMCPServer(mcpServer *server.MCPServer) {
-	// Get all MCP tools from the provider
-	mcpTools := r.getMCPTools()
 
 	// Convert and register each tool
 	for _, mcpTool := range mcpTools {
-		libMCPTool := r.convertMCPToolToLibMCPTool(mcpTool)
-		mcpServer.AddTool(libMCPTool, r.createMCPToolHandler(mcpTool.Resolver))
+		libMCPTool := p.convertMCPToolToLibMCPTool(mcpTool)
+		mcpServer.AddTool(libMCPTool, p.createMCPToolHandler(mcpTool.Resolver))
 	}
 }
 
 // convertMCPToolToLibMCPTool converts our MCPTool to a library mcp.Tool
-func (r *MattermostToolRegistry) convertMCPToolToLibMCPTool(mcpTool MCPTool) mcp.Tool {
+func (p *MattermostToolProvider) convertMCPToolToLibMCPTool(mcpTool MCPTool) mcp.Tool {
 	// Try to convert the JSON schema to MCP format
 	if schema, ok := mcpTool.Schema.(*jsonschema.Schema); ok && schema != nil {
 		// Marshal the jsonschema.Schema to JSON for use as raw schema
@@ -95,7 +91,7 @@ func (r *MattermostToolRegistry) convertMCPToolToLibMCPTool(mcpTool MCPTool) mcp
 			return mcp.NewToolWithRawSchema(mcpTool.Name, mcpTool.Description, schemaBytes)
 		}
 		// Log the error but continue with fallback
-		r.logger.Warn("Failed to marshal JSON schema for tool", mlog.String("tool", mcpTool.Name), mlog.Err(err))
+		p.logger.Warn("Failed to marshal JSON schema for tool", mlog.String("tool", mcpTool.Name), mlog.Err(err))
 	}
 
 	// Fallback to basic tool creation without schema
@@ -104,12 +100,12 @@ func (r *MattermostToolRegistry) convertMCPToolToLibMCPTool(mcpTool MCPTool) mcp
 }
 
 // createMCPToolHandler creates an MCP tool handler that wraps an MCP tool resolver
-func (r *MattermostToolRegistry) createMCPToolHandler(resolver MCPToolResolver) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (p *MattermostToolProvider) createMCPToolHandler(resolver MCPToolResolver) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		// Create MCP tool context from MCP context
-		mcpContext, err := r.createMCPToolContext(ctx)
+		mcpContext, err := p.createMCPToolContext(ctx)
 		if err != nil {
-			r.logger.Debug("Failed to create LLM context", mlog.Err(err))
+			p.logger.Debug("Failed to create LLM context", mlog.Err(err))
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{
 					mcp.TextContent{
@@ -135,7 +131,7 @@ func (r *MattermostToolRegistry) createMCPToolHandler(resolver MCPToolResolver) 
 		// Call the MCP tool resolver
 		result, err := resolver(mcpContext, argsGetter)
 		if err != nil {
-			r.logger.Debug("LLM tool resolver failed", mlog.Err(err))
+			p.logger.Debug("LLM tool resolver failed", mlog.Err(err))
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{
 					mcp.TextContent{
@@ -161,8 +157,8 @@ func (r *MattermostToolRegistry) createMCPToolHandler(resolver MCPToolResolver) 
 }
 
 // createMCPToolContext creates an MCPToolContext from the Go context and authenticated client
-func (r *MattermostToolRegistry) createMCPToolContext(ctx context.Context) (*MCPToolContext, error) {
-	client, err := r.authProvider.GetAuthenticatedMattermostClient(ctx)
+func (p *MattermostToolProvider) createMCPToolContext(ctx context.Context) (*MCPToolContext, error) {
+	client, err := p.authProvider.GetAuthenticatedMattermostClient(ctx)
 	if err != nil {
 		return nil, err
 	}

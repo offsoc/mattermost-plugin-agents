@@ -77,7 +77,7 @@ func NewMattermostStdioMCPServer(serverURL, token string, opts ...Option) (*Matt
 		return nil, fmt.Errorf("startup token validation failed: %w", err)
 	}
 
-	// Register all Mattermost tools using the new provider pattern
+	// Register all Mattermost tools
 	mattermostServer.registerTools()
 
 	return mattermostServer, nil
@@ -200,13 +200,13 @@ func (w *mlogWriter) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-// registerTools registers all tools using the tool registry
+// registerTools registers all tools using the tool provider
 func (s *MattermostMCPServer) registerTools() {
-	// Create the tools registry
-	toolRegistry := tools.NewMattermostToolRegistry(s.authProvider, s.logger, s.config.ServerURL, s.config.DevMode)
+	// Create the tools provider
+	toolProvider := tools.NewMattermostToolProvider(s.authProvider, s.logger, s.config.ServerURL, s.config.DevMode)
 
-	// Let the registry register all tools with the MCP server
-	toolRegistry.RegisterWithMCPServer(s.mcpServer)
+	// Let the provider provide all tools to the MCP server
+	toolProvider.ProvideTools(s.mcpServer)
 }
 
 // GetMCPServer returns the underlying MCP server for testing purposes

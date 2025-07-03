@@ -22,7 +22,7 @@ type CreateUserArgs struct {
 }
 
 // getDevUserTools returns development user-related tools for MCP
-func (p *MattermostToolRegistry) getDevUserTools() []MCPTool {
+func (p *MattermostToolProvider) getDevUserTools() []MCPTool {
 	return []MCPTool{
 		{
 			Name:        "create_user",
@@ -34,7 +34,7 @@ func (p *MattermostToolRegistry) getDevUserTools() []MCPTool {
 }
 
 // toolCreateUser implements the create_user tool using the context client
-func (p *MattermostToolRegistry) toolCreateUser(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
+func (p *MattermostToolProvider) toolCreateUser(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
 	var args CreateUserArgs
 	err := argsGetter(&args)
 	if err != nil {
