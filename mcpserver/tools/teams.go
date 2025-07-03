@@ -17,30 +17,30 @@ import (
 
 // GetTeamInfoArgs represents arguments for the get_team_info tool
 type GetTeamInfoArgs struct {
-	TeamID          string `jsonschema_description:"The exact team ID (fastest, most reliable method)"`
-	TeamDisplayName string `jsonschema_description:"The human-readable display name users see (e.g. 'Engineering Team')"`
-	TeamName        string `jsonschema_description:"The URL-friendly team name (e.g. 'engineering-team')"`
+	TeamID          string `json:"team_id" jsonschema_description:"The exact team ID (fastest, most reliable method)"`
+	TeamDisplayName string `json:"team_display_name" jsonschema_description:"The human-readable display name users see (e.g. 'Engineering Team')"`
+	TeamName        string `json:"team_name" jsonschema_description:"The URL-friendly team name (e.g. 'engineering-team')"`
 }
 
 // GetTeamMembersArgs represents arguments for the get_team_members tool
 type GetTeamMembersArgs struct {
-	TeamID string `jsonschema_description:"ID of the team to get members for"`
-	Limit  int    `jsonschema_description:"Number of members to return (default: 50, max: 200)"`
-	Page   int    `jsonschema_description:"Page number for pagination (default: 0)"`
+	TeamID string `json:"team_id" jsonschema_description:"ID of the team to get members for"`
+	Limit  int    `json:"limit" jsonschema_description:"Number of members to return (default: 50, max: 200)"`
+	Page   int    `json:"page" jsonschema_description:"Page number for pagination (default: 0)"`
 }
 
 // CreateTeamArgs represents arguments for the create_team tool (dev mode only)
 type CreateTeamArgs struct {
-	Name        string `jsonschema_description:"URL name for the team"`
-	DisplayName string `jsonschema_description:"Display name for the team"`
-	Type        string `jsonschema_description:"Team type: 'O' for open, 'I' for invite only"`
-	Description string `jsonschema_description:"Team description"`
+	Name        string `json:"name" jsonschema_description:"URL name for the team"`
+	DisplayName string `json:"display_name" jsonschema_description:"Display name for the team"`
+	Type        string `json:"type" jsonschema_description:"Team type: 'O' for open, 'I' for invite only"`
+	Description string `json:"description" jsonschema_description:"Team description"`
 }
 
 // AddUserToTeamArgs represents arguments for the add_user_to_team tool (dev mode only)
 type AddUserToTeamArgs struct {
-	UserID string `jsonschema_description:"ID of the user to add"`
-	TeamID string `jsonschema_description:"ID of the team to add user to"`
+	UserID string `json:"user_id" jsonschema_description:"ID of the user to add"`
+	TeamID string `json:"team_id" jsonschema_description:"ID of the team to add user to"`
 }
 
 // getTeamTools returns all team-related tools

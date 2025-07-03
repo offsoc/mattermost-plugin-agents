@@ -13,12 +13,12 @@ import (
 
 // CreateUserArgs represents arguments for the create_user tool (dev mode only)
 type CreateUserArgs struct {
-	Username  string `jsonschema_description:"Username for the new user"`
-	Email     string `jsonschema_description:"Email address for the new user"`
-	Password  string `jsonschema_description:"Password for the new user"`
-	FirstName string `jsonschema_description:"First name of the user"`
-	LastName  string `jsonschema_description:"Last name of the user"`
-	Nickname  string `jsonschema_description:"Nickname for the user"`
+	Username  string `json:"username" jsonschema_description:"Username for the new user"`
+	Email     string `json:"email" jsonschema_description:"Email address for the new user"`
+	Password  string `json:"password" jsonschema_description:"Password for the new user"`
+	FirstName string `json:"first_name" jsonschema_description:"First name of the user"`
+	LastName  string `json:"last_name" jsonschema_description:"Last name of the user"`
+	Nickname  string `json:"nickname" jsonschema_description:"Nickname for the user"`
 }
 
 // getDevUserTools returns development user-related tools for MCP

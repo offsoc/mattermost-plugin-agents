@@ -17,40 +17,40 @@ import (
 
 // ReadChannelArgs represents arguments for the read_channel tool
 type ReadChannelArgs struct {
-	ChannelID string `jsonschema_description:"The ID of the channel to read from"`
-	Limit     int    `jsonschema_description:"Number of posts to retrieve (default: 20, max: 100)"`
-	Since     string `jsonschema_description:"Only get posts since this timestamp (ISO 8601 format)"`
+	ChannelID string `json:"channel_id" jsonschema_description:"The ID of the channel to read from"`
+	Limit     int    `json:"limit" jsonschema_description:"Number of posts to retrieve (default: 20, max: 100)"`
+	Since     string `json:"since" jsonschema_description:"Only get posts since this timestamp (ISO 8601 format)"`
 }
 
 // CreateChannelArgs represents arguments for the create_channel tool
 type CreateChannelArgs struct {
-	Name        string `jsonschema_description:"The channel name (URL-friendly)"`
-	DisplayName string `jsonschema_description:"The channel display name"`
-	Type        string `jsonschema_description:"Channel type: 'O' for public, 'P' for private"`
-	TeamID      string `jsonschema_description:"The team ID where the channel will be created"`
-	Purpose     string `jsonschema_description:"Optional channel purpose"`
-	Header      string `jsonschema_description:"Optional channel header"`
+	Name        string `json:"name" jsonschema_description:"The channel name (URL-friendly)"`
+	DisplayName string `json:"display_name" jsonschema_description:"The channel display name"`
+	Type        string `json:"type" jsonschema_description:"Channel type: 'O' for public, 'P' for private"`
+	TeamID      string `json:"team_id" jsonschema_description:"The team ID where the channel will be created"`
+	Purpose     string `json:"purpose" jsonschema_description:"Optional channel purpose"`
+	Header      string `json:"header" jsonschema_description:"Optional channel header"`
 }
 
 // GetChannelInfoArgs represents arguments for the get_channel_info tool
 type GetChannelInfoArgs struct {
-	ChannelID          string `jsonschema_description:"The exact channel ID (fastest, most reliable method)"`
-	ChannelDisplayName string `jsonschema_description:"The human-readable display name users see (e.g. 'General Discussion')"`
-	ChannelName        string `jsonschema_description:"The URL-friendly channel name (e.g. 'general-discussion')"`
-	TeamID             string `jsonschema_description:"Team ID (required if using channel_name or channel_display_name)"`
+	ChannelID          string `json:"channel_id" jsonschema_description:"The exact channel ID (fastest, most reliable method)"`
+	ChannelDisplayName string `json:"channel_display_name" jsonschema_description:"The human-readable display name users see (e.g. 'General Discussion')"`
+	ChannelName        string `json:"channel_name" jsonschema_description:"The URL-friendly channel name (e.g. 'general-discussion')"`
+	TeamID             string `json:"team_id" jsonschema_description:"Team ID (required if using channel_name or channel_display_name)"`
 }
 
 // GetChannelMembersArgs represents arguments for the get_channel_members tool
 type GetChannelMembersArgs struct {
-	ChannelID string `jsonschema_description:"ID of the channel to get members for"`
-	Limit     int    `jsonschema_description:"Number of members to return (default: 50, max: 200)"`
-	Page      int    `jsonschema_description:"Page number for pagination (default: 0)"`
+	ChannelID string `json:"channel_id" jsonschema_description:"ID of the channel to get members for"`
+	Limit     int    `json:"limit" jsonschema_description:"Number of members to return (default: 50, max: 200)"`
+	Page      int    `json:"page" jsonschema_description:"Page number for pagination (default: 0)"`
 }
 
 // AddUserToChannelArgs represents arguments for the add_user_to_channel tool (dev mode only)
 type AddUserToChannelArgs struct {
-	UserID    string `jsonschema_description:"ID of the user to add"`
-	ChannelID string `jsonschema_description:"ID of the channel to add user to"`
+	UserID    string `json:"user_id" jsonschema_description:"ID of the user to add"`
+	ChannelID string `json:"channel_id" jsonschema_description:"ID of the channel to add user to"`
 }
 
 // getChannelTools returns all channel-related tools
@@ -160,6 +160,7 @@ func (p *MattermostToolRegistry) toolReadChannel(mcpContext *MCPToolContext, arg
 			result.WriteString(fmt.Sprintf("**Post %d** by %s:\n", i+1, user.Username))
 		}
 
+		result.WriteString(fmt.Sprintf("Post ID: %s\n", post.Id))
 		result.WriteString(fmt.Sprintf("%s\n\n", post.Message))
 	}
 

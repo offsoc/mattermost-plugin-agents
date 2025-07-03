@@ -15,16 +15,16 @@ import (
 
 // SearchPostsArgs represents arguments for the search_posts tool
 type SearchPostsArgs struct {
-	Query     string `jsonschema_description:"The search query"`
-	TeamID    string `jsonschema_description:"Optional team ID to limit search scope"`
-	ChannelID string `jsonschema_description:"Optional channel ID to limit search to a specific channel"`
-	Limit     int    `jsonschema_description:"Number of results to return (default: 20, max: 100)"`
+	Query     string `json:"query" jsonschema_description:"The search query"`
+	TeamID    string `json:"team_id" jsonschema_description:"Optional team ID to limit search scope"`
+	ChannelID string `json:"channel_id" jsonschema_description:"Optional channel ID to limit search to a specific channel"`
+	Limit     int    `json:"limit" jsonschema_description:"Number of results to return (default: 20, max: 100)"`
 }
 
 // SearchUsersArgs represents arguments for the search_users tool
 type SearchUsersArgs struct {
-	Term  string `jsonschema_description:"Search term (username, email, first name, or last name)"`
-	Limit int    `jsonschema_description:"Maximum number of results to return (default: 20, max: 100)"`
+	Term  string `json:"term" jsonschema_description:"Search term (username, email, first name, or last name)"`
+	Limit int    `json:"limit" jsonschema_description:"Maximum number of results to return (default: 20, max: 100)"`
 }
 
 // getSearchTools returns all search-related tools
@@ -76,12 +76,8 @@ func (p *MattermostToolRegistry) toolSearchPosts(mcpContext *MCPToolContext, arg
 	// Build search parameters - use the simpler search method
 	searchTerm := args.Query
 
-	// For team-specific search, include team context
+	// For team-specific search, include team context. This can be an empty string if not specified.
 	teamID := args.TeamID
-	if teamID == "" {
-		// If no team specified, we'll search across all teams the user has access to
-		teamID = "all"
-	}
 
 	// Perform the search using basic search
 	searchResults, _, err := client.SearchPosts(ctx, teamID, searchTerm, false)

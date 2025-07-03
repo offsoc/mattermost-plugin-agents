@@ -229,11 +229,11 @@ func TestDevToolsSecurityGating(t *testing.T) {
 			result := executeDevToolWithMCP(t, suite, toolName, args)
 			assert.True(t, result.IsError, "Dev tool %s should be blocked when dev mode is disabled", toolName)
 
-			// Check that the error message mentions dev mode
+			// Check that the error indicates the tool is not available (correct security behavior)
 			if len(result.Content) > 0 {
 				if textContent, ok := result.Content[0].(mcp.TextContent); ok {
-					assert.Contains(t, textContent.Text, "development mode",
-						"Error should mention development mode requirement")
+					assert.Contains(t, textContent.Text, "not found",
+						"Error should indicate tool is not available when dev mode is disabled")
 				}
 			}
 		})

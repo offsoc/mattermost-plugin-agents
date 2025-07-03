@@ -171,14 +171,39 @@ func ExecuteMCPTool(t *testing.T, mcpServer *server.MCPServer, toolName string, 
 		}
 	}
 
-	// Parse as successful response
+	// Parse as successful response with custom structure to handle Content interface
 	var successResponse struct {
-		JSONRPC string             `json:"jsonrpc"`
-		ID      interface{}        `json:"id"`
-		Result  mcp.CallToolResult `json:"result"`
+		JSONRPC string      `json:"jsonrpc"`
+		ID      interface{} `json:"id"`
+		Result  struct {
+			Content []map[string]interface{} `json:"content"` // Handle as raw JSON first
+			IsError bool                     `json:"isError,omitempty"`
+		} `json:"result"`
 	}
 	err = json.Unmarshal(responseBytes, &successResponse)
 	require.NoError(t, err, "Failed to unmarshal MCP tool response")
 
-	return &successResponse.Result
+	// Convert to proper CallToolResult with TextContent
+	result := &mcp.CallToolResult{
+		IsError: successResponse.Result.IsError,
+		Content: make([]mcp.Content, len(successResponse.Result.Content)),
+	}
+
+	// Convert each content item to TextContent (most common case for our tools)
+	for i, content := range successResponse.Result.Content {
+		if text, ok := content["text"].(string); ok {
+			result.Content[i] = mcp.TextContent{
+				Type: "text",
+				Text: text,
+			}
+		} else {
+			// Fallback for other content types - just convert to string
+			result.Content[i] = mcp.TextContent{
+				Type: "text",
+				Text: fmt.Sprintf("%v", content),
+			}
+		}
+	}
+
+	return result
 }

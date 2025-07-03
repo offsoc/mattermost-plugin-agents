@@ -15,25 +15,25 @@ import (
 
 // ReadPostArgs represents arguments for the read_post tool
 type ReadPostArgs struct {
-	PostID        string `jsonschema_description:"The ID of the post to read"`
-	IncludeThread bool   `jsonschema_description:"Whether to include the entire thread (default: true)"`
+	PostID        string `json:"post_id" jsonschema_description:"The ID of the post to read"`
+	IncludeThread bool   `json:"include_thread" jsonschema_description:"Whether to include the entire thread (default: true)"`
 }
 
 // CreatePostArgs represents arguments for the create_post tool
 type CreatePostArgs struct {
-	ChannelID string `jsonschema_description:"The ID of the channel to post in"`
-	Message   string `jsonschema_description:"The message content"`
-	RootID    string `jsonschema_description:"Optional root post ID for replies"`
+	ChannelID string `json:"channel_id" jsonschema_description:"The ID of the channel to post in"`
+	Message   string `json:"message" jsonschema_description:"The message content"`
+	RootID    string `json:"root_id" jsonschema_description:"Optional root post ID for replies"`
 }
 
 // CreatePostAsUserArgs represents arguments for the create_post_as_user tool (dev mode only)
 type CreatePostAsUserArgs struct {
-	Username  string `jsonschema_description:"Username to login as"`
-	Password  string `jsonschema_description:"Password to login with"`
-	ChannelID string `jsonschema_description:"The ID of the channel to post in"`
-	Message   string `jsonschema_description:"The message content"`
-	RootID    string `jsonschema_description:"Optional root post ID for replies"`
-	Props     string `jsonschema_description:"Optional post properties (JSON string)"`
+	Username  string `json:"username" jsonschema_description:"Username to login as"`
+	Password  string `json:"password" jsonschema_description:"Password to login with"`
+	ChannelID string `json:"channel_id" jsonschema_description:"The ID of the channel to post in"`
+	Message   string `json:"message" jsonschema_description:"The message content"`
+	RootID    string `json:"root_id" jsonschema_description:"Optional root post ID for replies"`
+	Props     string `json:"props" jsonschema_description:"Optional post properties (JSON string)"`
 }
 
 // getPostTools returns all post-related tools
@@ -140,6 +140,7 @@ func (p *MattermostToolRegistry) toolReadPost(mcpContext *MCPToolContext, argsGe
 			result.WriteString(fmt.Sprintf("**Post %d** by %s:\n", i+1, user.Username))
 		}
 
+		result.WriteString(fmt.Sprintf("Post ID: %s\n", post.Id))
 		result.WriteString(fmt.Sprintf("%s\n\n", post.Message))
 	}
 
