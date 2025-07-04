@@ -13,8 +13,8 @@ import (
 
 // AuthenticationProvider handles authentication for MCP requests
 type AuthenticationProvider interface {
-	// ValidateAuth validates authentication from context and returns user ID
-	ValidateAuth(ctx context.Context) (string, error)
+	// ValidateAuth validates authentication from context
+	ValidateAuth(ctx context.Context) error
 
 	// GetAuthenticatedMattermostClient returns an authenticated Mattermost client
 	GetAuthenticatedMattermostClient(ctx context.Context) (*model.Client4, error)
@@ -36,24 +36,24 @@ func NewTokenAuthenticationProvider(serverURL, token string, logger mlog.LoggerI
 	}
 }
 
-// ValidateAuth validates authentication and returns user ID
-func (p *TokenAuthenticationProvider) ValidateAuth(ctx context.Context) (string, error) {
+// ValidateAuth validates authentication
+func (p *TokenAuthenticationProvider) ValidateAuth(ctx context.Context) error {
 	// Get authenticated client (reuses the authentication logic)
 	client, err := p.GetAuthenticatedMattermostClient(ctx)
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	// Get current user to validate token
 	user, _, err := client.GetMe(ctx, "")
 	if err != nil {
 		p.logger.Error("failed to validate token", mlog.Err(err))
-		return "", fmt.Errorf("invalid authentication token: %w", err)
+		return fmt.Errorf("invalid authentication token: %w", err)
 	}
 
 	p.logger.Debug("validated token for user", mlog.String("user_id", user.Id), mlog.String("username", user.Username))
 
-	return user.Id, nil
+	return nil
 }
 
 // GetAuthenticatedMattermostClient returns an authenticated Mattermost client
@@ -91,10 +91,10 @@ func NewOAuthAuthenticationProvider(clientID, clientSecret, redirectURL, serverU
 	}
 }
 
-// ValidateAuth validates OAuth authentication from context and returns user ID
+// ValidateAuth validates OAuth authentication from context
 // TODO: Implement when HTTP transport is added
-func (p *OAuthAuthenticationProvider) ValidateAuth(ctx context.Context) (string, error) {
-	return "", fmt.Errorf("OAuth authentication not yet implemented")
+func (p *OAuthAuthenticationProvider) ValidateAuth(ctx context.Context) error {
+	return fmt.Errorf("OAuth authentication not yet implemented")
 }
 
 // GetAuthenticatedMattermostClient returns an OAuth-authenticated Mattermost client

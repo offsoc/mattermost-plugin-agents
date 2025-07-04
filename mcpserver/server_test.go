@@ -204,9 +204,8 @@ func TestAuthentication(t *testing.T) {
 		assert.NotNil(t, authProvider, "Token authentication provider should be created")
 
 		// Test token validation with configured token
-		userID, err := authProvider.ValidateAuth(context.Background())
+		err := authProvider.ValidateAuth(context.Background())
 		require.NoError(t, err, "Should validate authentication with configured token")
-		assert.NotEmpty(t, userID, "User ID should not be empty")
 	})
 
 	t.Run("TokenValidationAtStartup", func(t *testing.T) {
@@ -224,7 +223,7 @@ func TestAuthentication(t *testing.T) {
 		invalidToken := "invalid-token-xyz"
 		authProvider := auth.NewTokenAuthenticationProvider(suite.serverURL, invalidToken, suite.logger)
 
-		_, err := authProvider.ValidateAuth(context.Background())
+		err := authProvider.ValidateAuth(context.Background())
 		assert.Error(t, err, "Invalid token should fail validation")
 	})
 }

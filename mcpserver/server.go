@@ -73,7 +73,7 @@ func NewMattermostStdioMCPServer(serverURL, token string, opts ...Option) (*Matt
 	)
 
 	// For STDIO transport, always validate token at startup
-	if _, err := mattermostServer.authProvider.ValidateAuth(context.Background()); err != nil {
+	if err := mattermostServer.authProvider.ValidateAuth(context.Background()); err != nil {
 		return nil, fmt.Errorf("startup token validation failed: %w", err)
 	}
 
