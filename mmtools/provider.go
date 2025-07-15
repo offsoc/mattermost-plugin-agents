@@ -39,8 +39,8 @@ func (p *MMToolProvider) GetTools(isDM bool, bot *bots.Bot) []llm.Tool {
 	builtInTools := []llm.Tool{}
 
 	if isDM {
-		// Add search tool if search service is available
-		if p.search != nil {
+		// Add search tool if search service is available and enabled
+		if p.search.Enabled() {
 			builtInTools = append(builtInTools, llm.Tool{
 				Name:        "SearchServer",
 				Description: "Search the Mattermost chat server the user is on for messages using semantic search. Use this tool whenever the user asks a question and you don't have the context to answer or you think your response would be more accurate with knowledge from the Mattermost server",

@@ -9,4 +9,5 @@ const (
 	ServiceTypeAzure            = "azure"
 	ServiceTypeASage            = "asage"
 	ServiceTypeAnthropic        = "anthropic"
+	ServiceTypeCohere           = "cohere"
 )

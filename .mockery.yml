@@ -18,3 +18,9 @@ packages:
       filename: client_mock.go
     interfaces:
       Client:
+  github.com/mattermost/mattermost-plugin-ai/embeddings:
+    config:
+      dir: embeddings/mocks
+      filename: embedding_search_mock.go
+    interfaces:
+      EmbeddingSearch:

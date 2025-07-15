@@ -53,7 +53,7 @@ Select **Add an Agent** to create a new Agent, then configure the agent settings
 | **Display Name** | User-facing name shown in Mattermost |
 | **Agent Username** | The mattermost username for the agent. @ mentions to the agent will use this name |
 | **Agent Avatar** | Custom image for the agent |
-| **Service** | LLM provider for this agent (OpenAI, Anthropic, Azure OpenAI, OpenAI-compatible) |
+| **Service** | LLM provider for this agent (OpenAI, Anthropic, Cohere, Azure OpenAI, OpenAI-compatible) |
 | **Send User ID** | Whether to send Mattermost user IDs to the LLM provider |
 | **Default Model** | Specific model to use from your chosen provider |
 | **Input Token Limit** | Maximum tokens allowed in input (model-dependent) |
@@ -74,6 +74,7 @@ For each LLM provider you want to use, you'll need to configure authentication. 
 |----------|----------|----------|
 | **OpenAI** | API Key | Organization ID |
 | **Anthropic** | API Key | |
+| **Cohere** | API Key | |
 | **Azure OpenAI** | API Key, Resource Name, Deployment ID | |
 
 See the [Provider Guide](https://docs.mattermost.com/agents/docs/providers.html) for detailed provider-specific configuration.

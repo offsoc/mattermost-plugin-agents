@@ -80,6 +80,8 @@ func (c *BotConfig) IsValid() bool {
 		return c.Service.APIKey != ""
 	case ServiceTypeASage:
 		return c.Service.APIKey != ""
+	case ServiceTypeCohere:
+		return c.Service.APIKey != ""
 	default:
 		return false
 	}

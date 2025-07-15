@@ -38,8 +38,8 @@ func (p *MMToolProvider) toolSearchServer(llmContext *llm.Context, argsGetter ll
 		return "search term too long", errors.New("search term too long")
 	}
 
-	// Check if search service is available
-	if p.search == nil {
+	// Check if search service is available and enabled
+	if !p.search.Enabled() {
 		return "search functionality is not configured", errors.New("search is not configured")
 	}
 

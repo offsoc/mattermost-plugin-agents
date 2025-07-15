@@ -179,6 +179,11 @@ func (b *MMBots) getLLM(serviceConfig llm.ServiceConfig) llm.LanguageModel {
 		result = anthropic.New(serviceConfig, b.llmUpstreamHTTPClient)
 	case llm.ServiceTypeASage:
 		result = asage.New(serviceConfig, b.llmUpstreamHTTPClient)
+	case llm.ServiceTypeCohere:
+		// Set the Cohere OpenAI compatibility endpoint
+		cohereCfg := serviceConfig
+		cohereCfg.APIURL = "https://api.cohere.ai/compatibility/v1"
+		result = openai.NewCompatible(config.OpenAIConfigFromServiceConfig(cohereCfg), b.llmUpstreamHTTPClient)
 	}
 
 	// Truncation Support

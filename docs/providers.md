@@ -9,6 +9,7 @@ The Mattermost Agents plugin currently supports these LLM providers:
 - Local models via OpenAI-compatible APIs (Ollama, vLLM, etc.)
 - OpenAI
 - Anthropic
+- Cohere
 - Azure OpenAI
 
 ## General Configuration Concepts
@@ -68,6 +69,19 @@ Obtain an [Anthropic API key](https://console.anthropic.com/settings/keys), then
 |---------|----------|-------------|
 | **API Key** | Yes | Your Anthropic API key |
 | **Default Model** | Yes | The model to use by default (see [Anthropic's model documentation](https://docs.anthropic.com/claude/docs/models-overview)) |
+
+## Cohere
+
+### Authentication
+
+Obtain a [Cohere API key](https://dashboard.cohere.com/api-keys), then select **Cohere** in the **Service** dropdown and enter your API key. Specify a model name in the **Default Model** field that corresponds with the model's label in the API.
+
+### Configuration Options
+
+| Setting | Required | Description |
+|---------|----------|-------------|
+| **API Key** | Yes | Your Cohere API key |
+| **Default Model** | Yes | The model to use by default (see [Cohere's model documentation](https://docs.cohere.com/docs/models)) |
 
 ## Azure OpenAI
 

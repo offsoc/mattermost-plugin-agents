@@ -34,8 +34,8 @@ type Request struct {
 type Response struct {
 	Answer    string      `json:"answer"`
 	Results   []RAGResult `json:"results"`
-	PostID    string      `json:"postId,omitempty"`
-	ChannelID string      `json:"channelId,omitempty"`
+	PostID    string      `json:"postid,omitempty"`
+	ChannelID string      `json:"channelid,omitempty"`
 }
 
 // RAGResult represents an enriched search result with metadata
@@ -71,6 +71,11 @@ func New(
 		streamingService: streamingService,
 		licenseChecker:   licenseChecker,
 	}
+}
+
+// Enabled returns true if the search service is enabled and functional
+func (s *Search) Enabled() bool {
+	return s != nil && s.EmbeddingSearch != nil
 }
 
 // convertToRAGResults converts embeddings.EmbeddingSearchResult to RAGResult with enriched metadata
@@ -131,7 +136,7 @@ func (s *Search) convertToRAGResults(searchResults []embeddings.SearchResult) []
 
 // RunSearch initiates a search and sends results to a DM
 func (s *Search) RunSearch(ctx context.Context, userID string, bot *bots.Bot, query, teamID, channelID string, maxResults int) (map[string]string, error) {
-	if s.EmbeddingSearch == nil {
+	if !s.Enabled() {
 		return nil, fmt.Errorf("search functionality is not configured")
 	}
 
@@ -261,14 +266,14 @@ func (s *Search) RunSearch(ctx context.Context, userID string, bot *bots.Bot, qu
 	}(query, teamID, channelID, maxResults)
 
 	return map[string]string{
-		"PostID":    questionPost.Id,
-		"ChannelID": questionPost.ChannelId,
+		"postid":    questionPost.Id,
+		"channelid": questionPost.ChannelId,
 	}, nil
 }
 
 // SearchQuery performs a search and returns results immediately
 func (s *Search) SearchQuery(ctx context.Context, userID string, bot *bots.Bot, query, teamID, channelID string, maxResults int) (Response, error) {
-	if s.EmbeddingSearch == nil {
+	if !s.Enabled() {
 		return Response{}, fmt.Errorf("search functionality is not configured")
 	}
 

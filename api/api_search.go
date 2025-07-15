@@ -24,7 +24,7 @@ func (a *API) handleRunSearch(c *gin.Context) {
 	userID := c.GetHeader("Mattermost-User-Id")
 	bot := c.MustGet(ContextBotKey).(*bots.Bot)
 
-	if a.searchService == nil {
+	if !a.searchService.Enabled() {
 		c.AbortWithError(http.StatusBadRequest, fmt.Errorf("search functionality is not configured"))
 		return
 	}
@@ -53,7 +53,7 @@ func (a *API) handleSearchQuery(c *gin.Context) {
 	userID := c.GetHeader("Mattermost-User-Id")
 	bot := c.MustGet(ContextBotKey).(*bots.Bot)
 
-	if a.searchService == nil {
+	if !a.searchService.Enabled() {
 		c.AbortWithError(http.StatusBadRequest, fmt.Errorf("search functionality is not configured"))
 		return
 	}

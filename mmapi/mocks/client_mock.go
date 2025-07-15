@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/mattermost/mattermost-plugin-ai/mmapi"
 	"github.com/mattermost/mattermost/server/public/model"
 	mock "github.com/stretchr/testify/mock"
 )
@@ -126,52 +125,6 @@ func (_c *MockClient_CreatePost_Call) Return(err error) *MockClient_CreatePost_C
 }
 
 func (_c *MockClient_CreatePost_Call) RunAndReturn(run func(post *model.Post) error) *MockClient_CreatePost_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// DB provides a mock function for the type MockClient
-func (_mock *MockClient) DB() *mmapi.DBClient {
-	ret := _mock.Called()
-
-	if len(ret) == 0 {
-		panic("no return value specified for DB")
-	}
-
-	var r0 *mmapi.DBClient
-	if returnFunc, ok := ret.Get(0).(func() *mmapi.DBClient); ok {
-		r0 = returnFunc()
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*mmapi.DBClient)
-		}
-	}
-	return r0
-}
-
-// MockClient_DB_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DB'
-type MockClient_DB_Call struct {
-	*mock.Call
-}
-
-// DB is a helper method to define mock.On call
-func (_e *MockClient_Expecter) DB() *MockClient_DB_Call {
-	return &MockClient_DB_Call{Call: _e.mock.On("DB")}
-}
-
-func (_c *MockClient_DB_Call) Run(run func()) *MockClient_DB_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run()
-	})
-	return _c
-}
-
-func (_c *MockClient_DB_Call) Return(dBClient *mmapi.DBClient) *MockClient_DB_Call {
-	_c.Call.Return(dBClient)
-	return _c
-}
-
-func (_c *MockClient_DB_Call) RunAndReturn(run func() *mmapi.DBClient) *MockClient_DB_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -548,62 +501,6 @@ func (_c *MockClient_GetFileInfo_Call) Return(fileInfo *model.FileInfo, err erro
 }
 
 func (_c *MockClient_GetFileInfo_Call) RunAndReturn(run func(fileID string) (*model.FileInfo, error)) *MockClient_GetFileInfo_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// GetFirstPostBeforeTimeRangeID provides a mock function for the type MockClient
-func (_mock *MockClient) GetFirstPostBeforeTimeRangeID(channelID string, startTime int64, endTime int64) (string, error) {
-	ret := _mock.Called(channelID, startTime, endTime)
-
-	if len(ret) == 0 {
-		panic("no return value specified for GetFirstPostBeforeTimeRangeID")
-	}
-
-	var r0 string
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(string, int64, int64) (string, error)); ok {
-		return returnFunc(channelID, startTime, endTime)
-	}
-	if returnFunc, ok := ret.Get(0).(func(string, int64, int64) string); ok {
-		r0 = returnFunc(channelID, startTime, endTime)
-	} else {
-		r0 = ret.Get(0).(string)
-	}
-	if returnFunc, ok := ret.Get(1).(func(string, int64, int64) error); ok {
-		r1 = returnFunc(channelID, startTime, endTime)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// MockClient_GetFirstPostBeforeTimeRangeID_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetFirstPostBeforeTimeRangeID'
-type MockClient_GetFirstPostBeforeTimeRangeID_Call struct {
-	*mock.Call
-}
-
-// GetFirstPostBeforeTimeRangeID is a helper method to define mock.On call
-//   - channelID
-//   - startTime
-//   - endTime
-func (_e *MockClient_Expecter) GetFirstPostBeforeTimeRangeID(channelID interface{}, startTime interface{}, endTime interface{}) *MockClient_GetFirstPostBeforeTimeRangeID_Call {
-	return &MockClient_GetFirstPostBeforeTimeRangeID_Call{Call: _e.mock.On("GetFirstPostBeforeTimeRangeID", channelID, startTime, endTime)}
-}
-
-func (_c *MockClient_GetFirstPostBeforeTimeRangeID_Call) Run(run func(channelID string, startTime int64, endTime int64)) *MockClient_GetFirstPostBeforeTimeRangeID_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(string), args[1].(int64), args[2].(int64))
-	})
-	return _c
-}
-
-func (_c *MockClient_GetFirstPostBeforeTimeRangeID_Call) Return(s string, err error) *MockClient_GetFirstPostBeforeTimeRangeID_Call {
-	_c.Call.Return(s, err)
-	return _c
-}
-
-func (_c *MockClient_GetFirstPostBeforeTimeRangeID_Call) RunAndReturn(run func(channelID string, startTime int64, endTime int64) (string, error)) *MockClient_GetFirstPostBeforeTimeRangeID_Call {
 	_c.Call.Return(run)
 	return _c
 }
