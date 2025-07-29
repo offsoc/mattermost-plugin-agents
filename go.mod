@@ -11,12 +11,12 @@ require (
 	github.com/asticode/go-astisub v0.34.0
 	github.com/gin-gonic/gin v1.10.0
 	github.com/google/go-github/v41 v41.0.0
-	github.com/invopop/jsonschema v0.13.0
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/lib/pq v1.10.9
 	github.com/mark3labs/mcp-go v0.36.0
 	github.com/mattermost/mattermost/server/public v0.1.12
 	github.com/mattermost/testcontainers-mattermost-go v0.0.0-20250129100554-3cf1ce84b0e4
+	github.com/modelcontextprotocol/go-sdk v0.2.0
 	github.com/nicksnyder/go-i18n/v2 v2.5.1
 	github.com/pgvector/pgvector-go v0.3.0
 	github.com/pkg/errors v0.9.1
@@ -26,7 +26,7 @@ require (
 	github.com/spf13/cobra v1.9.1
 	github.com/stretchr/testify v1.10.0
 	github.com/tmc/langchaingo v0.1.13
-	github.com/wk8/go-ordered-map/v2 v2.1.8
+	golang.org/x/oauth2 v0.30.0
 	golang.org/x/text v0.24.0
 )
 
@@ -37,11 +37,9 @@ require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/asticode/go-astikit v0.54.0 // indirect
 	github.com/asticode/go-astits v1.13.0 // indirect
-	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/beevik/etree v1.5.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
-	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/bytedance/sonic v1.13.2 // indirect
 	github.com/bytedance/sonic/loader v0.2.4 // indirect
 	github.com/cenkalti/backoff/v4 v4.2.1 // indirect

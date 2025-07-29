@@ -495,7 +495,7 @@ func (s *MattermostHTTPMCPServer) setupMCPRoutes() {
 	// Handle /sse and all sub-paths with authentication
 	s.httpMux.Handle("/sse/", s.requireAuth(sseHandler.ServeHTTP))
 	s.httpMux.Handle("/sse", s.requireAuth(sseHandler.ServeHTTP))
-	
+
 	// Handle /message endpoint for MCP SSE transport (backwards compatibility)
 	s.httpMux.Handle("/message", s.requireAuth(sseHandler.ServeHTTP))
 

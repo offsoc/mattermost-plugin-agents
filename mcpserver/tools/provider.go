@@ -8,13 +8,13 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/invopop/jsonschema"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/mattermost/mattermost-plugin-ai/llm"
 	"github.com/mattermost/mattermost-plugin-ai/mcpserver/auth"
 	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/shared/mlog"
+	"github.com/modelcontextprotocol/go-sdk/jsonschema"
 )
 
 // MCPToolContext provides MCP-specific functionality with the authenticated client
@@ -120,8 +120,7 @@ func (p *MattermostToolProvider) createMCPToolHandler(resolver MCPToolResolver) 
 		// Create an argument getter that extracts arguments from the MCP request
 		argsGetter := func(target interface{}) error {
 			// Convert MCP arguments to the target struct
-			arguments := request.GetArguments()
-			argumentsBytes, marshalErr := json.Marshal(arguments)
+			argumentsBytes, marshalErr := json.Marshal(request.Params.Arguments)
 			if marshalErr != nil {
 				return fmt.Errorf("failed to marshal arguments: %w", marshalErr)
 			}

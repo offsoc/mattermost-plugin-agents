@@ -46,6 +46,8 @@ Create a new post in Mattermost.
 - `message` (required): The message content
 - `root_id` (optional): Root post ID for replies
 - `props` (optional): Post properties
+- `attachments` (optional): Array of file paths or URLs to attach to the post
+  - **Note**: File paths only work with Claude Code; Claude Desktop cannot access local files
 
 ### `create_channel`
 Create a new channel in Mattermost.
@@ -99,11 +101,13 @@ The following tools are only available when the `-dev` flag is enabled:
 
 #### `create_user`
 Create a new user account for testing scenarios.
-- **Parameters:** `username`, `email`, `password`, `first_name` (optional), `last_name` (optional), `nickname` (optional)
+- **Parameters:** `username`, `email`, `password`, `first_name` (optional), `last_name` (optional), `nickname` (optional), `profile_image` (optional): File path or URL to set as profile image (supports .jpeg, .jpg, .png, .gif)
+  - **Note**: File paths only work with Claude Code; Claude Desktop cannot access local files
 
 #### `create_team`
 Create a new team.
-- **Parameters:** `name`, `display_name`, `type` (O for open, I for invite only), `description` (optional)
+- **Parameters:** `name`, `display_name`, `type` (O for open, I for invite only), `description` (optional), `team_icon` (optional): File path or URL to set as team icon (supports .jpeg, .jpg, .png, .gif)
+  - **Note**: File paths only work with Claude Code; Claude Desktop cannot access local files
 
 #### `add_user_to_team`
 Add a user to a team.
@@ -120,21 +124,12 @@ Create a post as a specific user using username/password login. Simply provide t
   - `username` (required), `password` (required)
   - `channel_id` (required), `message` (required)
   - `root_id` (optional), `props` (optional)
-
-
-## Transport
-
-The MCP server supports configurable transport layers via the `--transport` flag:
-
-### stdio Transport (Default)
-- **Use case**: Local desktop clients like Claude Desktop
-- **Authentication**: Personal Access Token (PAT)
-- **Protocol**: JSON-RPC over stdin/stdout
-- **Flag**: `--transport stdio` (or omit for default)
+  - `attachments` (optional): Array of file paths or URLs to attach to the post
+  - **Note**: File paths only work with Claude Code; Claude Desktop cannot access local files
 
 ## Installation and Usage
 
-### Standalone Mode
+### Build
 
 1. **Build the server:**
    ```bash
@@ -149,48 +144,55 @@ The MCP server supports configurable transport layers via the `--transport` flag
    - Create a Personal Access Token in Mattermost (User Settings > Security > Personal Access Tokens)
    - Note your Mattermost server URL
 
-3. **Run the server:**
+### Configuration Options
 
-   ```bash
-   # Using command line flags
-   ./bin/mattermost-mcp-server --server-url https://your-mattermost.com --token your-pat-token
+**Required:**
+- `--server-url`: Mattermost server URL (or set `MM_SERVER_URL` env var)
+- `--token`: Personal Access Token (or set `MM_ACCESS_TOKEN` env var)
 
-   # Using environment variables
-   export MM_SERVER_URL=https://your-mattermost.com
-   export MM_ACCESS_TOKEN=your-pat-token
-   ./bin/mattermost-mcp-server
+**Optional:**
+- `--transport`: Transport type (currently only 'stdio' is supported, default: 'stdio')
+- `--logfile`: Path to log file (logs to file in addition to stderr, JSON format)
+- `--debug`: Enable debug logging (recommended for troubleshooting)
+- `--dev`: Enable development mode with additional tools for setting up test data
+- `--version`: Show version information
 
-   # Specify transport type (stdio is default)
-   ./bin/mattermost-mcp-server --server-url https://your-mattermost.com --token your-pat-token --transport stdio
+**Notes**: 
+- Token validation occurs at startup for fast failure detection
+- Logging output goes to stderr to avoid interfering with JSON-RPC communication on stdout
+- File logging (when `--logfile` is used) outputs structured JSON logs in addition to stderr
+- Debug logging includes tool call tracing and detailed operation logs
 
-   # With file logging (logs to both stderr and file)
-   ./bin/mattermost-mcp-server --server-url https://your-mattermost.com --token your-pat-token --logfile /var/log/mcp-server.log
+### Integration with AI Clients
 
-   # With debug logging for troubleshooting
-   ./bin/mattermost-mcp-server --server-url https://your-mattermost.com --token your-pat-token --debug
+#### Claude Code Integration
 
-   # Development mode with additional tools
-   ./bin/mattermost-mcp-server --server-url https://your-mattermost.com --token your-pat-token --dev
-   ```
+```bash
+claude mcp add mattermost -e MM_SERVER_URL=https://mattermost-url MM_ACCESS_TOKEN=<token> -- /path/to/mattermost-plugin-ai/bin/mattermost-mcp-server --dev --debug
+```
 
-4. **Configuration options:**
-   
-   **Required:**
-   - `--server-url`: Mattermost server URL (or set `MM_SERVER_URL` env var)
-   - `--token`: Personal Access Token (or set `MM_ACCESS_TOKEN` env var)
-   
-   **Optional:**
-   - `--transport`: Transport type (currently only 'stdio' is supported, default: 'stdio')
-   - `--logfile`: Path to log file (logs to file in addition to stderr, JSON format)
-   - `--debug`: Enable debug logging (recommended for troubleshooting)
-   - `--dev`: Enable development mode with additional tools for setting up test data
-   - `--version`: Show version information
+#### Claude Desktop Integration
 
-   **Notes**: 
-   - Token validation occurs at startup for fast failure detection
-   - Logging output goes to stderr to avoid interfering with JSON-RPC communication on stdout
-   - File logging (when `--logfile` is used) outputs structured JSON logs in addition to stderr
-   - Debug logging includes tool call tracing and detailed operation logs
+To use with Claude Desktop, add the server to your MCP configuration:
+
+**macOS/Linux**: `~/.config/claude/claude_desktop_config.json`
+
+**Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "mattermost": {
+      "command": "/path/to/mattermost-plugin-ai/bin/mattermost-mcp-server",
+      "args": ["--debug"],
+      "env": {
+        "MM_SERVER_URL": "https://your-mattermost.com",
+        "MM_ACCESS_TOKEN": "your-pat-token"
+      }
+    }
+  }
+}
+```
 
 ### Development Mode
 
@@ -202,27 +204,3 @@ Development mode (`--dev` flag) enables additional tools for setting up realisti
 ```
 
 **Security Note:** Development mode should only be used in development environments with admin-level access tokens, never in production.
-
-### Claude Desktop Integration
-
-To use with Claude Desktop, add the server to your MCP configuration:
-
-**macOS/Linux**: `~/.config/claude/claude_desktop_config.json`
-**Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-
-```json
-{
-  "mcpServers": {
-    "mattermost": {
-      "command": "/path/to/mattermost-plugin-ai/bin/mattermost-mcp-server",
-      "args": [
-        "--debug"
-      ],
-      "env": {
-        "MM_SERVER_URL": "https://your-mattermost.com",
-        "MM_ACCESS_TOKEN": "your-pat-token"
-      }
-    }
-  }
-}
-```
