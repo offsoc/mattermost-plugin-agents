@@ -37,7 +37,7 @@ type GetChannelInfoArgs struct {
 	ChannelID          string `json:"channel_id" jsonschema_description:"The exact channel ID (fastest, most reliable method)"`
 	ChannelDisplayName string `json:"channel_display_name" jsonschema_description:"The human-readable display name users see (e.g. 'General Discussion')"`
 	ChannelName        string `json:"channel_name" jsonschema_description:"The URL-friendly channel name (e.g. 'general-discussion')"`
-	TeamID             string `json:"team_id" jsonschema_description:"Team ID (required if using channel_name or channel_display_name)"`
+	TeamID             string `json:"team_id" jsonschema_description:"Team ID (optional - if provided, searches within specific team; if omitted, searches across all teams)"`
 }
 
 // GetChannelMembersArgs represents arguments for the get_channel_members tool
@@ -70,7 +70,7 @@ func (p *MattermostToolProvider) getChannelTools() []MCPTool {
 		},
 		{
 			Name:        "get_channel_info",
-			Description: "Get information about a channel. If you have a channel ID, use that for fastest lookup. If the user provides a human-readable name, try channel_display_name first (what users see in the UI), then channel_name (URL name) as fallback.",
+			Description: "Get information about a channel. If you have a channel ID, use that for fastest lookup. If the user provides a human-readable name, try channel_display_name first (what users see in the UI), then channel_name (URL name). If team_id is not provided, it will search across all teams the user has access to.",
 			Schema:      llm.NewJSONSchemaFromStruct(GetChannelInfoArgs{}),
 			Resolver:    p.toolGetChannelInfo,
 		},
@@ -273,8 +273,50 @@ func (p *MattermostToolProvider) toolGetChannelInfo(mcpContext *MCPToolContext, 
 		if err != nil {
 			return "channel not found by name", fmt.Errorf("error fetching channel by name: %w", err)
 		}
+	case args.ChannelDisplayName != "" || args.ChannelName != "":
+		// Fallback: Search across all teams using SearchAllChannelsForUser
+		searchTerm := args.ChannelDisplayName
+		if searchTerm == "" {
+			searchTerm = args.ChannelName
+		}
+
+		channels, _, searchErr := client.SearchAllChannelsForUser(ctx, searchTerm)
+		if searchErr != nil {
+			return "failed to search channels", fmt.Errorf("error searching channels: %w", searchErr)
+		}
+
+		// Find exact match by display name or name
+		for _, ch := range channels {
+			if ch.DisplayName == searchTerm || ch.Name == searchTerm {
+				// Convert ChannelWithTeamData to Channel
+				channel = &model.Channel{
+					Id:               ch.Id,
+					CreateAt:         ch.CreateAt,
+					UpdateAt:         ch.UpdateAt,
+					DeleteAt:         ch.DeleteAt,
+					TeamId:           ch.TeamId,
+					Type:             ch.Type,
+					DisplayName:      ch.DisplayName,
+					Name:             ch.Name,
+					Header:           ch.Header,
+					Purpose:          ch.Purpose,
+					LastPostAt:       ch.LastPostAt,
+					TotalMsgCount:    ch.TotalMsgCount,
+					ExtraUpdateAt:    ch.ExtraUpdateAt,
+					CreatorId:        ch.CreatorId,
+					SchemeId:         ch.SchemeId,
+					Props:            ch.Props,
+					GroupConstrained: ch.GroupConstrained,
+				}
+				break
+			}
+		}
+
+		if channel == nil {
+			return fmt.Sprintf("channel not found by '%s' across all teams", searchTerm), fmt.Errorf("no channel found with name or display name: %s", searchTerm)
+		}
 	default:
-		return "either channel_id or (channel_name/channel_display_name + team_id) must be provided", fmt.Errorf("insufficient parameters for channel lookup")
+		return "either channel_id or channel_name/channel_display_name must be provided", fmt.Errorf("insufficient parameters for channel lookup")
 	}
 
 	// Format the response

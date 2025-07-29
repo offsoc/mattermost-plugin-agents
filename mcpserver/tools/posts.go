@@ -209,7 +209,7 @@ func (p *MattermostToolProvider) toolCreatePostAsUser(mcpContext *MCPToolContext
 
 	// Create a new client and login as the specified user
 	ctx := context.Background()
-	userClient := model.NewAPIv4Client(p.serverURL)
+	userClient := model.NewAPIv4Client(p.mmServerURL)
 
 	// Login as the specified user
 	user, _, err := userClient.Login(ctx, args.Username, args.Password)

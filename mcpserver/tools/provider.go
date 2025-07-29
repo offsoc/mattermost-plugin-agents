@@ -41,16 +41,16 @@ type ToolProvider interface {
 type MattermostToolProvider struct {
 	authProvider auth.AuthenticationProvider
 	logger       mlog.LoggerIFace
-	serverURL    string
+	mmServerURL  string
 	devMode      bool
 }
 
 // NewMattermostToolProvider creates a new tool provider
-func NewMattermostToolProvider(authProvider auth.AuthenticationProvider, logger mlog.LoggerIFace, serverURL string, devMode bool) *MattermostToolProvider {
+func NewMattermostToolProvider(authProvider auth.AuthenticationProvider, logger mlog.LoggerIFace, mmServerURL string, devMode bool) *MattermostToolProvider {
 	return &MattermostToolProvider{
 		authProvider: authProvider,
 		logger:       logger,
-		serverURL:    serverURL,
+		mmServerURL:  mmServerURL,
 		devMode:      devMode,
 	}
 }
@@ -120,7 +120,8 @@ func (p *MattermostToolProvider) createMCPToolHandler(resolver MCPToolResolver) 
 		// Create an argument getter that extracts arguments from the MCP request
 		argsGetter := func(target interface{}) error {
 			// Convert MCP arguments to the target struct
-			argumentsBytes, marshalErr := json.Marshal(request.Params.Arguments)
+			arguments := request.GetArguments()
+			argumentsBytes, marshalErr := json.Marshal(arguments)
 			if marshalErr != nil {
 				return fmt.Errorf("failed to marshal arguments: %w", marshalErr)
 			}

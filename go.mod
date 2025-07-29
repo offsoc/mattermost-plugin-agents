@@ -14,7 +14,7 @@ require (
 	github.com/invopop/jsonschema v0.13.0
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/lib/pq v1.10.9
-	github.com/mark3labs/mcp-go v0.20.1
+	github.com/mark3labs/mcp-go v0.36.0
 	github.com/mattermost/mattermost/server/public v0.1.12
 	github.com/mattermost/testcontainers-mattermost-go v0.0.0-20250129100554-3cf1ce84b0e4
 	github.com/nicksnyder/go-i18n/v2 v2.5.1
@@ -128,6 +128,7 @@ require (
 	github.com/russellhaering/goxmldsig v1.5.0 // indirect
 	github.com/shirou/gopsutil/v3 v3.23.12 // indirect
 	github.com/shoenig/go-m1cpu v0.1.6 // indirect
+	github.com/spf13/cast v1.7.1 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/testcontainers/testcontainers-go v0.35.0 // indirect

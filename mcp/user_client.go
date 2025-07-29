@@ -12,6 +12,7 @@ import (
 
 	"github.com/invopop/jsonschema"
 	"github.com/mark3labs/mcp-go/client"
+	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mattermost/mattermost-plugin-ai/llm"
 	"github.com/mattermost/mattermost/server/public/pluginapi"
@@ -22,7 +23,7 @@ const MMUserIDHeader = "X-Mattermost-UserID"
 
 // ServerConnection represents the connection to a single MCP server
 type ServerConnection struct {
-	client   *client.SSEMCPClient
+	client   *client.Client
 	serverID string
 	tools    map[string]mcp.Tool
 }
@@ -82,13 +83,13 @@ func (c *UserClient) ConnectToAllServers(servers map[string]ServerConfig) error 
 
 // connectToServer establishes a connection to a single server and registers its tools
 func (c *UserClient) connectToServer(ctx context.Context, serverID string, serverConfig ServerConfig) error {
-	var opts []client.ClientOption
+	var opts []transport.ClientOption
 	headers := make(map[string]string)
 	headers[MMUserIDHeader] = c.userID
 	if serverConfig.Headers != nil {
 		maps.Copy(headers, serverConfig.Headers)
 	}
-	opts = append(opts, client.WithHeaders(serverConfig.Headers))
+	opts = append(opts, transport.WithHeaders(headers))
 
 	sseClient, err := client.NewSSEMCPClient(serverConfig.BaseURL, opts...)
 	if err != nil {
@@ -251,16 +252,15 @@ func (c *UserClient) createToolResolver(toolName string) func(llmContext *llm.Co
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
 
-		// Call the tool
-		callRequest := mcp.CallToolRequest{}
-		callRequest.Params.Name = toolName
-		callRequest.Params.Arguments = make(map[string]interface{})
-
 		// Parse the raw arguments into a map
 		var args map[string]interface{}
 		if err := json.Unmarshal(rawArgs, &args); err != nil {
 			return "", fmt.Errorf("failed to parse arguments for tool %s: %w", toolName, err)
 		}
+
+		// Call the tool
+		callRequest := mcp.CallToolRequest{}
+		callRequest.Params.Name = toolName
 		callRequest.Params.Arguments = args
 
 		result, err := serverClient.client.CallTool(ctx, callRequest)
