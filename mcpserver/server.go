@@ -62,11 +62,11 @@ func (s *MattermostHTTPMCPServer) Serve() error {
 }
 
 // NewStdioServer creates a new STDIO transport MCP server
-func NewStdioServer(serverURL, token string, logger *mlog.Logger, devMode bool) (*MattermostStdioMCPServer, error) {
-	if serverURL == "" {
+func NewStdioServer(config StdioConfig, logger *mlog.Logger) (*MattermostStdioMCPServer, error) {
+	if config.MMServerURL == "" {
 		return nil, fmt.Errorf("server URL cannot be empty")
 	}
-	if token == "" {
+	if config.PersonalAccessToken == "" {
 		return nil, fmt.Errorf("personal access token cannot be empty")
 	}
 
@@ -78,14 +78,6 @@ func NewStdioServer(serverURL, token string, logger *mlog.Logger, devMode bool) 
 		}
 	}
 
-	config := StdioConfig{
-		BaseConfig: BaseConfig{
-			MMServerURL: serverURL,
-			DevMode:     devMode,
-		},
-		PersonalAccessToken: token,
-	}
-
 	mattermostServer := &MattermostStdioMCPServer{
 		MattermostMCPServer: &MattermostMCPServer{
 			logger: logger,
@@ -95,7 +87,7 @@ func NewStdioServer(serverURL, token string, logger *mlog.Logger, devMode bool) 
 	}
 
 	// Create authentication provider
-	mattermostServer.authProvider = auth.NewTokenAuthenticationProvider(serverURL, token, logger)
+	mattermostServer.authProvider = auth.NewTokenAuthenticationProvider(config.GetMMServerURL(), config.GetMMInternalServerURL(), config.PersonalAccessToken, logger)
 
 	// Create MCP server
 	mattermostServer.mcpServer = server.NewMCPServer(
@@ -147,8 +139,9 @@ func NewHTTPServer(config HTTPConfig, logger *mlog.Logger) (*MattermostHTTPMCPSe
 
 	// Create OAuth authentication provider
 	mattermostServer.authProvider = auth.NewOAuthAuthenticationProvider(
-		config.MMServerURL,
-		config.MMServerURL, // OAuth issuer is the same as server URL
+		config.GetMMServerURL(),
+		config.GetMMInternalServerURL(),
+		config.GetMMServerURL(), // OAuth issuer is the same as external server URL
 		logger,
 	)
 
@@ -188,7 +181,7 @@ func (s *MattermostMCPServer) serveStdio() error {
 
 // registerTools registers all tools using the tool provider
 func (s *MattermostMCPServer) registerTools() {
-	toolProvider := tools.NewMattermostToolProvider(s.authProvider, s.logger, s.config.GetMMServerURL(), s.config.GetDevMode())
+	toolProvider := tools.NewMattermostToolProvider(s.authProvider, s.logger, s.config.GetMMServerURL(), s.config.GetMMInternalServerURL(), s.config.GetDevMode())
 	toolProvider.ProvideTools(s.mcpServer)
 }
 

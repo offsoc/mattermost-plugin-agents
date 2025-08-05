@@ -15,15 +15,16 @@ import (
 const version = "0.1.0"
 
 var (
-	mmServerURL  string
-	token        string
-	debug        bool
-	logFile      string
-	devMode      bool
-	transport    string
-	httpPort     int
-	httpBindAddr string
-	siteURL      string
+	mmServerURL         string
+	mmInternalServerURL string
+	token               string
+	debug               bool
+	logFile             string
+	devMode             bool
+	transport           string
+	httpPort            int
+	httpBindAddr        string
+	siteURL             string
 )
 
 func main() {
@@ -40,6 +41,7 @@ Authentication is handled via Personal Access Tokens (PAT).`,
 
 	// Define flags
 	rootCmd.Flags().StringVarP(&mmServerURL, "server-url", "s", "", "Mattermost server URL (required, or set MM_SERVER_URL env var)")
+	rootCmd.Flags().StringVar(&mmInternalServerURL, "internal-server-url", "", "Internal Mattermost server URL for API communication (optional, or set MM_INTERNAL_SERVER_URL env var)")
 	rootCmd.Flags().StringVarP(&token, "token", "t", "", "Personal Access Token (required, or set MM_ACCESS_TOKEN env var)")
 	rootCmd.Flags().BoolVarP(&debug, "debug", "d", false, "Enable debug logging")
 	rootCmd.Flags().StringVarP(&logFile, "logfile", "l", "", "Path to log file (logs to file in addition to stderr)")
@@ -76,6 +78,10 @@ func runServer(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	if mmInternalServerURL == "" {
+		mmInternalServerURL = os.Getenv("MM_INTERNAL_SERVER_URL")
+	}
+
 	if token == "" && transport == "stdio" {
 		token = os.Getenv("MM_ACCESS_TOKEN")
 		if token == "" {
@@ -106,13 +112,24 @@ func runServer(cmd *cobra.Command, args []string) error {
 
 	switch transport {
 	case "stdio":
-		mcpServer, err = mcpserver.NewStdioServer(mmServerURL, token, logger, devMode)
+		// Create STDIO transport configuration
+		stdioConfig := mcpserver.StdioConfig{
+			BaseConfig: mcpserver.BaseConfig{
+				MMServerURL:         mmServerURL,
+				MMInternalServerURL: mmInternalServerURL,
+				DevMode:             devMode,
+			},
+			PersonalAccessToken: token,
+		}
+
+		mcpServer, err = mcpserver.NewStdioServer(stdioConfig, logger)
 	case "http":
 		// Create HTTP transport configuration
 		httpConfig := mcpserver.HTTPConfig{
 			BaseConfig: mcpserver.BaseConfig{
-				MMServerURL: mmServerURL,
-				DevMode:     devMode,
+				MMServerURL:         mmServerURL,
+				MMInternalServerURL: mmInternalServerURL,
+				DevMode:             devMode,
 			},
 			HTTPPort:     httpPort,
 			HTTPBindAddr: httpBindAddr,

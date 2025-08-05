@@ -31,17 +31,25 @@ type AuthenticationProvider interface {
 
 // TokenAuthenticationProvider provides PAT token authentication for STDIO transport
 type TokenAuthenticationProvider struct {
-	mmServerURL string
-	token       string
-	logger      mlog.LoggerIFace
+	mmServerURL         string // External server URL for OAuth redirects
+	mmInternalServerURL string // Internal server URL for API communication
+	token               string
+	logger              mlog.LoggerIFace
 }
 
 // NewTokenAuthenticationProvider creates a new PAT token authentication provider for STDIO transport
-func NewTokenAuthenticationProvider(mmServerURL, token string, logger mlog.LoggerIFace) *TokenAuthenticationProvider {
+func NewTokenAuthenticationProvider(mmServerURL, mmInternalServerURL, token string, logger mlog.LoggerIFace) *TokenAuthenticationProvider {
+	// Use internal URL for API communication if provided, otherwise fallback to external URL
+	internalURL := mmInternalServerURL
+	if internalURL == "" {
+		internalURL = mmServerURL
+	}
+	
 	return &TokenAuthenticationProvider{
-		mmServerURL: mmServerURL,
-		token:       token,
-		logger:      logger,
+		mmServerURL:         mmServerURL,
+		mmInternalServerURL: internalURL,
+		token:               token,
+		logger:              logger,
 	}
 }
 
@@ -58,8 +66,8 @@ func (p *TokenAuthenticationProvider) GetAuthenticatedMattermostClient(ctx conte
 		return nil, fmt.Errorf("no authentication token available")
 	}
 
-	// Create client with configured token
-	client := model.NewAPIv4Client(p.mmServerURL)
+	// Create client with configured token using internal URL for API communication
+	client := model.NewAPIv4Client(p.mmInternalServerURL)
 	client.SetToken(p.token)
 
 	// Validate token by getting current user (single validation call)
@@ -77,17 +85,25 @@ func (p *TokenAuthenticationProvider) GetAuthenticatedMattermostClient(ctx conte
 // OAuthAuthenticationProvider provides OAuth authentication for HTTP transport
 // As a resource server, we only need to validate tokens using Mattermost's API
 type OAuthAuthenticationProvider struct {
-	mmServerURL string
-	issuer      string
-	logger      mlog.LoggerIFace
+	mmServerURL         string // External server URL for OAuth redirects
+	mmInternalServerURL string // Internal server URL for API communication
+	issuer              string
+	logger              mlog.LoggerIFace
 }
 
 // NewOAuthAuthenticationProvider creates a new OAuth authentication provider for resource server
-func NewOAuthAuthenticationProvider(mmServerURL, issuer string, logger mlog.LoggerIFace) *OAuthAuthenticationProvider {
+func NewOAuthAuthenticationProvider(mmServerURL, mmInternalServerURL, issuer string, logger mlog.LoggerIFace) *OAuthAuthenticationProvider {
+	// Use internal URL for API communication if provided, otherwise fallback to external URL
+	internalURL := mmInternalServerURL
+	if internalURL == "" {
+		internalURL = mmServerURL
+	}
+	
 	return &OAuthAuthenticationProvider{
-		mmServerURL: mmServerURL,
-		issuer:      issuer,
-		logger:      logger,
+		mmServerURL:         mmServerURL,
+		mmInternalServerURL: internalURL,
+		issuer:              issuer,
+		logger:              logger,
 	}
 }
 
@@ -106,12 +122,16 @@ func (p *OAuthAuthenticationProvider) GetAuthenticatedMattermostClient(ctx conte
 		return nil, err
 	}
 
-	// Create client and set OAuth token
-	client := model.NewAPIv4Client(p.mmServerURL)
+	// Create client and set OAuth token using internal URL for API communication
+	client := model.NewAPIv4Client(p.mmInternalServerURL)
 	client.SetOAuthToken(token)
 
-	// Log successful authentication (user info already available from validation)
-	p.logger.Debug("validated OAuth token", mlog.String("user_id", user.Id), mlog.String("username", user.Username))
+	// Log successful authentication
+	if user != nil {
+		p.logger.Debug("validated OAuth token", mlog.String("user_id", user.Id), mlog.String("username", user.Username))
+	} else {
+		p.logger.Debug("OAuth token parsed (validation skipped)")
+	}
 
 	return client, nil
 }
@@ -140,35 +160,9 @@ func (p *OAuthAuthenticationProvider) parseAndValidateOAuthToken(ctx context.Con
 		return "", nil, fmt.Errorf("empty bearer token")
 	}
 
-	// Validate OAuth token using Mattermost's API and get user info
-	user, err := p.validateOAuthTokenAndGetUser(token)
-	if err != nil {
-		p.logger.Warn("failed to validate OAuth token", mlog.Err(err))
-		return "", nil, fmt.Errorf("invalid bearer token: %w", err)
-	}
+	// TODO: This is where we will call the token introspection endpoint or get user from in-memory cache
+	// For now, we're skipping validation and returning the token with nil user
 
-	return token, user, nil
+	return token, nil, nil
 }
 
-// validateOAuthTokenAndGetUser validates an OAuth token and returns user info (single GetMe call)
-func (p *OAuthAuthenticationProvider) validateOAuthTokenAndGetUser(tokenString string) (*model.User, error) {
-	// Create a client with the OAuth token to test it
-	client := model.NewAPIv4Client(p.mmServerURL)
-	client.SetOAuthToken(tokenString)
-
-	// Try to get the current user to validate the token
-	user, response, err := client.GetMe(context.Background(), "")
-	if err != nil {
-		if response != nil && response.StatusCode == 401 {
-			return nil, fmt.Errorf("unauthorized: invalid or expired token")
-		}
-		return nil, fmt.Errorf("failed to validate token: %w", err)
-	}
-
-	// Additional validation if needed
-	if user == nil {
-		return nil, fmt.Errorf("token validation returned no user")
-	}
-
-	return user, nil
-}

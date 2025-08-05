@@ -39,19 +39,27 @@ type ToolProvider interface {
 
 // MattermostToolProvider provides Mattermost tools following the mmtools pattern
 type MattermostToolProvider struct {
-	authProvider auth.AuthenticationProvider
-	logger       mlog.LoggerIFace
-	mmServerURL  string
-	devMode      bool
+	authProvider        auth.AuthenticationProvider
+	logger              mlog.LoggerIFace
+	mmServerURL         string // External server URL for OAuth redirects
+	mmInternalServerURL string // Internal server URL for API communication
+	devMode             bool
 }
 
 // NewMattermostToolProvider creates a new tool provider
-func NewMattermostToolProvider(authProvider auth.AuthenticationProvider, logger mlog.LoggerIFace, mmServerURL string, devMode bool) *MattermostToolProvider {
+func NewMattermostToolProvider(authProvider auth.AuthenticationProvider, logger mlog.LoggerIFace, mmServerURL, mmInternalServerURL string, devMode bool) *MattermostToolProvider {
+	// Use internal URL for API communication if provided, otherwise fallback to external URL
+	internalURL := mmInternalServerURL
+	if internalURL == "" {
+		internalURL = mmServerURL
+	}
+	
 	return &MattermostToolProvider{
-		authProvider: authProvider,
-		logger:       logger,
-		mmServerURL:  mmServerURL,
-		devMode:      devMode,
+		authProvider:        authProvider,
+		logger:              logger,
+		mmServerURL:         mmServerURL,
+		mmInternalServerURL: internalURL,
+		devMode:             devMode,
 	}
 }
 

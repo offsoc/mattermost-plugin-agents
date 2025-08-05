@@ -103,7 +103,14 @@ func (suite *TestSuite) CreateMCPServer(devMode bool) {
 	require.NotEmpty(suite.t, suite.serverURL, "Server URL must be set")
 	require.NotEmpty(suite.t, suite.adminToken, "Admin token must be set")
 
-	mcpServer, err := mcpserver.NewStdioServer(suite.serverURL, suite.adminToken, suite.logger, devMode)
+	stdioConfig := mcpserver.StdioConfig{
+		BaseConfig: mcpserver.BaseConfig{
+			MMServerURL: suite.serverURL,
+			DevMode:     devMode,
+		},
+		PersonalAccessToken: suite.adminToken,
+	}
+	mcpServer, err := mcpserver.NewStdioServer(stdioConfig, suite.logger)
 	require.NoError(suite.t, err, "Failed to create MCP server")
 
 	suite.mcpServer = mcpServer
@@ -132,28 +139,56 @@ func TestMCPServerConfiguration(t *testing.T) {
 	defer suite.TearDown()
 
 	t.Run("ValidConfiguration", func(t *testing.T) {
-		mcpServer, err := mcpserver.NewStdioServer(suite.serverURL, suite.adminToken, suite.logger, false)
+		stdioConfig := mcpserver.StdioConfig{
+			BaseConfig: mcpserver.BaseConfig{
+				MMServerURL: suite.serverURL,
+				DevMode:     false,
+			},
+			PersonalAccessToken: suite.adminToken,
+		}
+		mcpServer, err := mcpserver.NewStdioServer(stdioConfig, suite.logger)
 
 		require.NoError(t, err, "Valid configuration should not return error")
 		assert.NotNil(t, mcpServer, "MCP server should be created with valid config")
 	})
 
 	t.Run("InvalidServerURL", func(t *testing.T) {
-		_, err := mcpserver.NewStdioServer("http://invalid-server-url:9999", suite.adminToken, suite.logger, false)
+		stdioConfig := mcpserver.StdioConfig{
+			BaseConfig: mcpserver.BaseConfig{
+				MMServerURL: "http://invalid-server-url:9999",
+				DevMode:     false,
+			},
+			PersonalAccessToken: suite.adminToken,
+		}
+		_, err := mcpserver.NewStdioServer(stdioConfig, suite.logger)
 
 		assert.Error(t, err, "Invalid server URL should return error")
 		assert.Contains(t, err.Error(), "startup token validation failed", "Error should mention token validation failure")
 	})
 
 	t.Run("InvalidToken", func(t *testing.T) {
-		_, err := mcpserver.NewStdioServer(suite.serverURL, "invalid-token-12345", suite.logger, false)
+		stdioConfig := mcpserver.StdioConfig{
+			BaseConfig: mcpserver.BaseConfig{
+				MMServerURL: suite.serverURL,
+				DevMode:     false,
+			},
+			PersonalAccessToken: "invalid-token-12345",
+		}
+		_, err := mcpserver.NewStdioServer(stdioConfig, suite.logger)
 
 		assert.Error(t, err, "Invalid token should return error")
 		assert.Contains(t, err.Error(), "startup token validation failed", "Error should mention token validation failure")
 	})
 
 	t.Run("EmptyToken", func(t *testing.T) {
-		_, err := mcpserver.NewStdioServer(suite.serverURL, "", suite.logger, false)
+		stdioConfig := mcpserver.StdioConfig{
+			BaseConfig: mcpserver.BaseConfig{
+				MMServerURL: suite.serverURL,
+				DevMode:     false,
+			},
+			PersonalAccessToken: "",
+		}
+		_, err := mcpserver.NewStdioServer(stdioConfig, suite.logger)
 
 		// Empty token should fail option validation
 		assert.Error(t, err, "Empty token should fail validation")
@@ -161,7 +196,14 @@ func TestMCPServerConfiguration(t *testing.T) {
 	})
 
 	t.Run("DevModeConfiguration", func(t *testing.T) {
-		mcpServer, err := mcpserver.NewStdioServer(suite.serverURL, suite.adminToken, suite.logger, true)
+		stdioConfig := mcpserver.StdioConfig{
+			BaseConfig: mcpserver.BaseConfig{
+				MMServerURL: suite.serverURL,
+				DevMode:     true,
+			},
+			PersonalAccessToken: suite.adminToken,
+		}
+		mcpServer, err := mcpserver.NewStdioServer(stdioConfig, suite.logger)
 
 		require.NoError(t, err, "Dev mode configuration should not return error")
 		assert.NotNil(t, mcpServer, "MCP server should be created with dev mode")
@@ -169,7 +211,14 @@ func TestMCPServerConfiguration(t *testing.T) {
 
 	t.Run("StdioTransportFixed", func(t *testing.T) {
 		// STDIO constructor always uses stdio transport
-		mcpServer, err := mcpserver.NewStdioServer(suite.serverURL, suite.adminToken, suite.logger, false)
+		stdioConfig := mcpserver.StdioConfig{
+			BaseConfig: mcpserver.BaseConfig{
+				MMServerURL: suite.serverURL,
+				DevMode:     false,
+			},
+			PersonalAccessToken: suite.adminToken,
+		}
+		mcpServer, err := mcpserver.NewStdioServer(stdioConfig, suite.logger)
 
 		require.NoError(t, err, "STDIO server should be created successfully")
 		assert.NotNil(t, mcpServer, "MCP server should be created")
@@ -183,7 +232,7 @@ func TestAuthentication(t *testing.T) {
 	defer suite.TearDown()
 
 	t.Run("TokenAuthenticationProvider", func(t *testing.T) {
-		authProvider := auth.NewTokenAuthenticationProvider(suite.serverURL, suite.adminToken, suite.logger)
+		authProvider := auth.NewTokenAuthenticationProvider(suite.serverURL, "", suite.adminToken, suite.logger)
 		assert.NotNil(t, authProvider, "Token authentication provider should be created")
 
 		// Test token validation with configured token
@@ -193,7 +242,14 @@ func TestAuthentication(t *testing.T) {
 
 	t.Run("TokenValidationAtStartup", func(t *testing.T) {
 		// This tests the startup token validation that happens in NewMattermostMCPServer
-		mcpServer, err := mcpserver.NewStdioServer(suite.serverURL, suite.adminToken, suite.logger, false)
+		stdioConfig := mcpserver.StdioConfig{
+			BaseConfig: mcpserver.BaseConfig{
+				MMServerURL: suite.serverURL,
+				DevMode:     false,
+			},
+			PersonalAccessToken: suite.adminToken,
+		}
+		mcpServer, err := mcpserver.NewStdioServer(stdioConfig, suite.logger)
 
 		require.NoError(t, err, "Startup token validation should succeed with valid token")
 		assert.NotNil(t, mcpServer, "MCP server should be created after successful token validation")
@@ -201,7 +257,7 @@ func TestAuthentication(t *testing.T) {
 
 	t.Run("TokenAuthenticationFailure", func(t *testing.T) {
 		invalidToken := "invalid-token-xyz"
-		authProvider := auth.NewTokenAuthenticationProvider(suite.serverURL, invalidToken, suite.logger)
+		authProvider := auth.NewTokenAuthenticationProvider(suite.serverURL, "", invalidToken, suite.logger)
 
 		err := authProvider.ValidateAuth(context.Background())
 		assert.Error(t, err, "Invalid token should fail validation")
@@ -215,21 +271,42 @@ func TestMCPServerStartupValidation(t *testing.T) {
 
 	t.Run("SuccessfulStartupValidation", func(t *testing.T) {
 		// This internally calls validateTokenAtStartup
-		mcpServer, err := mcpserver.NewStdioServer(suite.serverURL, suite.adminToken, suite.logger, false)
+		stdioConfig := mcpserver.StdioConfig{
+			BaseConfig: mcpserver.BaseConfig{
+				MMServerURL: suite.serverURL,
+				DevMode:     false,
+			},
+			PersonalAccessToken: suite.adminToken,
+		}
+		mcpServer, err := mcpserver.NewStdioServer(stdioConfig, suite.logger)
 
 		require.NoError(t, err, "Startup validation should succeed")
 		assert.NotNil(t, mcpServer, "MCP server should be created after successful validation")
 	})
 
 	t.Run("StartupValidationWithInvalidServer", func(t *testing.T) {
-		_, err := mcpserver.NewStdioServer("http://nonexistent-server:8065", suite.adminToken, suite.logger, false)
+		stdioConfig := mcpserver.StdioConfig{
+			BaseConfig: mcpserver.BaseConfig{
+				MMServerURL: "http://nonexistent-server:8065",
+				DevMode:     false,
+			},
+			PersonalAccessToken: suite.adminToken,
+		}
+		_, err := mcpserver.NewStdioServer(stdioConfig, suite.logger)
 
 		assert.Error(t, err, "Startup validation should fail with invalid server")
 		assert.Contains(t, err.Error(), "startup token validation failed", "Error should mention startup validation failure")
 	})
 
 	t.Run("StartupValidationWithUnauthorizedToken", func(t *testing.T) {
-		_, err := mcpserver.NewStdioServer(suite.serverURL, "unauthorized-token-123", suite.logger, false)
+		stdioConfig := mcpserver.StdioConfig{
+			BaseConfig: mcpserver.BaseConfig{
+				MMServerURL: suite.serverURL,
+				DevMode:     false,
+			},
+			PersonalAccessToken: "unauthorized-token-123",
+		}
+		_, err := mcpserver.NewStdioServer(stdioConfig, suite.logger)
 
 		assert.Error(t, err, "Startup validation should fail with unauthorized token")
 		assert.Contains(t, err.Error(), "startup token validation failed", "Error should mention startup validation failure")
@@ -237,7 +314,14 @@ func TestMCPServerStartupValidation(t *testing.T) {
 
 	t.Run("ValidTokenAlwaysValidated", func(t *testing.T) {
 		// STDIO servers always validate tokens at startup
-		mcpServer, err := mcpserver.NewStdioServer(suite.serverURL, suite.adminToken, suite.logger, false)
+		stdioConfig := mcpserver.StdioConfig{
+			BaseConfig: mcpserver.BaseConfig{
+				MMServerURL: suite.serverURL,
+				DevMode:     false,
+			},
+			PersonalAccessToken: suite.adminToken,
+		}
+		mcpServer, err := mcpserver.NewStdioServer(stdioConfig, suite.logger)
 
 		require.NoError(t, err, "Server creation should succeed with valid token")
 		assert.NotNil(t, mcpServer, "MCP server should be created")

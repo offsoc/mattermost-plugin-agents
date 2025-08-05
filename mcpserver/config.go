@@ -6,6 +6,7 @@ package mcpserver
 // ServerConfig interface defines common configuration methods for all server types
 type ServerConfig interface {
 	GetMMServerURL() string
+	GetMMInternalServerURL() string
 	GetDevMode() bool
 }
 
@@ -14,12 +15,25 @@ type BaseConfig struct {
 	// Mattermost server URL (e.g., "https://mattermost.company.com")
 	MMServerURL string `json:"mm_server_url"`
 
+	// Internal Mattermost server URL for API communication (e.g., "http://localhost:8065")
+	// If empty, MMServerURL will be used for internal communication
+	MMInternalServerURL string `json:"mm_internal_server_url"`
+
 	// Development mode enables additional tools for setting up test data
 	DevMode bool `json:"dev_mode"`
 }
 
 // GetMMServerURL returns the Mattermost server URL
 func (c BaseConfig) GetMMServerURL() string {
+	return c.MMServerURL
+}
+
+// GetMMInternalServerURL returns the internal Mattermost server URL for API communication
+// If not set, falls back to the external server URL for backward compatibility
+func (c BaseConfig) GetMMInternalServerURL() string {
+	if c.MMInternalServerURL != "" {
+		return c.MMInternalServerURL
+	}
 	return c.MMServerURL
 }
 

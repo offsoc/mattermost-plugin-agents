@@ -151,6 +151,7 @@ Create a post as a specific user using username/password login. Simply provide t
 - `--token`: Personal Access Token (or set `MM_ACCESS_TOKEN` env var)
 
 **Optional:**
+- `--internal-server-url`: Internal Mattermost server URL for API communication (or set `MM_INTERNAL_SERVER_URL` env var). Use this when the MCP server runs on the same machine as Mattermost to enable localhost communication while providing external URLs for OAuth clients.
 - `--transport`: Transport type (currently only 'stdio' is supported, default: 'stdio')
 - `--logfile`: Path to log file (logs to file in addition to stderr, JSON format)
 - `--debug`: Enable debug logging (recommended for troubleshooting)
@@ -204,3 +205,28 @@ Development mode (`--dev` flag) enables additional tools for setting up realisti
 ```
 
 **Security Note:** Development mode should only be used in development environments with admin-level access tokens, never in production.
+
+### Advanced Configuration: Internal Server URL
+
+When the MCP server runs on the same machine as your Mattermost server, you can optimize performance and security by using the internal server URL option:
+
+```bash
+# MCP server and Mattermost on the same machine
+./bin/mattermost-mcp-server \
+  --server-url https://mattermost.company.com \
+  --internal-server-url http://localhost:8065 \
+  --token your-pat-token
+```
+
+**Environment variables:**
+```bash
+export MM_SERVER_URL=https://mattermost.company.com
+export MM_INTERNAL_SERVER_URL=http://localhost:8065
+export MM_ACCESS_TOKEN=your-pat-token
+./bin/mattermost-mcp-server
+```
+
+**When to use:**
+- MCP server deployed on the same server as Mattermost
+- Docker containers on the same network
+- Local development environments
