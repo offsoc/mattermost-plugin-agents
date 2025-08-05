@@ -50,8 +50,8 @@ Authentication is handled via Personal Access Tokens (PAT).`,
 
 	// HTTP transport flags
 	rootCmd.Flags().IntVar(&httpPort, "http-port", 8080, "Port for HTTP server (used when transport is http)")
-	rootCmd.Flags().StringVar(&httpBindAddr, "http-bind-addr", "127.0.0.1", "Bind address for HTTP server (used when transport is http)")
-	rootCmd.Flags().StringVar(&siteURL, "site-url", "", "Site URL for HTTP server (used with reverse proxy, used when transport is http)")
+	rootCmd.Flags().StringVar(&httpBindAddr, "http-bind-addr", "127.0.0.1", "Bind address for HTTP server (defaults to localhost for security, use 0.0.0.0 for all interfaces)")
+	rootCmd.Flags().StringVar(&siteURL, "site-url", "", "External URL for OAuth and CORS (required when http-bind-addr is localhost or when using reverse proxy)")
 
 	// Note: We don't mark flags as required since they can also come from environment variables
 

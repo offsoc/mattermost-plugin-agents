@@ -38,14 +38,14 @@ func (s *MattermostHTTPMCPServer) handleProtectedResourceMetadata(w http.Respons
 		return
 	}
 
-	// Get the server URL from config
-	serverURL := s.config.GetMMServerURL()
+	// Return 404 if site-url is not configured to prevent exposing unreachable localhost URLs
+	if s.config.SiteURL == "" {
+		http.NotFound(w, r)
+		return
+	}
 
 	// Determine the resource URL (this MCP server) - RFC 9728 compliant
-	resourceURL := serverURL
-	if s.config.SiteURL != "" {
-		resourceURL = s.config.SiteURL
-	}
+	resourceURL := s.config.SiteURL
 
 	// Ensure resource URL is RFC 9728 compliant (HTTPS, no query/fragment)
 	// Remove any query parameters or fragments as per RFC 9728
@@ -59,7 +59,7 @@ func (s *MattermostHTTPMCPServer) handleProtectedResourceMetadata(w http.Respons
 	metadata := ProtectedResourceMetadata{
 		Resource: resourceURL, // Required: The protected resource's resource identifier URL
 		AuthorizationServers: []string{
-			serverURL, // Mattermost is the authorization server
+			s.config.GetMMServerURL(), // Mattermost is the authorization server
 		},
 		ScopesSupported: []string{
 			"user",

@@ -44,7 +44,7 @@ func NewTokenAuthenticationProvider(mmServerURL, mmInternalServerURL, token stri
 	if internalURL == "" {
 		internalURL = mmServerURL
 	}
-	
+
 	return &TokenAuthenticationProvider{
 		mmServerURL:         mmServerURL,
 		mmInternalServerURL: internalURL,
@@ -98,7 +98,7 @@ func NewOAuthAuthenticationProvider(mmServerURL, mmInternalServerURL, issuer str
 	if internalURL == "" {
 		internalURL = mmServerURL
 	}
-	
+
 	return &OAuthAuthenticationProvider{
 		mmServerURL:         mmServerURL,
 		mmInternalServerURL: internalURL,
@@ -165,4 +165,3 @@ func (p *OAuthAuthenticationProvider) parseAndValidateOAuthToken(ctx context.Con
 
 	return token, nil, nil
 }
-

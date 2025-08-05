@@ -53,7 +53,7 @@ func NewMattermostToolProvider(authProvider auth.AuthenticationProvider, logger 
 	if internalURL == "" {
 		internalURL = mmServerURL
 	}
-	
+
 	return &MattermostToolProvider{
 		authProvider:        authProvider,
 		logger:              logger,
