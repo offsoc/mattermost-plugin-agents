@@ -117,7 +117,7 @@ func (p *OAuthAuthenticationProvider) ValidateAuth(ctx context.Context) error {
 // GetAuthenticatedMattermostClient returns an OAuth-authenticated Mattermost client from context
 func (p *OAuthAuthenticationProvider) GetAuthenticatedMattermostClient(ctx context.Context) (*model.Client4, error) {
 	// Parse and validate OAuth token from context
-	token, user, err := p.parseAndValidateOAuthToken(ctx)
+	token, err := p.parseAndValidateOAuthToken(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -126,42 +126,35 @@ func (p *OAuthAuthenticationProvider) GetAuthenticatedMattermostClient(ctx conte
 	client := model.NewAPIv4Client(p.mmInternalServerURL)
 	client.SetOAuthToken(token)
 
-	// Log successful authentication
-	if user != nil {
-		p.logger.Debug("validated OAuth token", mlog.String("user_id", user.Id), mlog.String("username", user.Username))
-	} else {
-		p.logger.Debug("OAuth token parsed (validation skipped)")
-	}
-
 	return client, nil
 }
 
 // parseAndValidateOAuthToken extracts and validates OAuth token from context, returning token and user info
-func (p *OAuthAuthenticationProvider) parseAndValidateOAuthToken(ctx context.Context) (string, *model.User, error) {
+func (p *OAuthAuthenticationProvider) parseAndValidateOAuthToken(ctx context.Context) (string, error) {
 	// Extract HTTP request from context
 	httpReq, ok := ctx.Value(HTTPRequestContextKey).(*http.Request)
 	if !ok || httpReq == nil {
-		return "", nil, fmt.Errorf("OAuth provider requires HTTP request in context")
+		return "", fmt.Errorf("OAuth provider requires HTTP request in context")
 	}
 
 	// Extract Bearer token from Authorization header
 	authHeader := httpReq.Header.Get("Authorization")
 	if authHeader == "" {
-		return "", nil, fmt.Errorf("missing authorization header")
+		return "", fmt.Errorf("missing authorization header")
 	}
 
 	// Check for Bearer token
 	if !strings.HasPrefix(authHeader, "Bearer ") {
-		return "", nil, fmt.Errorf("invalid authorization header format, expected Bearer token")
+		return "", fmt.Errorf("invalid authorization header format, expected Bearer token")
 	}
 
 	token := strings.TrimPrefix(authHeader, "Bearer ")
 	if token == "" {
-		return "", nil, fmt.Errorf("empty bearer token")
+		return "", fmt.Errorf("empty bearer token")
 	}
 
 	// TODO: This is where we will call the token introspection endpoint or get user from in-memory cache
 	// For now, we're skipping validation and returning the token with nil user
 
-	return token, nil, nil
+	return token, nil
 }
