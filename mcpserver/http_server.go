@@ -64,7 +64,7 @@ func NewHTTPServer(config HTTPConfig, logger *mlog.Logger) (*MattermostHTTPMCPSe
 	mattermostServer.authProvider = auth.NewOAuthAuthenticationProvider(
 		config.GetMMServerURL(),
 		config.GetMMInternalServerURL(),
-		config.GetMMServerURL(), // OAuth issuer is the same as external server URL
+		config.GetMMServerURL(), // OAuth issuer is the external server URL
 		logger,
 	)
 

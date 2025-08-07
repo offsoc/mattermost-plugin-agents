@@ -31,25 +31,24 @@ type AuthenticationProvider interface {
 
 // TokenAuthenticationProvider provides PAT token authentication for STDIO transport
 type TokenAuthenticationProvider struct {
-	mmServerURL         string // External server URL for OAuth redirects
-	mmInternalServerURL string // Internal server URL for API communication
-	token               string
-	logger              mlog.LoggerIFace
+	mmServerURL string // Mattermost server URL for API communication
+	token       string
+	logger      mlog.LoggerIFace
 }
 
 // NewTokenAuthenticationProvider creates a new PAT token authentication provider for STDIO transport
-func NewTokenAuthenticationProvider(mmServerURL, mmInternalServerURL, token string, logger mlog.LoggerIFace) *TokenAuthenticationProvider {
+// Uses internalURL for API communication if provided, otherwise falls back to externalURL
+func NewTokenAuthenticationProvider(externalURL, internalURL, token string, logger mlog.LoggerIFace) *TokenAuthenticationProvider {
 	// Use internal URL for API communication if provided, otherwise fallback to external URL
-	internalURL := mmInternalServerURL
-	if internalURL == "" {
-		internalURL = mmServerURL
+	mmServerURL := internalURL
+	if mmServerURL == "" {
+		mmServerURL = externalURL
 	}
 
 	return &TokenAuthenticationProvider{
-		mmServerURL:         mmServerURL,
-		mmInternalServerURL: internalURL,
-		token:               token,
-		logger:              logger,
+		mmServerURL: mmServerURL,
+		token:       token,
+		logger:      logger,
 	}
 }
 
@@ -66,8 +65,8 @@ func (p *TokenAuthenticationProvider) GetAuthenticatedMattermostClient(ctx conte
 		return nil, fmt.Errorf("no authentication token available")
 	}
 
-	// Create client with configured token using internal URL for API communication
-	client := model.NewAPIv4Client(p.mmInternalServerURL)
+	// Create client with configured token
+	client := model.NewAPIv4Client(p.mmServerURL)
 	client.SetToken(p.token)
 
 	// Validate token by getting current user (single validation call)
@@ -85,25 +84,24 @@ func (p *TokenAuthenticationProvider) GetAuthenticatedMattermostClient(ctx conte
 // OAuthAuthenticationProvider provides OAuth authentication for HTTP transport
 // As a resource server, we only need to validate tokens using Mattermost's API
 type OAuthAuthenticationProvider struct {
-	mmServerURL         string // External server URL for OAuth redirects
-	mmInternalServerURL string // Internal server URL for API communication
-	issuer              string
-	logger              mlog.LoggerIFace
+	mmServerURL string // Mattermost server URL for API communication
+	issuer      string
+	logger      mlog.LoggerIFace
 }
 
 // NewOAuthAuthenticationProvider creates a new OAuth authentication provider for resource server
-func NewOAuthAuthenticationProvider(mmServerURL, mmInternalServerURL, issuer string, logger mlog.LoggerIFace) *OAuthAuthenticationProvider {
+// Uses internalURL for API communication if provided, otherwise falls back to externalURL
+func NewOAuthAuthenticationProvider(externalURL, internalURL, issuer string, logger mlog.LoggerIFace) *OAuthAuthenticationProvider {
 	// Use internal URL for API communication if provided, otherwise fallback to external URL
-	internalURL := mmInternalServerURL
-	if internalURL == "" {
-		internalURL = mmServerURL
+	mmServerURL := internalURL
+	if mmServerURL == "" {
+		mmServerURL = externalURL
 	}
 
 	return &OAuthAuthenticationProvider{
-		mmServerURL:         mmServerURL,
-		mmInternalServerURL: internalURL,
-		issuer:              issuer,
-		logger:              logger,
+		mmServerURL: mmServerURL,
+		issuer:      issuer,
+		logger:      logger,
 	}
 }
 
@@ -122,8 +120,8 @@ func (p *OAuthAuthenticationProvider) GetAuthenticatedMattermostClient(ctx conte
 		return nil, err
 	}
 
-	// Create client and set OAuth token using internal URL for API communication
-	client := model.NewAPIv4Client(p.mmInternalServerURL)
+	// Create client and set OAuth token
+	client := model.NewAPIv4Client(p.mmServerURL)
 	client.SetOAuthToken(token)
 
 	return client, nil
