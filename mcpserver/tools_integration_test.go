@@ -156,14 +156,15 @@ func TestMCPToolsIntegration(t *testing.T) {
 			assert.True(t, result.IsError, "get_channel_info with invalid ID should fail")
 		})
 
-		t.Run("MissingTeamIDForNameLookup", func(t *testing.T) {
+		t.Run("CrossTeamLookupByChannelName", func(t *testing.T) {
 			args := map[string]interface{}{
 				"channel_name": testData.Channel.Name,
-				// missing team_id
+				// missing team_id - should fall back to cross-team search
 			}
 
 			result := executeToolWithMCP(t, suite, "get_channel_info", args)
-			assert.True(t, result.IsError, "get_channel_info with channel name but no team_id should fail")
+			assert.False(t, result.IsError, "get_channel_info with channel name should succeed via cross-team search")
+			assert.NotEmpty(t, result.Content, "get_channel_info should return content")
 		})
 	})
 

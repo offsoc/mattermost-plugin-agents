@@ -168,6 +168,14 @@ func (s *MattermostHTTPMCPServer) setupHTTPServerWithOAuth(baseURL, addr string)
 	return nil
 }
 
+// GetTestHandler returns the HTTP handler for testing purposes
+func (s *MattermostHTTPMCPServer) GetTestHandler() http.Handler {
+	if s.httpServer != nil {
+		return s.httpServer.Handler
+	}
+	return s.httpMux
+}
+
 // getResourceMetadataURL returns the URL for the protected resource metadata endpoint
 func (s *MattermostHTTPMCPServer) getResourceMetadataURL() string {
 	baseURL := s.config.GetMMServerURL()
