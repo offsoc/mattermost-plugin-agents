@@ -6,7 +6,7 @@ A Model Context Protocol (MCP) server that provides AI agents and automation too
 
 - **MCP Protocol Support**: Implements the Model Context Protocol for standardized AI agent communication
 - **Authentication**: Personal Access Token (PAT) authentication
-- **Transport**: Configurable transport layer (currently stdio JSON-RPC for local desktop clients like Claude Desktop)
+- **Transport**: Configurable transport layer (stdio JSON-RPC for desktop clients, HTTP with SSE for web applications)
 - **Comprehensive Mattermost Integration**: Read posts, channels, search, create content
 - **Dual Mode Operation**: Runs standalone or embedded in the AI plugin
 
@@ -148,15 +148,20 @@ Create a post as a specific user using username/password login. Simply provide t
 
 **Required:**
 - `--server-url`: Mattermost server URL (or set `MM_SERVER_URL` env var)
-- `--token`: Personal Access Token (or set `MM_ACCESS_TOKEN` env var)
+- `--token`: Personal Access Token (or set `MM_ACCESS_TOKEN` env var for stdio transport)
 
 **Optional:**
 - `--internal-server-url`: Internal Mattermost server URL for API communication (or set `MM_INTERNAL_SERVER_URL` env var). Use this when the MCP server runs on the same machine as Mattermost to enable localhost communication while providing external URLs for OAuth clients.
-- `--transport`: Transport type (currently only 'stdio' is supported, default: 'stdio')
+- `--transport`: Transport type ('stdio' or 'http', default: 'stdio')
 - `--logfile`: Path to log file (logs to file in addition to stderr, JSON format)
 - `--debug`: Enable debug logging (recommended for troubleshooting)
 - `--dev`: Enable development mode with additional tools for setting up test data
 - `--version`: Show version information
+
+**HTTP Transport Options (when --transport=http):**
+- `--http-port`: Port for HTTP server (default: 8080)
+- `--http-bind-addr`: Bind address for HTTP server (default: 127.0.0.1 for security, use specific IP for external access)
+- `--site-url`: Public URL where clients will access the MCP server (used for OAuth metadata and origin validation)
 
 **Notes**: 
 - Token validation occurs at startup for fast failure detection
@@ -194,6 +199,58 @@ To use with Claude Desktop, add the server to your MCP configuration:
   }
 }
 ```
+
+#### HTTP Transport Integration
+
+For HTTP-based MCP clients and web applications, the server supports HTTP transport with OAuth authentication:
+
+**Basic HTTP server setup:**
+```bash
+./bin/mattermost-mcp-server \
+  --transport http \
+  --server-url https://your-mattermost.com \
+  --http-port 8080 \
+  --debug
+```
+
+**HTTP server with custom port (recommended for production):**
+```bash
+./bin/mattermost-mcp-server \
+  --transport http \
+  --server-url https://your-mattermost.com \
+  --http-port 3000 \
+  --debug
+```
+
+**External access via specific network interface:**
+```bash
+# Bind to specific network interface IP
+./bin/mattermost-mcp-server \
+  --transport http \
+  --server-url https://your-mattermost.com \
+  --http-bind-addr 192.168.1.100 \
+  --http-port 3000 \
+  --debug
+```
+
+**Environment variables:**
+```bash
+export MM_SERVER_URL=https://your-mattermost.com
+export MM_INTERNAL_SERVER_URL=http://localhost:8065  # optional for localhost optimization
+./bin/mattermost-mcp-server --transport http --http-port 8080 --site-url https://mcp.yourcompany.com
+```
+
+**Available endpoints:**
+- `/mcp`: Main MCP communication endpoint (SSE and streamable HTTP)
+- `/sse`: Server-Sent Events endpoint (backwards compatibility)
+- `/message`: Message endpoint for SSE transport (backwards compatibility)
+- `/.well-known/oauth-protected-resource`: OAuth metadata endpoint
+
+**Security considerations:**
+- HTTP transport uses OAuth 2.0 authentication instead of Personal Access Tokens
+- Default bind address is 127.0.0.1 (localhost only) for security - recommended for production with reverse proxy
+- For external access, bind to specific network interface IPs rather than all interfaces
+- Origin validation prevents DNS rebinding attacks
 
 ### Development Mode
 
