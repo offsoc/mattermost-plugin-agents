@@ -367,7 +367,7 @@ dist-fips: apply server-fips webapp bundle-fips
 
 ## Builds both normal and FIPS distributions.
 .PHONY: dist-all
-dist-all: clean
+dist-all:
 	@echo "==> Building normal distribution..."
 	$(MAKE) dist
 	@echo "==> Building FIPS distribution..."

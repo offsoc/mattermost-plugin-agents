@@ -6,6 +6,7 @@ on:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -175,7 +176,18 @@ jobs:
         env:
           MM_SERVERS_CONFIG: ${{ secrets.MM_SERVERS_CONFIG }}
         run: |
-          PLUGIN_FILE=$(ls artifacts/dist/*.tar.gz | head -1)
+          # Get plugin info from manifest
+          PLUGIN_ID=$(cd artifacts && find . -name "plugin.json" -exec jq -r '.id' {} \; | head -1)
+          PLUGIN_VERSION=$(cd artifacts && find . -name "plugin.json" -exec jq -r '.version' {} \; | head -1)
+          PLUGIN_FILE="artifacts/dist/${PLUGIN_ID}-${PLUGIN_VERSION}.tar.gz"
+          
+          if [ ! -f "$PLUGIN_FILE" ]; then
+            echo "Error: Plugin file not found at $PLUGIN_FILE"
+            echo "Available files:"
+            ls -la artifacts/dist/
+            exit 1
+          fi
+          
           echo "Found plugin bundle: $PLUGIN_FILE"
 
           echo "$MM_SERVERS_CONFIG" | jq -c '.[]' | while read -r server; do
