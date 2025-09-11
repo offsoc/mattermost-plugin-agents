@@ -77,10 +77,8 @@ func NewHTTPServer(config HTTPConfig, logger *mlog.Logger) (*MattermostHTTPMCPSe
 		server.WithRecovery(),
 	)
 
-	// Register tools
 	mattermostServer.registerTools()
 
-	// Create SSE server using the mcp-go library with authentication
 	baseURL := fmt.Sprintf("http://%s:%d", config.HTTPBindAddr, config.HTTPPort)
 	if config.SiteURL != "" {
 		baseURL = config.SiteURL
@@ -88,8 +86,45 @@ func NewHTTPServer(config HTTPConfig, logger *mlog.Logger) (*MattermostHTTPMCPSe
 
 	// Create HTTP server with OAuth endpoints and MCP routing
 	addr := fmt.Sprintf("%s:%d", config.HTTPBindAddr, config.HTTPPort)
-	if err := mattermostServer.setupHTTPServerWithOAuth(baseURL, addr); err != nil {
-		return nil, fmt.Errorf("failed to setup HTTP server: %w", err)
+	
+	// Create HTTP mux router
+	mattermostServer.httpMux = http.NewServeMux()
+
+	// Add OAuth metadata endpoints
+	mattermostServer.addOAuthMetadataEndpoints()
+
+	// Create SSE server for MCP communication (backwards compatibility)
+	// Configure SSE server with custom endpoints to match our path stripping
+	mattermostServer.sseServer = server.NewSSEServer(
+		mattermostServer.mcpServer,
+		server.WithBaseURL(baseURL),
+		server.WithStaticBasePath(""),
+		server.WithSSEEndpoint("/sse"),
+		server.WithMessageEndpoint("/message"),
+		server.WithUseFullURLForMessageEndpoint(false),
+		server.WithSSEContextFunc(mattermostServer.createAuthContextFunc()),
+	)
+
+	// Create Streamable HTTP server for MCP communication (new standard)
+	// Configure with SSE support for GET requests per MCP specification
+	mattermostServer.streamableHTTPServer = server.NewStreamableHTTPServer(
+		mattermostServer.mcpServer,
+		server.WithHTTPContextFunc(mattermostServer.createHTTPContextFunc()),
+	)
+
+	// Setup MCP routes
+	mattermostServer.setupMCPRoutes()
+
+	// Apply logging and security middleware to the mux
+	mainHandler := mattermostServer.loggingMiddleware(mattermostServer.httpMux)
+	secureHandler := mattermostServer.securityMiddleware(mainHandler)
+
+	// Create HTTP server with security middleware
+	mattermostServer.httpServer = &http.Server{
+		Addr:         addr,
+		Handler:      secureHandler,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 30 * time.Second,
 	}
 
 	return mattermostServer, nil
@@ -123,50 +158,6 @@ func (s *MattermostHTTPMCPServer) createHTTPContextFunc() server.HTTPContextFunc
 	}
 }
 
-// setupHTTPServerWithOAuth sets up the HTTP server with OAuth metadata endpoints and MCP routing
-func (s *MattermostHTTPMCPServer) setupHTTPServerWithOAuth(baseURL, addr string) error {
-	// Create HTTP mux router
-	s.httpMux = http.NewServeMux()
-
-	// Add OAuth metadata endpoints
-	s.addOAuthMetadataEndpoints()
-
-	// Create SSE server for MCP communication (backwards compatibility)
-	// Configure SSE server with custom endpoints to match our path stripping
-	s.sseServer = server.NewSSEServer(
-		s.mcpServer,
-		server.WithBaseURL(baseURL),
-		server.WithStaticBasePath(""),
-		server.WithSSEEndpoint("/sse"),
-		server.WithMessageEndpoint("/message"),
-		server.WithUseFullURLForMessageEndpoint(false),
-		server.WithSSEContextFunc(s.createAuthContextFunc()),
-	)
-
-	// Create Streamable HTTP server for MCP communication (new standard)
-	// Configure with SSE support for GET requests per MCP specification
-	s.streamableHTTPServer = server.NewStreamableHTTPServer(
-		s.mcpServer,
-		server.WithHTTPContextFunc(s.createHTTPContextFunc()),
-	)
-
-	// Setup MCP routes
-	s.setupMCPRoutes()
-
-	// Apply logging and security middleware to the mux
-	mainHandler := s.loggingMiddleware(s.httpMux)
-	secureHandler := s.securityMiddleware(mainHandler)
-
-	// Create HTTP server with security middleware
-	s.httpServer = &http.Server{
-		Addr:         addr,
-		Handler:      secureHandler,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
-	}
-
-	return nil
-}
 
 // GetTestHandler returns the HTTP handler for testing purposes
 func (s *MattermostHTTPMCPServer) GetTestHandler() http.Handler {

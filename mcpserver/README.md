@@ -213,15 +213,6 @@ For HTTP-based MCP clients and web applications, the server supports HTTP transp
   --debug
 ```
 
-**HTTP server with custom port (recommended for production):**
-```bash
-./bin/mattermost-mcp-server \
-  --transport http \
-  --server-url https://your-mattermost.com \
-  --http-port 3000 \
-  --debug
-```
-
 **External access via specific network interface:**
 ```bash
 # Bind to specific network interface IP
@@ -245,12 +236,6 @@ export MM_INTERNAL_SERVER_URL=http://localhost:8065  # optional for localhost op
 - `/sse`: Server-Sent Events endpoint (backwards compatibility)
 - `/message`: Message endpoint for SSE transport (backwards compatibility)
 - `/.well-known/oauth-protected-resource`: OAuth metadata endpoint
-
-**Security considerations:**
-- HTTP transport uses OAuth 2.0 authentication instead of Personal Access Tokens
-- Default bind address is 127.0.0.1 (localhost only) for security - recommended for production with reverse proxy
-- For external access, bind to specific network interface IPs rather than all interfaces
-- Origin validation prevents DNS rebinding attacks
 
 ### Development Mode
 
