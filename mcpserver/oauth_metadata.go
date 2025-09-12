@@ -19,12 +19,6 @@ type ProtectedResourceMetadata struct {
 	ResourceName         string   `json:"resource_name,omitempty"`         // Recommended: Human-readable name
 }
 
-// addOAuthMetadataEndpoints adds OAuth metadata endpoints to the HTTP mux
-func (s *MattermostHTTPMCPServer) addOAuthMetadataEndpoints() {
-	// Add OAuth 2.0 Protected Resource Metadata endpoint (RFC 9728)
-	// This endpoint doesn't require authentication
-	s.httpMux.HandleFunc("/.well-known/oauth-protected-resource", s.handleProtectedResourceMetadata)
-}
 
 // handleProtectedResourceMetadata handles OAuth 2.0 Protected Resource Metadata requests (RFC 9728)
 func (s *MattermostHTTPMCPServer) handleProtectedResourceMetadata(w http.ResponseWriter, r *http.Request) {

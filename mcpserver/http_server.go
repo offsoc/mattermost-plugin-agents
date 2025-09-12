@@ -22,7 +22,6 @@ type MattermostHTTPMCPServer struct {
 	config               HTTPConfig
 	sseServer            *server.SSEServer
 	streamableHTTPServer *server.StreamableHTTPServer
-	httpMux              *http.ServeMux
 	httpServer           *http.Server
 }
 
@@ -86,12 +85,6 @@ func NewHTTPServer(config HTTPConfig, logger *mlog.Logger) (*MattermostHTTPMCPSe
 
 	// Create HTTP server with OAuth endpoints and MCP routing
 	addr := fmt.Sprintf("%s:%d", config.HTTPBindAddr, config.HTTPPort)
-	
-	// Create HTTP mux router
-	mattermostServer.httpMux = http.NewServeMux()
-
-	// Add OAuth metadata endpoints
-	mattermostServer.addOAuthMetadataEndpoints()
 
 	// Create SSE server for MCP communication (backwards compatibility)
 	// Configure SSE server with custom endpoints to match our path stripping
@@ -99,8 +92,6 @@ func NewHTTPServer(config HTTPConfig, logger *mlog.Logger) (*MattermostHTTPMCPSe
 		mattermostServer.mcpServer,
 		server.WithBaseURL(baseURL),
 		server.WithStaticBasePath(""),
-		server.WithSSEEndpoint("/sse"),
-		server.WithMessageEndpoint("/message"),
 		server.WithUseFullURLForMessageEndpoint(false),
 		server.WithSSEContextFunc(mattermostServer.createAuthContextFunc()),
 	)
@@ -112,11 +103,12 @@ func NewHTTPServer(config HTTPConfig, logger *mlog.Logger) (*MattermostHTTPMCPSe
 		server.WithHTTPContextFunc(mattermostServer.createHTTPContextFunc()),
 	)
 
-	// Setup MCP routes
-	mattermostServer.setupMCPRoutes()
+	// Create HTTP mux router and setup all routes
+	httpMux := http.NewServeMux()
+	mattermostServer.setupRoutes(httpMux)
 
 	// Apply logging and security middleware to the mux
-	mainHandler := mattermostServer.loggingMiddleware(mattermostServer.httpMux)
+	mainHandler := mattermostServer.loggingMiddleware(httpMux)
 	secureHandler := mattermostServer.securityMiddleware(mainHandler)
 
 	// Create HTTP server with security middleware
@@ -158,13 +150,9 @@ func (s *MattermostHTTPMCPServer) createHTTPContextFunc() server.HTTPContextFunc
 	}
 }
 
-
 // GetTestHandler returns the HTTP handler for testing purposes
 func (s *MattermostHTTPMCPServer) GetTestHandler() http.Handler {
-	if s.httpServer != nil {
-		return s.httpServer.Handler
-	}
-	return s.httpMux
+	return s.httpServer.Handler
 }
 
 // getResourceMetadataURL returns the URL for the protected resource metadata endpoint
@@ -389,27 +377,30 @@ func (s *MattermostHTTPMCPServer) requireAuth(next http.HandlerFunc) http.Handle
 	}
 }
 
-// setupMCPRoutes sets up the MCP communication routes
-func (s *MattermostHTTPMCPServer) setupMCPRoutes() {
-	// New Streamable HTTP endpoint for MCP over HTTP standard
-	s.httpMux.HandleFunc("/mcp", s.requireAuth(func(w http.ResponseWriter, r *http.Request) {
+// setupRoutes sets up all HTTP routes for the MCP server on the provided mux
+func (s *MattermostHTTPMCPServer) setupRoutes(httpMux *http.ServeMux) {
+	// OAuth 2.0 Protected Resource Metadata endpoint (RFC 9728) - no auth required
+	httpMux.HandleFunc("/.well-known/oauth-protected-resource", s.handleProtectedResourceMetadata)
+
+	// New Streamable HTTP endpoint for MCP over HTTP standard - requires auth
+	httpMux.HandleFunc("/mcp", s.requireAuth(func(w http.ResponseWriter, r *http.Request) {
 		s.streamableHTTPServer.ServeHTTP(w, r)
 	}))
 
-	// SSE handler
+	// SSE handler for MCP communication (backwards compatibility) - requires auth
 	sseHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.sseServer.ServeHTTP(w, r)
 	})
 
 	// Handle /sse and all sub-paths with authentication
-	s.httpMux.Handle("/sse/", s.requireAuth(sseHandler.ServeHTTP))
-	s.httpMux.Handle("/sse", s.requireAuth(sseHandler.ServeHTTP))
+	httpMux.Handle("/sse/", s.requireAuth(sseHandler.ServeHTTP))
+	httpMux.Handle("/sse", s.requireAuth(sseHandler.ServeHTTP))
 
-	// Handle /message endpoint for MCP SSE transport (backwards compatibility)
-	s.httpMux.Handle("/message", s.requireAuth(sseHandler.ServeHTTP))
+	// Handle /message endpoint for MCP SSE transport (backwards compatibility) - requires auth
+	httpMux.Handle("/message", s.requireAuth(sseHandler.ServeHTTP))
 
 	// Default 404 handler for any other unmatched paths
-	s.httpMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	httpMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		s.logger.Debug("Request to unmatched path", mlog.String("path", r.URL.Path))
 		http.NotFound(w, r)
 	})
