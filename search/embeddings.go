@@ -46,7 +46,7 @@ func newEmbeddingProvider(config embeddings.UpstreamConfig, httpClient *http.Cli
 		if err := json.Unmarshal(config.Parameters, &openaiConfig); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal OpenAI config: %w", err)
 		}
-		return openai.NewCompatibleEmbeddings(openaiConfig, httpClient), nil
+		return openai.NewEmbeddings(openaiConfig, httpClient), nil
 	}
 
 	return nil, fmt.Errorf("unsupported embedding provider type: %s", config.Type)

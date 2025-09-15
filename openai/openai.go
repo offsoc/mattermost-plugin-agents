@@ -621,8 +621,12 @@ func (s *OpenAI) CreateEmbedding(ctx context.Context, text string) ([]float32, e
 		Input: openai.EmbeddingNewParamsInputUnion{
 			OfString: openai.String(text),
 		},
-		Model:      getEmbeddingModelConstant(s.config.EmbeddingModel),
-		Dimensions: openai.Int(int64(s.config.EmbeddingDimensions)),
+		Model: getEmbeddingModelConstant(s.config.EmbeddingModel),
+	}
+
+	// Only set dimensions if it's explicitly configured (> 0)
+	if s.config.EmbeddingDimensions > 0 {
+		params.Dimensions = openai.Int(int64(s.config.EmbeddingDimensions))
 	}
 
 	resp, err := s.client.Embeddings.New(ctx, params)
@@ -648,8 +652,12 @@ func (s *OpenAI) BatchCreateEmbeddings(ctx context.Context, texts []string) ([][
 		Input: openai.EmbeddingNewParamsInputUnion{
 			OfArrayOfStrings: texts,
 		},
-		Model:      getEmbeddingModelConstant(s.config.EmbeddingModel),
-		Dimensions: openai.Int(int64(s.config.EmbeddingDimensions)),
+		Model: getEmbeddingModelConstant(s.config.EmbeddingModel),
+	}
+
+	// Only set dimensions if it's explicitly configured (> 0)
+	if s.config.EmbeddingDimensions > 0 {
+		params.Dimensions = openai.Int(int64(s.config.EmbeddingDimensions))
 	}
 
 	resp, err := s.client.Embeddings.New(ctx, params)
