@@ -93,14 +93,12 @@ func NewHTTPServer(config HTTPConfig, logger *mlog.Logger) (*MattermostHTTPMCPSe
 		server.WithBaseURL(baseURL),
 		server.WithStaticBasePath(""),
 		server.WithUseFullURLForMessageEndpoint(false),
-		server.WithSSEContextFunc(mattermostServer.createAuthContextFunc()),
 	)
 
 	// Create Streamable HTTP server for MCP communication (new standard)
 	// Configure with SSE support for GET requests per MCP specification
 	mattermostServer.streamableHTTPServer = server.NewStreamableHTTPServer(
 		mattermostServer.mcpServer,
-		server.WithHTTPContextFunc(mattermostServer.createHTTPContextFunc()),
 	)
 
 	// Create HTTP mux router and setup all routes
@@ -134,25 +132,29 @@ func (s *MattermostHTTPMCPServer) Serve() error {
 	return s.httpServer.ListenAndServe()
 }
 
-// createAuthContextFunc creates a context function for SSE authentication
-func (s *MattermostHTTPMCPServer) createAuthContextFunc() server.SSEContextFunc {
-	return func(ctx context.Context, r *http.Request) context.Context {
-		// Add HTTP request to context so OAuth provider can access it
-		return context.WithValue(ctx, auth.HTTPRequestContextKey, r)
-	}
-}
-
-// createHTTPContextFunc creates a context function for Streamable HTTP authentication
-func (s *MattermostHTTPMCPServer) createHTTPContextFunc() server.HTTPContextFunc {
-	return func(ctx context.Context, r *http.Request) context.Context {
-		// Add HTTP request to context so OAuth provider can access it
-		return context.WithValue(ctx, auth.HTTPRequestContextKey, r)
-	}
-}
-
 // GetTestHandler returns the HTTP handler for testing purposes
 func (s *MattermostHTTPMCPServer) GetTestHandler() http.Handler {
 	return s.httpServer.Handler
+}
+
+// extractBearerToken extracts the Bearer token from the Authorization header
+func extractBearerToken(r *http.Request) (string, error) {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		return "", fmt.Errorf("missing authorization header")
+	}
+
+	// Check for Bearer token
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		return "", fmt.Errorf("invalid authorization header format, expected Bearer token")
+	}
+
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+	if token == "" {
+		return "", fmt.Errorf("empty bearer token")
+	}
+
+	return token, nil
 }
 
 // getResourceMetadataURL returns the URL for the protected resource metadata endpoint
@@ -354,9 +356,24 @@ func (r *responseRecorder) Write(data []byte) (int, error) {
 // requireAuth creates HTTP middleware that requires OAuth authentication
 func (s *MattermostHTTPMCPServer) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Add HTTP request to context for OAuth provider
-		ctx := context.WithValue(r.Context(), auth.HTTPRequestContextKey, r)
+		// Extract Bearer token from Authorization header
+		token, err := extractBearerToken(r)
+		if err != nil {
+			s.logger.Warn("failed to extract bearer token for middleware",
+				mlog.String("path", r.URL.Path),
+				mlog.Err(err))
 
+			// Return 401 Unauthorized with WWW-Authenticate header (RFC 9728)
+			resourceMetadataURL := s.getResourceMetadataURL()
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata="%s"`, resourceMetadataURL))
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		// Add token to context and validate it
+		ctx := r.Context()
+		ctx = context.WithValue(ctx, auth.AuthTokenContextKey, token)
 		if err := s.authProvider.ValidateAuth(ctx); err != nil {
 			s.logger.Warn("authentication failed for MCP endpoint",
 				mlog.String("path", r.URL.Path),
@@ -370,8 +387,6 @@ func (s *MattermostHTTPMCPServer) requireAuth(next http.HandlerFunc) http.Handle
 			_, _ = w.Write([]byte(`{"error": {"code": -32600, "message": "Authentication required"}}`))
 			return
 		}
-
-		// Set the authenticated context for downstream handlers
 		r = r.WithContext(ctx)
 		next(w, r)
 	}

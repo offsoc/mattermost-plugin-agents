@@ -6,26 +6,24 @@ package auth
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"strings"
 
 	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/shared/mlog"
 )
 
-// Context keys for passing HTTP requests through context
-type contextKey string
+// Context keys for passing data through context
+type ContextKey string
 
 const (
-	HTTPRequestContextKey contextKey = "http_request"
+	// AuthTokenContextKey is used to store the validated auth token in context
+	AuthTokenContextKey ContextKey = "auth_token"
 )
 
 // AuthenticationProvider handles authentication for MCP requests
 type AuthenticationProvider interface {
-	// ValidateAuth validates authentication from context (may contain HTTP request)
 	ValidateAuth(ctx context.Context) error
 
-	// GetAuthenticatedMattermostClient returns an authenticated Mattermost client from context
+	// GetAuthenticatedMattermostClient returns an authenticated Mattermost client
 	GetAuthenticatedMattermostClient(ctx context.Context) (*model.Client4, error)
 }
 
@@ -112,47 +110,20 @@ func (p *OAuthAuthenticationProvider) ValidateAuth(ctx context.Context) error {
 	return err
 }
 
-// GetAuthenticatedMattermostClient returns an OAuth-authenticated Mattermost client from context
+// GetAuthenticatedMattermostClient returns an OAuth-authenticated Mattermost client
 func (p *OAuthAuthenticationProvider) GetAuthenticatedMattermostClient(ctx context.Context) (*model.Client4, error) {
-	// Parse and validate OAuth token from context
-	token, err := p.parseAndValidateOAuthToken(ctx)
-	if err != nil {
-		return nil, err
+	// Get token from context (required for OAuth)
+	token, ok := ctx.Value(AuthTokenContextKey).(string)
+	if !ok || token == "" {
+		return nil, fmt.Errorf("OAuth provider requires validated token in context")
 	}
+
+	// TODO: This is where we will call the token introspection endpoint or get user from in-memory cache
+	// For now, we're skipping validation and creating the client with the token
 
 	// Create client and set OAuth token
 	client := model.NewAPIv4Client(p.mmServerURL)
 	client.SetOAuthToken(token)
 
 	return client, nil
-}
-
-// parseAndValidateOAuthToken extracts and validates OAuth token from context, returning token and user info
-func (p *OAuthAuthenticationProvider) parseAndValidateOAuthToken(ctx context.Context) (string, error) {
-	// Extract HTTP request from context
-	httpReq, ok := ctx.Value(HTTPRequestContextKey).(*http.Request)
-	if !ok || httpReq == nil {
-		return "", fmt.Errorf("OAuth provider requires HTTP request in context")
-	}
-
-	// Extract Bearer token from Authorization header
-	authHeader := httpReq.Header.Get("Authorization")
-	if authHeader == "" {
-		return "", fmt.Errorf("missing authorization header")
-	}
-
-	// Check for Bearer token
-	if !strings.HasPrefix(authHeader, "Bearer ") {
-		return "", fmt.Errorf("invalid authorization header format, expected Bearer token")
-	}
-
-	token := strings.TrimPrefix(authHeader, "Bearer ")
-	if token == "" {
-		return "", fmt.Errorf("empty bearer token")
-	}
-
-	// TODO: This is where we will call the token introspection endpoint or get user from in-memory cache
-	// For now, we're skipping validation and returning the token with nil user
-
-	return token, nil
 }

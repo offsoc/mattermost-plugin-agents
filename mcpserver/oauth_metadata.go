@@ -19,7 +19,6 @@ type ProtectedResourceMetadata struct {
 	ResourceName         string   `json:"resource_name,omitempty"`         // Recommended: Human-readable name
 }
 
-
 // handleProtectedResourceMetadata handles OAuth 2.0 Protected Resource Metadata requests (RFC 9728)
 func (s *MattermostHTTPMCPServer) handleProtectedResourceMetadata(w http.ResponseWriter, r *http.Request) {
 	// Set CORS headers
