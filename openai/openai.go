@@ -250,7 +250,7 @@ func postsToChatCompletionMessages(posts []llm.Post) []openai.ChatCompletionMess
 						continue
 					}
 					if file.Size > OpenAIMaxImageSize {
-						parts = append(parts, openai.TextContentPart("User submitted a image larger than 20MB. Tell the user this."))
+						parts = append(parts, openai.TextContentPart("User submitted an image larger than 20MB. Tell the user this."))
 						continue
 					}
 					fileBytes, err := io.ReadAll(file.Reader)
