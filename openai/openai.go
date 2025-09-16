@@ -105,7 +105,7 @@ func New(config Config, httpClient *http.Client) *OpenAI {
 // NewEmbeddings creates a new OpenAI client configured only for embeddings functionality
 func NewEmbeddings(config Config, httpClient *http.Client) *OpenAI {
 	if config.EmbeddingModel == "" {
-		config.EmbeddingModel = string(openai.EmbeddingModelTextEmbedding3Large)
+		config.EmbeddingModel = openai.EmbeddingModelTextEmbedding3Large
 		config.EmbeddingDimensions = 3072
 	}
 
@@ -125,7 +125,7 @@ func NewEmbeddings(config Config, httpClient *http.Client) *OpenAI {
 // NewCompatibleEmbeddings creates a new OpenAI client configured only for embeddings functionality
 func NewCompatibleEmbeddings(config Config, httpClient *http.Client) *OpenAI {
 	if config.EmbeddingModel == "" {
-		config.EmbeddingModel = string(openai.EmbeddingModelTextEmbedding3Large)
+		config.EmbeddingModel = openai.EmbeddingModelTextEmbedding3Large
 		config.EmbeddingDimensions = 3072
 	}
 
@@ -493,7 +493,7 @@ func getModelConstant(model string) shared.ChatModel {
 		return shared.ChatModelO1Mini
 	default:
 		// For custom models or newer versions, use the string as-is
-		return shared.ChatModel(model)
+		return model
 	}
 }
 
@@ -689,7 +689,7 @@ func getEmbeddingModelConstant(model string) openai.EmbeddingModel {
 		return openai.EmbeddingModelTextEmbeddingAda002
 	default:
 		// For custom models, use the string as-is
-		return openai.EmbeddingModel(model)
+		return model
 	}
 }
 
