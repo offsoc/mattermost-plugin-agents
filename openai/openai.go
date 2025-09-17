@@ -150,17 +150,34 @@ func modifyCompletionRequestWithRequest(params openai.ChatCompletionNewParams, i
 
 // schemaToFunctionParameters converts a jsonschema.Schema to shared.FunctionParameters
 func schemaToFunctionParameters(schema *jsonschema.Schema) shared.FunctionParameters {
+	// Default schema that satisfies OpenAI's requirements
+	defaultSchema := shared.FunctionParameters{
+		"type":       "object",
+		"properties": map[string]any{},
+	}
+
 	// Convert the schema to a map by marshaling and unmarshaling
 	data, err := json.Marshal(schema)
 	if err != nil {
-		// Fallback to empty parameters if marshaling fails
-		return shared.FunctionParameters{}
+		return defaultSchema
 	}
 
 	var result shared.FunctionParameters
 	if err := json.Unmarshal(data, &result); err != nil {
-		// Fallback to empty parameters if unmarshaling fails
-		return shared.FunctionParameters{}
+		return defaultSchema
+	}
+
+	// Ensure the result has the required fields for OpenAI
+	// OpenAI requires "type" and "properties" to be present, even if properties is empty
+	// This is because OpenAI's FunctionDefinitionParam has `omitzero` on the `Parameters` field
+	if result == nil {
+		return defaultSchema
+	}
+	if _, hasType := result["type"]; !hasType {
+		result["type"] = "object"
+	}
+	if _, hasProps := result["properties"]; !hasProps {
+		result["properties"] = map[string]any{}
 	}
 
 	return result

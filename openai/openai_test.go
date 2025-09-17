@@ -266,6 +266,60 @@ func TestToolsToOpenAITools(t *testing.T) {
 				assert.Empty(t, result)
 			},
 		},
+		{
+			name: "tool with no parameters (like atlassianUserInfo)",
+			tools: []llm.Tool{
+				{
+					Name:        "atlassianUserInfo",
+					Description: "Get current user info from Atlassian",
+					Schema: &jsonschema.Schema{
+						Type:       "object",
+						Properties: map[string]*jsonschema.Schema{},
+					},
+				},
+			},
+			expected: 1,
+			check: func(t *testing.T, result []openai.ChatCompletionToolUnionParam) {
+				require.Len(t, result, 1)
+				assert.NotNil(t, result[0].OfFunction)
+				if result[0].OfFunction != nil {
+					assert.Equal(t, "atlassianUserInfo", result[0].OfFunction.Function.Name)
+					assert.Equal(t, "Get current user info from Atlassian", result[0].OfFunction.Function.Description.Value)
+
+					// Most importantly, check that Parameters is not nil and has the required structure
+					params := result[0].OfFunction.Function.Parameters
+					assert.NotNil(t, params)
+					assert.Equal(t, "object", params["type"])
+					props, ok := params["properties"].(map[string]any)
+					assert.True(t, ok, "properties should be a map")
+					assert.Empty(t, props, "properties should be empty for parameterless tool")
+				}
+			},
+		},
+		{
+			name: "tool with nil schema",
+			tools: []llm.Tool{
+				{
+					Name:        "simpleAction",
+					Description: "Simple action with no parameters",
+					Schema:      nil,
+				},
+			},
+			expected: 1,
+			check: func(t *testing.T, result []openai.ChatCompletionToolUnionParam) {
+				require.Len(t, result, 1)
+				assert.NotNil(t, result[0].OfFunction)
+				if result[0].OfFunction != nil {
+					// Even with nil schema, we should get valid parameters
+					params := result[0].OfFunction.Function.Parameters
+					assert.NotNil(t, params)
+					assert.Equal(t, "object", params["type"])
+					props, ok := params["properties"].(map[string]any)
+					assert.True(t, ok, "properties should be a map")
+					assert.Empty(t, props, "properties should be empty for nil schema")
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -318,7 +372,26 @@ func TestSchemaToFunctionParameters(t *testing.T) {
 			name:   "nil schema",
 			schema: nil,
 			check: func(t *testing.T, result shared.FunctionParameters) {
-				assert.Empty(t, result)
+				// When schema is nil, we should return a basic object schema
+				// with type="object" and empty properties to satisfy OpenAI API requirements
+				assert.Equal(t, "object", result["type"])
+				props, ok := result["properties"].(map[string]any)
+				assert.True(t, ok)
+				assert.Empty(t, props)
+			},
+		},
+		{
+			name: "empty properties schema (like atlassianUserInfo)",
+			schema: &jsonschema.Schema{
+				Type:       "object",
+				Properties: map[string]*jsonschema.Schema{},
+			},
+			check: func(t *testing.T, result shared.FunctionParameters) {
+				// Even with empty properties, we should have type="object" and properties={}
+				assert.Equal(t, "object", result["type"])
+				props, ok := result["properties"].(map[string]interface{})
+				assert.True(t, ok)
+				assert.Empty(t, props)
 			},
 		},
 		{
@@ -352,6 +425,33 @@ func TestSchemaToFunctionParameters(t *testing.T) {
 						}
 					}
 				}
+			},
+		},
+		{
+			name: "schema without type field",
+			schema: &jsonschema.Schema{
+				Properties: map[string]*jsonschema.Schema{
+					"field1": {Type: "string"},
+				},
+			},
+			check: func(t *testing.T, result shared.FunctionParameters) {
+				// Should default to "object" type
+				assert.Equal(t, "object", result["type"])
+				assert.NotNil(t, result["properties"])
+			},
+		},
+		{
+			name: "schema with only required field",
+			schema: &jsonschema.Schema{
+				Required: []string{"field1"},
+			},
+			check: func(t *testing.T, result shared.FunctionParameters) {
+				// Should have type and properties even if only required is specified
+				assert.Equal(t, "object", result["type"])
+				props, ok := result["properties"].(map[string]any)
+				assert.True(t, ok)
+				assert.Empty(t, props)
+				assert.NotNil(t, result["required"])
 			},
 		},
 	}
