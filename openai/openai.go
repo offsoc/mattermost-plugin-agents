@@ -52,7 +52,6 @@ const (
 var ErrStreamingTimeout = errors.New("timeout streaming")
 
 func NewAzure(config Config, httpClient *http.Client) *OpenAI {
-	// Azure configuration
 	opts := []option.RequestOption{
 		azure.WithEndpoint(strings.TrimSuffix(config.APIURL, "/"), "2024-06-01"),
 		azure.WithAPIKey(config.APIKey),
@@ -498,7 +497,7 @@ func getModelConstant(model string) shared.ChatModel {
 func (s *OpenAI) ChatCompletion(request llm.CompletionRequest, opts ...llm.LanguageModelOption) (*llm.TextStreamResult, error) {
 	params := s.completionRequestFromConfig(s.createConfig(opts))
 	params = modifyCompletionRequestWithRequest(params, request)
-	// Streaming is enabled via the NewStreaming method, not a params field
+
 	if s.config.SendUserID {
 		if request.Context.RequestingUser != nil {
 			params.User = openai.String(request.Context.RequestingUser.Id)
@@ -517,15 +516,9 @@ func (s *OpenAI) ChatCompletionNoStream(request llm.CompletionRequest, opts ...l
 }
 
 func (s *OpenAI) Transcribe(file io.Reader) (*subtitles.Subtitles, error) {
-	// Read the file into a buffer since the new API expects a filename
-	buf := new(bytes.Buffer)
-	if _, err := io.Copy(buf, file); err != nil {
-		return nil, fmt.Errorf("unable to read file: %w", err)
-	}
-
 	params := openai.AudioTranscriptionNewParams{
 		Model:          openai.AudioModelWhisper1,
-		File:           buf,
+		File:           file,
 		ResponseFormat: openai.AudioResponseFormatVTT,
 	}
 
