@@ -348,6 +348,13 @@ func (s *OpenAI) streamResultToChannels(params openai.ChatCompletionNewParams, l
 			}
 		}
 
+		if delta.Content != "" {
+			output <- llm.TextStreamEvent{
+				Type:  llm.EventTypeText,
+				Value: delta.Content,
+			}
+		}
+
 		// Check finishing conditions
 		switch choice.FinishReason {
 		case "stop":
@@ -400,12 +407,6 @@ func (s *OpenAI) streamResultToChannels(params openai.ChatCompletionNewParams, l
 			}
 		}
 
-		if delta.Content != "" {
-			output <- llm.TextStreamEvent{
-				Type:  llm.EventTypeText,
-				Value: delta.Content,
-			}
-		}
 	}
 
 	if err := stream.Err(); err != nil {
