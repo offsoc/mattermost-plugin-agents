@@ -406,7 +406,6 @@ func (s *OpenAI) streamResultToChannels(params openai.ChatCompletionNewParams, l
 				return
 			}
 		}
-
 	}
 
 	if err := stream.Err(); err != nil {
