@@ -21,6 +21,7 @@ import (
 	"github.com/mattermost/mattermost-plugin-ai/subtitles"
 	"github.com/modelcontextprotocol/go-sdk/jsonschema"
 	"github.com/openai/openai-go/v2"
+	"github.com/openai/openai-go/v2/azure"
 	"github.com/openai/openai-go/v2/option"
 	"github.com/openai/openai-go/v2/shared"
 )
@@ -53,12 +54,9 @@ var ErrStreamingTimeout = errors.New("timeout streaming")
 func NewAzure(config Config, httpClient *http.Client) *OpenAI {
 	// Azure configuration
 	opts := []option.RequestOption{
-		option.WithAPIKey(config.APIKey),
+		azure.WithEndpoint(strings.TrimSuffix(config.APIURL, "/"), "2024-06-01"),
+		azure.WithAPIKey(config.APIKey),
 		option.WithHTTPClient(httpClient),
-		option.WithBaseURL(strings.TrimSuffix(config.APIURL, "/")),
-		// For Azure, we need to use a different base URL pattern
-		// Azure expects: https://{your-resource-name}.openai.azure.com/openai/deployments/{deployment-id}
-		option.WithHeader("api-version", "2024-06-01"),
 	}
 
 	client := openai.NewClient(opts...)
