@@ -415,10 +415,8 @@ func (s *OpenAI) streamResultToChannels(params openai.ChatCompletionNewParams, l
 		case "":
 			// Not done yet, keep going
 		default:
-			if choice.FinishReason != "" {
-				fmt.Printf("Unknown finish reason: %s", choice.FinishReason)
-				return
-			}
+			fmt.Printf("Unknown finish reason: %s", choice.FinishReason)
+			return
 		}
 	}
 
