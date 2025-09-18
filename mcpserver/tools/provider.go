@@ -20,7 +20,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/jsonschema"
 )
 
-
 // MCPToolContext provides MCP-specific functionality with the authenticated client
 type MCPToolContext struct {
 	Client        *model.Client4
@@ -140,6 +139,11 @@ func (p *MattermostToolProvider) createMCPToolHandler(resolver MCPToolResolver) 
 				return fmt.Errorf("failed to marshal arguments: %w", marshalErr)
 			}
 
+			// Validate transport restrictions before unmarshaling
+			if validationErr := validateTransportRestrictions(argumentsBytes, target, string(mcpContext.TransportMode)); validationErr != nil {
+				return fmt.Errorf("transport validation failed: %w", validationErr)
+			}
+
 			return json.Unmarshal(argumentsBytes, target)
 		}
 
@@ -185,10 +189,10 @@ func (p *MattermostToolProvider) createMCPToolContext(ctx context.Context) (*MCP
 }
 
 // NewJSONSchemaForTransport creates a JSONSchema from a Go struct, filtering fields based on transport mode
-// 
+//
 // Transport tag examples:
 //   - transport:"stdio" - only available in stdio transport
-//   - transport:"http" - only available in http transport  
+//   - transport:"http" - only available in http transport
 //   - transport:"stdio,http" - available in both stdio and http transports
 //   - transport:"stdio,websocket" - available in stdio and websocket transports
 //   - no transport tag - available in all transport modes
@@ -233,13 +237,13 @@ func NewJSONSchemaForTransport[T any](transportMode string) *jsonschema.Schema {
 	// Check each field and its transport tag
 	for i := 0; i < structType.NumField(); i++ {
 		field := structType.Field(i)
-		
+
 		// Get the JSON field name
 		jsonTag := field.Tag.Get("json")
 		if jsonTag == "" || jsonTag == "-" {
 			continue
 		}
-		
+
 		// Extract field name (ignore omitempty and other options)
 		jsonFieldName := strings.Split(jsonTag, ",")[0]
 		if jsonFieldName == "" {
@@ -248,7 +252,7 @@ func NewJSONSchemaForTransport[T any](transportMode string) *jsonschema.Schema {
 
 		// Check the transport tag
 		transportTag := field.Tag.Get("transport")
-		
+
 		// Include field if:
 		// - No transport tag (available for all transports)
 		// - Current transport mode is in the comma-separated list of allowed transports
@@ -279,16 +283,72 @@ func isTransportAllowed(transportTag, currentTransport string) bool {
 	if transportTag == "" {
 		return true // No restrictions
 	}
-	
+
 	// Normalize and split by comma
 	allowedTransports := strings.Split(strings.ReplaceAll(transportTag, " ", ""), ",")
-	
+
 	// Check if current transport is in the allowed list
 	for _, allowed := range allowedTransports {
 		if allowed == currentTransport {
 			return true
 		}
 	}
-	
+
 	return false
+}
+
+// validateTransportRestrictions validates that no transport-restricted fields are present in the JSON data
+// for the current transport mode. This prevents clients from sending fields they shouldn't have access to.
+func validateTransportRestrictions(jsonData []byte, target interface{}, currentTransport string) error {
+	// Get the struct type to inspect field tags
+	targetType := reflect.TypeOf(target)
+	if targetType.Kind() == reflect.Ptr {
+		targetType = targetType.Elem()
+	}
+
+	// If it's not a struct, no validation needed
+	if targetType.Kind() != reflect.Struct {
+		return nil
+	}
+
+	// Check if the incoming JSON is actually an object/map
+	// If it's not an object, we can't have field restrictions to validate
+	var incomingData map[string]interface{}
+	if err := json.Unmarshal(jsonData, &incomingData); err != nil {
+		// If JSON can't be parsed as an object, it's likely a primitive value or array
+		// In this case, there are no fields to validate transport restrictions for
+		return nil
+	}
+
+	// Check each field in the struct
+	for i := 0; i < targetType.NumField(); i++ {
+		field := targetType.Field(i)
+
+		// Get the JSON field name
+		jsonTag := field.Tag.Get("json")
+		if jsonTag == "" || jsonTag == "-" {
+			continue
+		}
+
+		// Extract field name (ignore omitempty and other options)
+		jsonFieldName := strings.Split(jsonTag, ",")[0]
+		if jsonFieldName == "" {
+			continue
+		}
+
+		// Check if this field is present in the incoming data
+		if _, fieldPresent := incomingData[jsonFieldName]; !fieldPresent {
+			continue // Field not provided, so no validation needed
+		}
+
+		// Check the transport tag
+		transportTag := field.Tag.Get("transport")
+
+		// If field has transport restrictions and current transport is not allowed
+		if transportTag != "" && !isTransportAllowed(transportTag, currentTransport) {
+			return fmt.Errorf("field '%s' is not available in %s transport mode (requires: %s)", jsonFieldName, currentTransport, transportTag)
+		}
+	}
+
+	return nil
 }

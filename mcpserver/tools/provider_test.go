@@ -21,6 +21,13 @@ type TestSchemaArgs struct {
 	Enabled  bool   `json:"enabled" jsonschema_description:"Whether the feature is enabled"`
 }
 
+// TestTransportArgs is a test struct for transport validation testing
+type TestTransportArgs struct {
+	Message       string   `json:"message" jsonschema_description:"The message content"`
+	Attachments   []string `json:"attachments,omitempty" transport:"stdio" jsonschema_description:"Optional list of file attachments"`
+	HTTPOnlyField string   `json:"http_only_field,omitempty" transport:"http" jsonschema_description:"Field only available in HTTP mode"`
+}
+
 func TestConvertMCPToolToLibMCPTool_WithSchema(t *testing.T) {
 	// Create a mock provider
 	provider := &MattermostToolProvider{
@@ -121,4 +128,135 @@ func TestConvertMCPToolToLibMCPTool_WithInvalidSchema(t *testing.T) {
 
 	// Verify that RawInputSchema is empty (fallback due to invalid schema type)
 	assert.Empty(t, libTool.RawInputSchema, "RawInputSchema should be empty when schema is invalid type")
+}
+
+func TestValidateTransportRestrictions_ValidFields(t *testing.T) {
+	testCases := []struct {
+		name          string
+		jsonData      string
+		transport     string
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name:        "stdio transport with stdio-only field should succeed",
+			jsonData:    `{"message": "hello", "attachments": ["file1.txt"]}`,
+			transport:   "stdio",
+			expectError: false,
+		},
+		{
+			name:        "http transport with http-only field should succeed",
+			jsonData:    `{"message": "hello", "http_only_field": "value"}`,
+			transport:   "http",
+			expectError: false,
+		},
+		{
+			name:        "http transport without restricted fields should succeed",
+			jsonData:    `{"message": "hello"}`,
+			transport:   "http",
+			expectError: false,
+		},
+		{
+			name:          "http transport with stdio-only field should fail",
+			jsonData:      `{"message": "hello", "attachments": ["file1.txt"]}`,
+			transport:     "http",
+			expectError:   true,
+			errorContains: "field 'attachments' is not available in http transport mode",
+		},
+		{
+			name:          "stdio transport with http-only field should fail",
+			jsonData:      `{"message": "hello", "http_only_field": "value"}`,
+			transport:     "stdio",
+			expectError:   true,
+			errorContains: "field 'http_only_field' is not available in stdio transport mode",
+		},
+		{
+			name:          "http transport with multiple restricted fields should fail on first",
+			jsonData:      `{"message": "hello", "attachments": ["file1.txt"], "http_only_field": "value"}`,
+			transport:     "http",
+			expectError:   true,
+			errorContains: "field 'attachments' is not available in http transport mode",
+		},
+	}
+
+	var target TestTransportArgs
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateTransportRestrictions([]byte(tc.jsonData), &target, tc.transport)
+
+			if tc.expectError {
+				require.Error(t, err, "Expected validation to fail")
+				assert.Contains(t, err.Error(), tc.errorContains, "Error message should contain expected text")
+			} else {
+				require.NoError(t, err, "Expected validation to succeed")
+			}
+		})
+	}
+}
+
+func TestValidateTransportRestrictions_NonStructTarget(t *testing.T) {
+	// Test with a non-struct target (should succeed without validation)
+	var target string
+	jsonData := `"hello world"`
+
+	err := validateTransportRestrictions([]byte(jsonData), &target, "http")
+	require.NoError(t, err, "Non-struct targets should not be validated")
+}
+
+func TestValidateTransportRestrictions_SliceTarget(t *testing.T) {
+	// Test with a slice target (should succeed without validation)
+	var target []string
+	jsonData := `["item1", "item2"]`
+
+	err := validateTransportRestrictions([]byte(jsonData), &target, "http")
+	require.NoError(t, err, "Non-struct targets should not be validated")
+}
+
+func TestValidateTransportRestrictions_InvalidJSON(t *testing.T) {
+	var target TestTransportArgs
+	invalidJSON := `{"message": "hello", "attachments"`
+
+	err := validateTransportRestrictions([]byte(invalidJSON), &target, "stdio")
+	require.NoError(t, err, "Invalid JSON that can't be parsed as object should be allowed (not parsed as struct)")
+}
+
+func TestValidateTransportRestrictions_AttackScenario(t *testing.T) {
+	// This test simulates the attack scenario described in the issue:
+	// Someone creates a POST request to the create_post tool in HTTP mode
+	// and tries to add an attachment field, which should only be available in stdio mode
+	
+	// Simulate a malicious HTTP request trying to send attachments
+	maliciousHttpRequest := `{
+		"channel_id": "channel123",
+		"message": "This is a test post",
+		"attachments": ["malicious_file.txt", "another_file.pdf"]
+	}`
+
+	// This should be similar to CreatePostArgs from posts.go
+	type CreatePostArgsSimulated struct {
+		ChannelID   string   `json:"channel_id"`
+		Message     string   `json:"message"`
+		Attachments []string `json:"attachments,omitempty" transport:"stdio"`
+	}
+
+	var target CreatePostArgsSimulated
+
+	// Validate that HTTP transport rejects stdio-only fields
+	err := validateTransportRestrictions([]byte(maliciousHttpRequest), &target, "http")
+	require.Error(t, err, "HTTP transport should reject stdio-only attachments field")
+	assert.Contains(t, err.Error(), "field 'attachments' is not available in http transport mode")
+	
+	// Validate that stdio transport allows the same request
+	err = validateTransportRestrictions([]byte(maliciousHttpRequest), &target, "stdio")
+	require.NoError(t, err, "stdio transport should allow attachments field")
+
+	// Validate that a clean HTTP request without restricted fields works
+	cleanHttpRequest := `{
+		"channel_id": "channel123", 
+		"message": "This is a clean test post"
+	}`
+	
+	err = validateTransportRestrictions([]byte(cleanHttpRequest), &target, "http")
+	require.NoError(t, err, "HTTP transport should allow requests without restricted fields")
 }
