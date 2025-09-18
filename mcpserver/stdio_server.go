@@ -62,8 +62,8 @@ func NewStdioServer(config StdioConfig, logger *mlog.Logger) (*MattermostStdioMC
 		return nil, fmt.Errorf("startup token validation failed: %w", err)
 	}
 
-	// Register tools
-	mattermostServer.registerTools(types.TransportModeStdio)
+	// Register tools with local access mode
+	mattermostServer.registerTools(types.AccessModeLocal)
 
 	return mattermostServer, nil
 }

@@ -12,20 +12,18 @@ import (
 
 // Test structs for schema generation
 type TestArgs struct {
-	// No transport tag - should be available for all transports
-	CommonField string `json:"common_field" jsonschema_description:"Available in all transports"`
+	// No access tag - should be available for all access modes
+	CommonField string `json:"common_field" jsonschema_description:"Available in all access modes"`
 
-	// Single transport
-	StdioOnly string `json:"stdio_only" transport:"stdio" jsonschema_description:"Only available via stdio"`
-	HttpOnly  string `json:"http_only" transport:"http" jsonschema_description:"Only available via HTTP"`
+	// Single access mode
+	LocalOnly  string `json:"local_only" access:"local" jsonschema_description:"Only available for local access"`
+	RemoteOnly string `json:"remote_only" access:"remote" jsonschema_description:"Only available for remote access"`
 
-	// Multiple transports
-	StdioAndHttp    string `json:"stdio_http" transport:"stdio,http" jsonschema_description:"Available in stdio and HTTP"`
-	WithSpaces      string `json:"with_spaces" transport:"stdio, http, websocket" jsonschema_description:"Multiple transports with spaces"`
-	ThreeTransports string `json:"three_transports" transport:"stdio,http,websocket" jsonschema_description:"Available in three transports"`
+	// Multiple access modes
+	LocalAndRemote string `json:"local_remote" access:"local,remote" jsonschema_description:"Available for both local and remote"`
 
-	// Required field with transport restrictions
-	RequiredStdio string `json:"required_stdio" transport:"stdio" jsonschema_description:"Required field only for stdio"`
+	// Required field with access restrictions
+	RequiredLocal string `json:"required_local" access:"local" jsonschema_description:"Required field only for local"`
 }
 
 type EmptyStruct struct{}
@@ -35,96 +33,67 @@ type NoJSONTagsStruct struct {
 	Field2 int
 }
 
-func TestNewJSONSchemaForTransport(t *testing.T) {
+func TestNewJSONSchemaForAccessMode(t *testing.T) {
 	tests := []struct {
 		name           string
-		transportMode  string
+		accessMode     string
 		expectedFields []string
 		excludedFields []string
 		expectedCount  int
 	}{
 		{
-			name:          "stdio transport includes correct fields",
-			transportMode: "stdio",
+			name:       "local access mode includes correct fields",
+			accessMode: "local",
 			expectedFields: []string{
 				"common_field",
-				"stdio_only",
-				"stdio_http",
-				"with_spaces",
-				"three_transports",
-				"required_stdio",
+				"local_only",
+				"local_remote",
+				"required_local",
 			},
-			excludedFields: []string{"http_only"},
-			expectedCount:  6,
+			excludedFields: []string{"remote_only"},
+			expectedCount:  4,
 		},
 		{
-			name:          "http transport includes correct fields",
-			transportMode: "http",
+			name:       "remote access mode includes correct fields",
+			accessMode: "remote",
 			expectedFields: []string{
 				"common_field",
-				"http_only",
-				"stdio_http",
-				"with_spaces",
-				"three_transports",
+				"remote_only",
+				"local_remote",
 			},
-			excludedFields: []string{"stdio_only", "required_stdio"},
-			expectedCount:  5,
-		},
-		{
-			name:          "websocket transport includes correct fields",
-			transportMode: "websocket",
-			expectedFields: []string{
-				"common_field",
-				"with_spaces",
-				"three_transports",
-			},
-			excludedFields: []string{"stdio_only", "http_only", "stdio_http", "required_stdio"},
+			excludedFields: []string{"local_only", "required_local"},
 			expectedCount:  3,
-		},
-		{
-			name:           "unknown transport only includes common fields",
-			transportMode:  "unknown",
-			expectedFields: []string{"common_field"},
-			excludedFields: []string{"stdio_only", "http_only", "stdio_http", "with_spaces", "three_transports", "required_stdio"},
-			expectedCount:  1,
-		},
-		{
-			name:           "sse transport only includes common fields",
-			transportMode:  "sse",
-			expectedFields: []string{"common_field"},
-			excludedFields: []string{"stdio_only", "http_only", "stdio_http", "with_spaces", "three_transports", "required_stdio"},
-			expectedCount:  1,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			schema := NewJSONSchemaForTransport[TestArgs](tt.transportMode)
+			schema := NewJSONSchemaForAccessMode[TestArgs](tt.accessMode)
 
 			require.NotNil(t, schema)
 			require.NotNil(t, schema.Properties)
 
 			// Check expected field count
 			assert.Len(t, schema.Properties, tt.expectedCount,
-				"transport %s should have %d fields", tt.transportMode, tt.expectedCount)
+				"access mode %s should have %d fields", tt.accessMode, tt.expectedCount)
 
 			// Check all expected fields are present
 			for _, field := range tt.expectedFields {
 				assert.Contains(t, schema.Properties, field,
-					"transport %s schema should include %s", tt.transportMode, field)
+					"access mode %s schema should include %s", tt.accessMode, field)
 			}
 
 			// Check all excluded fields are absent
 			for _, field := range tt.excludedFields {
 				assert.NotContains(t, schema.Properties, field,
-					"transport %s schema should not include %s", tt.transportMode, field)
+					"access mode %s schema should not include %s", tt.accessMode, field)
 			}
 		})
 	}
 
 	// Test edge cases that don't fit the table pattern
 	t.Run("empty struct returns valid schema", func(t *testing.T) {
-		schema := NewJSONSchemaForTransport[EmptyStruct]("stdio")
+		schema := NewJSONSchemaForAccessMode[EmptyStruct]("local")
 
 		require.NotNil(t, schema)
 		// Properties might be nil or empty for empty struct
@@ -134,14 +103,14 @@ func TestNewJSONSchemaForTransport(t *testing.T) {
 	})
 
 	t.Run("struct with no JSON tags returns base schema", func(t *testing.T) {
-		schema := NewJSONSchemaForTransport[NoJSONTagsStruct]("stdio")
+		schema := NewJSONSchemaForAccessMode[NoJSONTagsStruct]("local")
 
 		require.NotNil(t, schema)
 		// Should return base schema since no JSON tags to filter
 	})
 
 	t.Run("preserves schema metadata", func(t *testing.T) {
-		schema := NewJSONSchemaForTransport[TestArgs]("stdio")
+		schema := NewJSONSchemaForAccessMode[TestArgs]("local")
 
 		require.NotNil(t, schema)
 		// Check that basic schema properties are preserved
@@ -153,40 +122,46 @@ func TestNewJSONSchemaForTransport(t *testing.T) {
 			assert.NotNil(t, commonField)
 		}
 	})
+
+	t.Run("empty access mode panics", func(t *testing.T) {
+		assert.Panics(t, func() {
+			NewJSONSchemaForAccessMode[TestArgs]("")
+		}, "Empty access mode should panic")
+	})
 }
 
-func TestIsTransportAllowed(t *testing.T) {
+func TestIsAccessAllowed(t *testing.T) {
 	tests := []struct {
-		name             string
-		transportTag     string
-		currentTransport string
-		expected         bool
+		name          string
+		accessTag     string
+		currentAccess string
+		expected      bool
 	}{
-		{"empty tag allows all", "", "stdio", true},
-		{"empty tag allows any transport", "", "http", true},
-		{"exact match stdio", "stdio", "stdio", true},
-		{"exact match http", "http", "http", true},
-		{"no match stdio vs http", "stdio", "http", false},
-		{"no match http vs stdio", "http", "stdio", false},
-		{"comma separated includes stdio", "stdio,http", "stdio", true},
-		{"comma separated includes http", "stdio,http", "http", true},
-		{"comma separated excludes websocket", "stdio,http", "websocket", false},
-		{"with spaces includes stdio", "stdio, http", "stdio", true},
-		{"with spaces includes http", "stdio, http", "http", true},
-		{"with spaces excludes websocket", "stdio, http", "websocket", false},
-		{"three transports includes first", "stdio,http,websocket", "stdio", true},
-		{"three transports includes middle", "stdio,http,websocket", "http", true},
-		{"three transports includes last", "stdio,http,websocket", "websocket", true},
-		{"three transports excludes other", "stdio,http,websocket", "sse", false},
-		{"mixed spaces includes all", "stdio , http,  websocket", "http", true},
+		{"empty tag allows all", "", "local", true},
+		{"empty tag allows any access", "", "remote", true},
+		{"exact match local", "local", "local", true},
+		{"exact match remote", "remote", "remote", true},
+		{"no match local vs remote", "local", "remote", false},
+		{"no match remote vs local", "remote", "local", false},
+		{"comma separated includes local", "local,remote", "local", true},
+		{"comma separated includes remote", "local,remote", "remote", true},
+		{"comma separated excludes other", "local,remote", "other", false},
+		{"with spaces includes local", "local, remote", "local", true},
+		{"with spaces includes remote", "local, remote", "remote", true},
+		{"with spaces excludes other", "local, remote", "other", false},
+		{"three access modes includes first", "local,remote,special", "local", true},
+		{"three access modes includes middle", "local,remote,special", "remote", true},
+		{"three access modes includes last", "local,remote,special", "special", true},
+		{"three access modes excludes other", "local,remote,special", "unknown", false},
+		{"mixed spaces includes all", "local , remote,  special", "remote", true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isTransportAllowed(tt.transportTag, tt.currentTransport)
+			result := isAccessAllowed(tt.accessTag, tt.currentAccess)
 			assert.Equal(t, tt.expected, result,
-				"isTransportAllowed(%q, %q) = %v, want %v",
-				tt.transportTag, tt.currentTransport, result, tt.expected)
+				"isAccessAllowed(%q, %q) = %v, want %v",
+				tt.accessTag, tt.currentAccess, result, tt.expected)
 		})
 	}
 }

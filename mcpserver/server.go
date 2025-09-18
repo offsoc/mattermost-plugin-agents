@@ -21,8 +21,8 @@ type MattermostMCPServer struct {
 }
 
 // registerTools registers all tools using the tool provider
-func (s *MattermostMCPServer) registerTools(transportMode types.TransportMode) {
-	toolProvider := tools.NewMattermostToolProvider(s.authProvider, s.logger, s.config.GetMMServerURL(), s.config.GetMMInternalServerURL(), s.config.GetDevMode(), transportMode)
+func (s *MattermostMCPServer) registerTools(accessMode types.AccessMode) {
+	toolProvider := tools.NewMattermostToolProvider(s.authProvider, s.logger, s.config.GetMMServerURL(), s.config.GetMMInternalServerURL(), s.config.GetDevMode(), accessMode)
 	toolProvider.ProvideTools(s.mcpServer)
 }
 

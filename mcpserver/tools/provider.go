@@ -22,8 +22,8 @@ import (
 
 // MCPToolContext provides MCP-specific functionality with the authenticated client
 type MCPToolContext struct {
-	Client        *model.Client4
-	TransportMode types.TransportMode
+	Client     *model.Client4
+	AccessMode types.AccessMode
 }
 
 // MCPToolResolver defines the signature for MCP tool resolvers
@@ -48,11 +48,11 @@ type MattermostToolProvider struct {
 	mmServerURL         string // External server URL for OAuth redirects
 	mmInternalServerURL string // Internal server URL for API communication
 	devMode             bool
-	transportMode       types.TransportMode
+	accessMode          types.AccessMode
 }
 
 // NewMattermostToolProvider creates a new tool provider
-func NewMattermostToolProvider(authProvider auth.AuthenticationProvider, logger mlog.LoggerIFace, mmServerURL, mmInternalServerURL string, devMode bool, transportMode types.TransportMode) *MattermostToolProvider {
+func NewMattermostToolProvider(authProvider auth.AuthenticationProvider, logger mlog.LoggerIFace, mmServerURL, mmInternalServerURL string, devMode bool, accessMode types.AccessMode) *MattermostToolProvider {
 	// Use internal URL for API communication if provided, otherwise fallback to external URL
 	internalURL := mmInternalServerURL
 	if internalURL == "" {
@@ -65,7 +65,7 @@ func NewMattermostToolProvider(authProvider auth.AuthenticationProvider, logger 
 		mmServerURL:         mmServerURL,
 		mmInternalServerURL: internalURL,
 		devMode:             devMode,
-		transportMode:       transportMode,
+		accessMode:          accessMode,
 	}
 }
 
@@ -139,9 +139,9 @@ func (p *MattermostToolProvider) createMCPToolHandler(resolver MCPToolResolver) 
 				return fmt.Errorf("failed to marshal arguments: %w", marshalErr)
 			}
 
-			// Validate transport restrictions before unmarshaling
-			if validationErr := validateTransportRestrictions(argumentsBytes, target, string(mcpContext.TransportMode)); validationErr != nil {
-				return fmt.Errorf("transport validation failed: %w", validationErr)
+			// Validate access restrictions before unmarshaling
+			if validationErr := validateAccessRestrictions(argumentsBytes, target, string(mcpContext.AccessMode)); validationErr != nil {
+				return fmt.Errorf("access validation failed: %w", validationErr)
 			}
 
 			return json.Unmarshal(argumentsBytes, target)
@@ -183,23 +183,26 @@ func (p *MattermostToolProvider) createMCPToolContext(ctx context.Context) (*MCP
 	}
 
 	return &MCPToolContext{
-		Client:        client,
-		TransportMode: p.transportMode,
+		Client:     client,
+		AccessMode: p.accessMode,
 	}, nil
 }
 
-// NewJSONSchemaForTransport creates a JSONSchema from a Go struct, filtering fields based on transport mode
+// NewJSONSchemaForAccessMode creates a JSONSchema from a Go struct, filtering fields based on access mode
 //
-// Transport tag examples:
-//   - transport:"stdio" - only available in stdio transport
-//   - transport:"http" - only available in http transport
-//   - transport:"stdio,http" - available in both stdio and http transports
-//   - transport:"stdio,websocket" - available in stdio and websocket transports
-//   - no transport tag - available in all transport modes
+// Access tag examples:
+//   - access:"local" - only available for local access mode
+//   - access:"remote" - only available for remote access mode
+//   - access:"local,remote" - available for both local and remote access modes
+//   - no access tag - available in all access modes
 //
-// The function uses comma-separated parsing, so you can specify multiple transport modes
-// that should have access to a particular field.
-func NewJSONSchemaForTransport[T any](transportMode string) *jsonschema.Schema {
+// The function uses comma-separated parsing, so you can specify multiple access modes.
+func NewJSONSchemaForAccessMode[T any](accessMode string) *jsonschema.Schema {
+	// Validate access mode - empty string indicates uninitialized AccessMode
+	if accessMode == "" {
+		panic("access mode cannot be empty - indicates uninitialized AccessMode")
+	}
+
 	// Get the base schema
 	baseSchema, err := jsonschema.For[T]()
 	if err != nil {
@@ -234,7 +237,7 @@ func NewJSONSchemaForTransport[T any](transportMode string) *jsonschema.Schema {
 		Required:    []string{},
 	}
 
-	// Check each field and its transport tag
+	// Check each field and its access tag
 	for i := 0; i < structType.NumField(); i++ {
 		field := structType.Field(i)
 
@@ -250,13 +253,13 @@ func NewJSONSchemaForTransport[T any](transportMode string) *jsonschema.Schema {
 			continue
 		}
 
-		// Check the transport tag
-		transportTag := field.Tag.Get("transport")
+		// Check access tag
+		restrictionTag := field.Tag.Get("access")
 
 		// Include field if:
-		// - No transport tag (available for all transports)
-		// - Current transport mode is in the comma-separated list of allowed transports
-		includeField := transportTag == "" || isTransportAllowed(transportTag, transportMode)
+		// - No restriction tag (available for all access modes)
+		// - Current access mode is in the comma-separated list of allowed modes
+		includeField := restrictionTag == "" || isAccessAllowed(restrictionTag, accessMode)
 
 		if includeField {
 			// Copy the property from base schema if it exists
@@ -277,19 +280,20 @@ func NewJSONSchemaForTransport[T any](transportMode string) *jsonschema.Schema {
 	return filteredSchema
 }
 
-// isTransportAllowed checks if the current transport mode is allowed based on the transport tag
-// Supports comma-separated lists of transport modes (e.g., "stdio,http,websocket")
-func isTransportAllowed(transportTag, currentTransport string) bool {
-	if transportTag == "" {
+// isAccessAllowed checks if the current access mode is allowed based on the access tag
+// Supports comma-separated access modes (e.g., "local", "remote", "local,remote")
+func isAccessAllowed(restrictionTag, currentAccessMode string) bool {
+	if restrictionTag == "" {
 		return true // No restrictions
 	}
 
 	// Normalize and split by comma
-	allowedTransports := strings.Split(strings.ReplaceAll(transportTag, " ", ""), ",")
+	allowedValues := strings.Split(strings.ReplaceAll(restrictionTag, " ", ""), ",")
 
-	// Check if current transport is in the allowed list
-	for _, allowed := range allowedTransports {
-		if allowed == currentTransport {
+	// Check each allowed value
+	for _, allowed := range allowedValues {
+		// Direct access mode matching
+		if allowed == currentAccessMode {
 			return true
 		}
 	}
@@ -297,9 +301,9 @@ func isTransportAllowed(transportTag, currentTransport string) bool {
 	return false
 }
 
-// validateTransportRestrictions validates that no transport-restricted fields are present in the JSON data
-// for the current transport mode. This prevents clients from sending fields they shouldn't have access to.
-func validateTransportRestrictions(jsonData []byte, target interface{}, currentTransport string) error {
+// validateAccessRestrictions validates that no access-restricted fields are present in the JSON data
+// for the current access mode. This prevents clients from sending fields they shouldn't have access to.
+func validateAccessRestrictions(jsonData []byte, target interface{}, currentAccessMode string) error {
 	// Get the struct type to inspect field tags
 	targetType := reflect.TypeOf(target)
 	if targetType.Kind() == reflect.Ptr {
@@ -341,12 +345,12 @@ func validateTransportRestrictions(jsonData []byte, target interface{}, currentT
 			continue // Field not provided, so no validation needed
 		}
 
-		// Check the transport tag
-		transportTag := field.Tag.Get("transport")
+		// Check access tag
+		restrictionTag := field.Tag.Get("access")
 
-		// If field has transport restrictions and current transport is not allowed
-		if transportTag != "" && !isTransportAllowed(transportTag, currentTransport) {
-			return fmt.Errorf("field '%s' is not available in %s transport mode (requires: %s)", jsonFieldName, currentTransport, transportTag)
+		// If field has access restrictions and current access mode is not allowed
+		if restrictionTag != "" && !isAccessAllowed(restrictionTag, currentAccessMode) {
+			return fmt.Errorf("field '%s' is not available in %s access mode (requires: %s)", jsonFieldName, currentAccessMode, restrictionTag)
 		}
 	}
 

@@ -21,11 +21,11 @@ type TestSchemaArgs struct {
 	Enabled  bool   `json:"enabled" jsonschema_description:"Whether the feature is enabled"`
 }
 
-// TestTransportArgs is a test struct for transport validation testing
-type TestTransportArgs struct {
-	Message       string   `json:"message" jsonschema_description:"The message content"`
-	Attachments   []string `json:"attachments,omitempty" transport:"stdio" jsonschema_description:"Optional list of file attachments"`
-	HTTPOnlyField string   `json:"http_only_field,omitempty" transport:"http" jsonschema_description:"Field only available in HTTP mode"`
+// TestAccessArgs is a test struct for access validation testing
+type TestAccessArgs struct {
+	Message         string   `json:"message" jsonschema_description:"The message content"`
+	Attachments     []string `json:"attachments,omitempty" access:"local" jsonschema_description:"Optional list of file attachments"`
+	RemoteOnlyField string   `json:"remote_only_field,omitempty" access:"remote" jsonschema_description:"Field only available in remote mode"`
 }
 
 func TestConvertMCPToolToLibMCPTool_WithSchema(t *testing.T) {
@@ -130,60 +130,60 @@ func TestConvertMCPToolToLibMCPTool_WithInvalidSchema(t *testing.T) {
 	assert.Empty(t, libTool.RawInputSchema, "RawInputSchema should be empty when schema is invalid type")
 }
 
-func TestValidateTransportRestrictions_ValidFields(t *testing.T) {
+func TestValidateAccessRestrictions_ValidFields(t *testing.T) {
 	testCases := []struct {
 		name          string
 		jsonData      string
-		transport     string
+		accessMode    string
 		expectError   bool
 		errorContains string
 	}{
 		{
-			name:        "stdio transport with stdio-only field should succeed",
+			name:        "local access mode with local-only field should succeed",
 			jsonData:    `{"message": "hello", "attachments": ["file1.txt"]}`,
-			transport:   "stdio",
+			accessMode:  "local",
 			expectError: false,
 		},
 		{
-			name:        "http transport with http-only field should succeed",
-			jsonData:    `{"message": "hello", "http_only_field": "value"}`,
-			transport:   "http",
+			name:        "remote access mode with remote-only field should succeed",
+			jsonData:    `{"message": "hello", "remote_only_field": "value"}`,
+			accessMode:  "remote",
 			expectError: false,
 		},
 		{
-			name:        "http transport without restricted fields should succeed",
+			name:        "remote access mode without restricted fields should succeed",
 			jsonData:    `{"message": "hello"}`,
-			transport:   "http",
+			accessMode:  "remote",
 			expectError: false,
 		},
 		{
-			name:          "http transport with stdio-only field should fail",
+			name:          "remote access mode with local-only field should fail",
 			jsonData:      `{"message": "hello", "attachments": ["file1.txt"]}`,
-			transport:     "http",
+			accessMode:    "remote",
 			expectError:   true,
-			errorContains: "field 'attachments' is not available in http transport mode",
+			errorContains: "field 'attachments' is not available in remote access mode",
 		},
 		{
-			name:          "stdio transport with http-only field should fail",
-			jsonData:      `{"message": "hello", "http_only_field": "value"}`,
-			transport:     "stdio",
+			name:          "local access mode with remote-only field should fail",
+			jsonData:      `{"message": "hello", "remote_only_field": "value"}`,
+			accessMode:    "local",
 			expectError:   true,
-			errorContains: "field 'http_only_field' is not available in stdio transport mode",
+			errorContains: "field 'remote_only_field' is not available in local access mode",
 		},
 		{
-			name:          "http transport with multiple restricted fields should fail on first",
-			jsonData:      `{"message": "hello", "attachments": ["file1.txt"], "http_only_field": "value"}`,
-			transport:     "http",
+			name:          "remote access mode with multiple restricted fields should fail on first",
+			jsonData:      `{"message": "hello", "attachments": ["file1.txt"], "remote_only_field": "value"}`,
+			accessMode:    "remote",
 			expectError:   true,
-			errorContains: "field 'attachments' is not available in http transport mode",
+			errorContains: "field 'attachments' is not available in remote access mode",
 		},
 	}
 
-	var target TestTransportArgs
+	var target TestAccessArgs
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := validateTransportRestrictions([]byte(tc.jsonData), &target, tc.transport)
+			err := validateAccessRestrictions([]byte(tc.jsonData), &target, tc.accessMode)
 
 			if tc.expectError {
 				require.Error(t, err, "Expected validation to fail")
@@ -195,68 +195,68 @@ func TestValidateTransportRestrictions_ValidFields(t *testing.T) {
 	}
 }
 
-func TestValidateTransportRestrictions_NonStructTarget(t *testing.T) {
+func TestValidateAccessRestrictions_NonStructTarget(t *testing.T) {
 	// Test with a non-struct target (should succeed without validation)
 	var target string
 	jsonData := `"hello world"`
 
-	err := validateTransportRestrictions([]byte(jsonData), &target, "http")
+	err := validateAccessRestrictions([]byte(jsonData), &target, "remote")
 	require.NoError(t, err, "Non-struct targets should not be validated")
 }
 
-func TestValidateTransportRestrictions_SliceTarget(t *testing.T) {
+func TestValidateAccessRestrictions_SliceTarget(t *testing.T) {
 	// Test with a slice target (should succeed without validation)
 	var target []string
 	jsonData := `["item1", "item2"]`
 
-	err := validateTransportRestrictions([]byte(jsonData), &target, "http")
+	err := validateAccessRestrictions([]byte(jsonData), &target, "remote")
 	require.NoError(t, err, "Non-struct targets should not be validated")
 }
 
-func TestValidateTransportRestrictions_InvalidJSON(t *testing.T) {
-	var target TestTransportArgs
+func TestValidateAccessRestrictions_InvalidJSON(t *testing.T) {
+	var target TestAccessArgs
 	invalidJSON := `{"message": "hello", "attachments"`
 
-	err := validateTransportRestrictions([]byte(invalidJSON), &target, "stdio")
+	err := validateAccessRestrictions([]byte(invalidJSON), &target, "local")
 	require.NoError(t, err, "Invalid JSON that can't be parsed as object should be allowed (not parsed as struct)")
 }
 
-func TestValidateTransportRestrictions_AttackScenario(t *testing.T) {
-	// This test simulates the attack scenario described in the issue:
-	// Someone creates a POST request to the create_post tool in HTTP mode
-	// and tries to add an attachment field, which should only be available in stdio mode
-	
-	// Simulate a malicious HTTP request trying to send attachments
-	maliciousHttpRequest := `{
+func TestValidateAccessRestrictions_AttackScenario(t *testing.T) {
+	// This test simulates a realistic attack scenario:
+	// Someone creates a remote HTTP request to a post creation tool and tries to
+	// include attachments, which should only be available in local access mode
+
+	// Simulate a malicious HTTP request trying to send attachments via remote access
+	maliciousRemoteRequest := `{
 		"channel_id": "channel123",
 		"message": "This is a test post",
-		"attachments": ["malicious_file.txt", "another_file.pdf"]
+		"attachments": ["/etc/passwd"]
 	}`
 
-	// This should be similar to CreatePostArgs from posts.go
+	// Use the actual CreatePostArgs-like structure from our codebase
 	type CreatePostArgsSimulated struct {
 		ChannelID   string   `json:"channel_id"`
 		Message     string   `json:"message"`
-		Attachments []string `json:"attachments,omitempty" transport:"stdio"`
+		Attachments []string `json:"attachments,omitempty" access:"local"`
 	}
 
 	var target CreatePostArgsSimulated
 
-	// Validate that HTTP transport rejects stdio-only fields
-	err := validateTransportRestrictions([]byte(maliciousHttpRequest), &target, "http")
-	require.Error(t, err, "HTTP transport should reject stdio-only attachments field")
-	assert.Contains(t, err.Error(), "field 'attachments' is not available in http transport mode")
-	
-	// Validate that stdio transport allows the same request
-	err = validateTransportRestrictions([]byte(maliciousHttpRequest), &target, "stdio")
-	require.NoError(t, err, "stdio transport should allow attachments field")
+	// Validate that remote access mode rejects local-only attachment fields
+	err := validateAccessRestrictions([]byte(maliciousRemoteRequest), &target, "remote")
+	require.Error(t, err, "Remote access mode should reject local-only attachments field")
+	assert.Contains(t, err.Error(), "field 'attachments' is not available in remote access mode")
 
-	// Validate that a clean HTTP request without restricted fields works
-	cleanHttpRequest := `{
+	// Validate that local access mode allows the same request
+	err = validateAccessRestrictions([]byte(maliciousRemoteRequest), &target, "local")
+	require.NoError(t, err, "Local access mode should allow attachments field")
+
+	// Validate that a clean remote request without restricted fields works
+	cleanRemoteRequest := `{
 		"channel_id": "channel123", 
 		"message": "This is a clean test post"
 	}`
-	
-	err = validateTransportRestrictions([]byte(cleanHttpRequest), &target, "http")
-	require.NoError(t, err, "HTTP transport should allow requests without restricted fields")
+
+	err = validateAccessRestrictions([]byte(cleanRemoteRequest), &target, "remote")
+	require.NoError(t, err, "Remote access mode should allow requests without restricted fields")
 }

@@ -77,7 +77,8 @@ func NewHTTPServer(config HTTPConfig, logger *mlog.Logger) (*MattermostHTTPMCPSe
 		server.WithRecovery(),
 	)
 
-	mattermostServer.registerTools(types.TransportModeHTTP)
+	// Register tools with remote access mode
+	mattermostServer.registerTools(types.AccessModeRemote)
 
 	baseURL := fmt.Sprintf("http://%s:%d", config.HTTPBindAddr, config.HTTPPort)
 	if config.SiteURL != "" {
