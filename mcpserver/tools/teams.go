@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/mattermost/mattermost-plugin-ai/llm"
+	"github.com/mattermost/mattermost-plugin-ai/mcpserver/types"
 	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/shared/mlog"
 )
@@ -35,7 +36,7 @@ type CreateTeamArgs struct {
 	DisplayName string `json:"display_name" jsonschema_description:"Display name for the team"`
 	Type        string `json:"type" jsonschema_description:"Team type: 'O' for open, 'I' for invite only"`
 	Description string `json:"description" jsonschema_description:"Team description"`
-	TeamIcon    string `json:"team_icon" jsonschema_description:"File path or URL to set as team icon (supports .jpeg, .jpg, .png, .gif)"`
+	TeamIcon    string `json:"team_icon,omitempty" transport:"stdio" jsonschema_description:"File path or URL to set as team icon (supports .jpeg, .jpg, .png, .gif)"`
 }
 
 // AddUserToTeamArgs represents arguments for the add_user_to_team tool (dev mode only)
@@ -50,13 +51,13 @@ func (p *MattermostToolProvider) getTeamTools() []MCPTool {
 		{
 			Name:        "get_team_info",
 			Description: "Get information about a team. If you have a team ID, use that for fastest lookup. If the user provides a human-readable name, try team_display_name first (what users see in the UI), then team_name (URL name) as fallback.",
-			Schema:      llm.NewJSONSchemaFromStruct[GetTeamInfoArgs](),
+			Schema:      NewJSONSchemaForTransport[GetTeamInfoArgs](string(p.transportMode)),
 			Resolver:    p.toolGetTeamInfo,
 		},
 		{
 			Name:        "get_team_members",
 			Description: "Get members of a team with pagination support",
-			Schema:      llm.NewJSONSchemaFromStruct[GetTeamMembersArgs](),
+			Schema:      NewJSONSchemaForTransport[GetTeamMembersArgs](string(p.transportMode)),
 			Resolver:    p.toolGetTeamMembers,
 		},
 	}
@@ -68,13 +69,13 @@ func (p *MattermostToolProvider) getDevTeamTools() []MCPTool {
 		{
 			Name:        "create_team",
 			Description: "Create a new team (dev mode only)",
-			Schema:      llm.NewJSONSchemaFromStruct[CreateTeamArgs](),
+			Schema:      NewJSONSchemaForTransport[CreateTeamArgs](string(p.transportMode)),
 			Resolver:    p.toolCreateTeam,
 		},
 		{
 			Name:        "add_user_to_team",
 			Description: "Add a user to a team (dev mode only)",
-			Schema:      llm.NewJSONSchemaFromStruct[AddUserToTeamArgs](),
+			Schema:      NewJSONSchemaForTransport[AddUserToTeamArgs](string(p.transportMode)),
 			Resolver:    p.toolAddUserToTeam,
 		},
 	}
@@ -262,6 +263,11 @@ func (p *MattermostToolProvider) toolCreateTeam(mcpContext *MCPToolContext, args
 		return "type must be 'O' for open or 'I' for invite only", fmt.Errorf("invalid team type: %s", args.Type)
 	}
 
+	// Validate transport-specific fields
+	if mcpContext.TransportMode != types.TransportModeStdio && args.TeamIcon != "" {
+		return "team icon not supported in HTTP mode", fmt.Errorf("team icon upload requires stdio transport")
+	}
+
 	// Get client from context
 	if mcpContext.Client == nil {
 		return "client not available", fmt.Errorf("client not available in context")
@@ -286,11 +292,11 @@ func (p *MattermostToolProvider) toolCreateTeam(mcpContext *MCPToolContext, args
 	// Upload team icon if specified
 	if args.TeamIcon != "" {
 		// Validate image file type
-		fileName := getFileNameFromSpec(args.TeamIcon)
+		fileName := extractFileNameForStdio(args.TeamIcon, mcpContext.TransportMode)
 		if !isValidImageFile(fileName) {
 			teamIconMessage = " (team icon upload failed: unsupported file type, only .jpeg, .jpg, .png, .gif are supported)"
 		} else {
-			imageData, err := fetchFileData(args.TeamIcon)
+			imageData, err := fetchFileDataForStdio(args.TeamIcon, mcpContext.TransportMode)
 			if err != nil {
 				teamIconMessage = fmt.Sprintf(" (team icon upload failed: %v)", err)
 			} else {

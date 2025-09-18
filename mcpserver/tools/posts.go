@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/mattermost/mattermost-plugin-ai/llm"
+	"github.com/mattermost/mattermost-plugin-ai/mcpserver/types"
 	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/shared/mlog"
 )
@@ -24,7 +25,7 @@ type CreatePostArgs struct {
 	ChannelID   string   `json:"channel_id" jsonschema_description:"The ID of the channel to post in"`
 	Message     string   `json:"message" jsonschema_description:"The message content"`
 	RootID      string   `json:"root_id" jsonschema_description:"Optional root post ID for replies"`
-	Attachments []string `json:"attachments,omitempty" jsonschema_description:"Optional list of file paths or URLs to attach to the post"`
+	Attachments []string `json:"attachments,omitempty" transport:"stdio" jsonschema_description:"Optional list of file paths or URLs to attach to the post"`
 }
 
 // CreatePostAsUserArgs represents arguments for the create_post_as_user tool (dev mode only)
@@ -35,13 +36,13 @@ type CreatePostAsUserArgs struct {
 	Message     string   `json:"message" jsonschema_description:"The message content"`
 	RootID      string   `json:"root_id" jsonschema_description:"Optional root post ID for replies"`
 	Props       string   `json:"props" jsonschema_description:"Optional post properties (JSON string)"`
-	Attachments []string `json:"attachments,omitempty" jsonschema_description:"Optional list of file paths or URLs to attach to the post"`
+	Attachments []string `json:"attachments,omitempty" transport:"stdio" jsonschema_description:"Optional list of file paths or URLs to attach to the post"`
 }
 
 // DMSelfArgs represents arguments for the dm_self tool
 type DMSelfArgs struct {
 	Message     string   `json:"message" jsonschema_description:"The message content to send to yourself"`
-	Attachments []string `json:"attachments,omitempty" jsonschema_description:"Optional list of file paths or URLs to attach to the message"`
+	Attachments []string `json:"attachments,omitempty" transport:"stdio" jsonschema_description:"Optional list of file paths or URLs to attach to the message"`
 }
 
 // getPostTools returns all post-related tools
@@ -50,19 +51,19 @@ func (p *MattermostToolProvider) getPostTools() []MCPTool {
 		{
 			Name:        "read_post",
 			Description: "Read a specific post and its thread from Mattermost",
-			Schema:      llm.NewJSONSchemaFromStruct[ReadPostArgs](),
+			Schema:      NewJSONSchemaForTransport[ReadPostArgs](string(p.transportMode)),
 			Resolver:    p.toolReadPost,
 		},
 		{
 			Name:        "create_post",
 			Description: "Create a new post in Mattermost",
-			Schema:      llm.NewJSONSchemaFromStruct[CreatePostArgs](),
+			Schema:      NewJSONSchemaForTransport[CreatePostArgs](string(p.transportMode)),
 			Resolver:    p.toolCreatePost,
 		},
 		{
 			Name:        "dm_self",
 			Description: "Send a direct message to yourself. Use this when the user requests to send something to themselves (e.g., 'send me this', 'DM me that')",
-			Schema:      llm.NewJSONSchemaFromStruct[DMSelfArgs](),
+			Schema:      NewJSONSchemaForTransport[DMSelfArgs](string(p.transportMode)),
 			Resolver:    p.toolDMSelf,
 		},
 	}
@@ -74,7 +75,7 @@ func (p *MattermostToolProvider) getDevPostTools() []MCPTool {
 		{
 			Name:        "create_post_as_user",
 			Description: "Create a post as a specific user using username/password login. Use this tool in dev mode for creating realistic multi-user scenarios. Simply provide the username and password of created users.",
-			Schema:      llm.NewJSONSchemaFromStruct[CreatePostAsUserArgs](),
+			Schema:      NewJSONSchemaForTransport[CreatePostAsUserArgs](string(p.transportMode)),
 			Resolver:    p.toolCreatePostAsUser,
 		},
 	}
@@ -177,6 +178,11 @@ func (p *MattermostToolProvider) toolCreatePost(mcpContext *MCPToolContext, args
 		return "message is required", fmt.Errorf("message cannot be empty")
 	}
 
+	// Validate transport-specific fields
+	if mcpContext.TransportMode != types.TransportModeStdio && len(args.Attachments) > 0 {
+		return "attachments not supported in HTTP mode", fmt.Errorf("file attachments require stdio transport")
+	}
+
 	// Get client from context
 	if mcpContext.Client == nil {
 		return "client not available", fmt.Errorf("client not available in context")
@@ -185,7 +191,7 @@ func (p *MattermostToolProvider) toolCreatePost(mcpContext *MCPToolContext, args
 	ctx := context.Background()
 
 	// Upload files if specified
-	fileIDs, attachmentMessage := handleFileAttachments(ctx, client, args.ChannelID, args.Attachments)
+	fileIDs, attachmentMessage := uploadFilesAndUrlsForStdio(ctx, client, args.ChannelID, args.Attachments, mcpContext.TransportMode)
 
 	// Create the post
 	post := &model.Post{
@@ -225,6 +231,11 @@ func (p *MattermostToolProvider) toolCreatePostAsUser(mcpContext *MCPToolContext
 		return "message is required", fmt.Errorf("message cannot be empty")
 	}
 
+	// Validate transport-specific fields
+	if mcpContext.TransportMode != types.TransportModeStdio && len(args.Attachments) > 0 {
+		return "attachments not supported in HTTP mode", fmt.Errorf("file attachments require stdio transport")
+	}
+
 	// Create a new client and login as the specified user
 	ctx := context.Background()
 	userClient := model.NewAPIv4Client(p.mmInternalServerURL)
@@ -236,7 +247,7 @@ func (p *MattermostToolProvider) toolCreatePostAsUser(mcpContext *MCPToolContext
 	}
 
 	// Upload files if specified
-	fileIDs, attachmentMessage := handleFileAttachments(ctx, userClient, args.ChannelID, args.Attachments)
+	fileIDs, attachmentMessage := uploadFilesAndUrlsForStdio(ctx, userClient, args.ChannelID, args.Attachments, mcpContext.TransportMode)
 
 	// Create the post
 	post := &model.Post{
@@ -274,6 +285,11 @@ func (p *MattermostToolProvider) toolDMSelf(mcpContext *MCPToolContext, argsGett
 		return "message is required", fmt.Errorf("message cannot be empty")
 	}
 
+	// Validate transport-specific fields
+	if mcpContext.TransportMode != types.TransportModeStdio && len(args.Attachments) > 0 {
+		return "attachments not supported in HTTP mode", fmt.Errorf("file attachments require stdio transport")
+	}
+
 	// Get client from context
 	if mcpContext.Client == nil {
 		return "client not available", fmt.Errorf("client not available in context")
@@ -294,7 +310,7 @@ func (p *MattermostToolProvider) toolDMSelf(mcpContext *MCPToolContext, argsGett
 	}
 
 	// Upload files if specified
-	fileIDs, attachmentMessage := handleFileAttachments(ctx, client, dmChannel.Id, args.Attachments)
+	fileIDs, attachmentMessage := uploadFilesAndUrlsForStdio(ctx, client, dmChannel.Id, args.Attachments, mcpContext.TransportMode)
 
 	// Create the post in the DM channel
 	post := &model.Post{

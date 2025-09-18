@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/mattermost/mattermost-plugin-ai/llm"
+	"github.com/mattermost/mattermost-plugin-ai/mcpserver/types"
 	"github.com/mattermost/mattermost/server/public/model"
 )
 
@@ -19,7 +20,7 @@ type CreateUserArgs struct {
 	FirstName    string `json:"first_name" jsonschema_description:"First name of the user"`
 	LastName     string `json:"last_name" jsonschema_description:"Last name of the user"`
 	Nickname     string `json:"nickname" jsonschema_description:"Nickname for the user"`
-	ProfileImage string `json:"profile_image,omitempty" jsonschema_description:"Optional file path or URL to profile image (supports .jpeg, .jpg, .png, .gif)"`
+	ProfileImage string `json:"profile_image,omitempty" transport:"stdio" jsonschema_description:"Optional file path or URL to profile image (supports .jpeg, .jpg, .png, .gif)"`
 }
 
 // getDevUserTools returns development user-related tools for MCP
@@ -28,7 +29,7 @@ func (p *MattermostToolProvider) getDevUserTools() []MCPTool {
 		{
 			Name:        "create_user",
 			Description: "Create a new user account (dev mode only)",
-			Schema:      llm.NewJSONSchemaFromStruct[CreateUserArgs](),
+			Schema:      NewJSONSchemaForTransport[CreateUserArgs](string(p.transportMode)),
 			Resolver:    p.toolCreateUser,
 		},
 	}
@@ -51,6 +52,11 @@ func (p *MattermostToolProvider) toolCreateUser(mcpContext *MCPToolContext, args
 	}
 	if args.Password == "" {
 		return "password is required", fmt.Errorf("password cannot be empty")
+	}
+
+	// Validate transport-specific fields
+	if mcpContext.TransportMode != types.TransportModeStdio && args.ProfileImage != "" {
+		return "profile image not supported in HTTP mode", fmt.Errorf("profile image upload requires stdio transport")
 	}
 
 	// Get client from context
@@ -79,11 +85,11 @@ func (p *MattermostToolProvider) toolCreateUser(mcpContext *MCPToolContext, args
 	// Upload profile image if specified
 	if args.ProfileImage != "" {
 		// Validate image file type
-		fileName := getFileNameFromSpec(args.ProfileImage)
+		fileName := extractFileNameForStdio(args.ProfileImage, mcpContext.TransportMode)
 		if !isValidImageFile(fileName) {
 			profileImageMessage = " (profile image upload failed: unsupported file type, only .jpeg, .jpg, .png, .gif are supported)"
 		} else {
-			imageData, err := fetchFileData(args.ProfileImage)
+			imageData, err := fetchFileDataForStdio(args.ProfileImage, mcpContext.TransportMode)
 			if err != nil {
 				profileImageMessage = fmt.Sprintf(" (profile image upload failed: %v)", err)
 			} else {

@@ -10,6 +10,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/mattermost/mattermost-plugin-ai/mcpserver/auth"
+	"github.com/mattermost/mattermost-plugin-ai/mcpserver/types"
 	"github.com/mattermost/mattermost/server/public/shared/mlog"
 )
 
@@ -62,7 +63,7 @@ func NewStdioServer(config StdioConfig, logger *mlog.Logger) (*MattermostStdioMC
 	}
 
 	// Register tools
-	mattermostServer.registerTools()
+	mattermostServer.registerTools(types.TransportModeStdio)
 
 	return mattermostServer, nil
 }

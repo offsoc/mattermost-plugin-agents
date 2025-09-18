@@ -7,6 +7,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/mattermost/mattermost-plugin-ai/mcpserver/auth"
 	"github.com/mattermost/mattermost-plugin-ai/mcpserver/tools"
+	"github.com/mattermost/mattermost-plugin-ai/mcpserver/types"
 	"github.com/mattermost/mattermost/server/public/shared/mlog"
 )
 
@@ -20,8 +21,8 @@ type MattermostMCPServer struct {
 }
 
 // registerTools registers all tools using the tool provider
-func (s *MattermostMCPServer) registerTools() {
-	toolProvider := tools.NewMattermostToolProvider(s.authProvider, s.logger, s.config.GetMMServerURL(), s.config.GetMMInternalServerURL(), s.config.GetDevMode())
+func (s *MattermostMCPServer) registerTools(transportMode types.TransportMode) {
+	toolProvider := tools.NewMattermostToolProvider(s.authProvider, s.logger, s.config.GetMMServerURL(), s.config.GetMMInternalServerURL(), s.config.GetDevMode(), transportMode)
 	toolProvider.ProvideTools(s.mcpServer)
 }
 

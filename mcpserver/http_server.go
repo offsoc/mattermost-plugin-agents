@@ -13,6 +13,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/mattermost/mattermost-plugin-ai/mcpserver/auth"
+	"github.com/mattermost/mattermost-plugin-ai/mcpserver/types"
 	"github.com/mattermost/mattermost/server/public/shared/mlog"
 )
 
@@ -76,7 +77,7 @@ func NewHTTPServer(config HTTPConfig, logger *mlog.Logger) (*MattermostHTTPMCPSe
 		server.WithRecovery(),
 	)
 
-	mattermostServer.registerTools()
+	mattermostServer.registerTools(types.TransportModeHTTP)
 
 	baseURL := fmt.Sprintf("http://%s:%d", config.HTTPBindAddr, config.HTTPPort)
 	if config.SiteURL != "" {

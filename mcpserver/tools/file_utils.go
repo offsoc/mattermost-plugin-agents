@@ -13,17 +13,23 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/mattermost/mattermost-plugin-ai/mcpserver/types"
 	"github.com/mattermost/mattermost/server/public/model"
 )
 
-// fetchFileData fetches file data from a file path or URL and returns it as []byte
-func fetchFileData(filespec string) ([]byte, error) {
+// fetchFileDataForStdio fetches file data from a file path or URL (STDIO transport only)
+func fetchFileDataForStdio(filespec string, transportMode types.TransportMode) ([]byte, error) {
 	if filespec == "" {
 		return nil, fmt.Errorf("empty filespec provided")
 	}
 
+	// URLs are only allowed for STDIO transport
+	if transportMode != types.TransportModeStdio {
+		return nil, fmt.Errorf("URL access not supported over network transports, only STDIO transport allows URL access")
+	}
+
 	// Check if it's a URL
-	if strings.HasPrefix(filespec, "http://") || strings.HasPrefix(filespec, "https://") {
+	if isURL(filespec) {
 		resp, err := http.Get(filespec) // #nosec G107 - filespec is validated to be URL
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch file from URL: %w", err)
@@ -42,7 +48,6 @@ func fetchFileData(filespec string) ([]byte, error) {
 		return data, nil
 	}
 
-	// Handle as file path
 	cleanPath := filepath.Clean(filespec)
 	file, err := os.Open(cleanPath)
 	if err != nil {
@@ -58,14 +63,23 @@ func fetchFileData(filespec string) ([]byte, error) {
 	return data, nil
 }
 
-// getFileNameFromSpec extracts the filename from a filespec (URL or file path)
-func getFileNameFromSpec(filespec string) string {
+// isURL checks if a string is a URL
+func isURL(filespec string) bool {
+	return strings.HasPrefix(filespec, "http://") || strings.HasPrefix(filespec, "https://")
+}
+
+// extractFileNameForStdio extracts the filename from a filespec (URL or file path, STDIO transport only)
+func extractFileNameForStdio(filespec string, transportMode types.TransportMode) string {
 	if filespec == "" {
 		return ""
 	}
 
-	// For URLs, extract filename from the path
-	if strings.HasPrefix(filespec, "http://") || strings.HasPrefix(filespec, "https://") {
+	if transportMode != types.TransportModeStdio {
+		return "url-access-denied"
+	}
+
+	// Handle URLs - only allowed for STDIO transport
+	if isURL(filespec) {
 		parsedURL, err := url.Parse(filespec)
 		if err != nil {
 			// Fallback to simple string splitting if URL parsing fails
@@ -83,7 +97,7 @@ func getFileNameFromSpec(filespec string) string {
 		return filename
 	}
 
-	// For file paths, extract the base name
+	// For local file paths, extract the base name
 	return filepath.Base(filespec)
 }
 
@@ -99,22 +113,27 @@ func isValidImageFile(filename string) bool {
 	return false
 }
 
-// uploadFiles uploads multiple files and returns their file IDs
-func uploadFiles(ctx context.Context, client *model.Client4, channelID string, filespecs []string) ([]string, error) {
+// uploadFilesForStdio uploads multiple files from URLs or file paths (STDIO transport only) and returns their file IDs
+func uploadFilesForStdio(ctx context.Context, client *model.Client4, channelID string, filespecs []string, transportMode types.TransportMode) ([]string, error) {
 	var fileIDs []string
+
+	// Early validation - only STDIO transport can upload files
+	if transportMode != types.TransportModeStdio {
+		return nil, fmt.Errorf("file uploads not supported over network transports, only STDIO transport allows file operations")
+	}
 
 	for _, filespec := range filespecs {
 		if filespec == "" {
 			continue
 		}
 
-		fileData, err := fetchFileData(filespec)
+		fileData, err := fetchFileDataForStdio(filespec, transportMode)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch file %s: %w", filespec, err)
 		}
 
-		fileName := getFileNameFromSpec(filespec)
-		if fileName == "" {
+		fileName := extractFileNameForStdio(filespec, transportMode)
+		if fileName == "" || fileName == "url-access-denied" || fileName == "file-access-denied" {
 			fileName = "attachment"
 		}
 
@@ -131,13 +150,18 @@ func uploadFiles(ctx context.Context, client *model.Client4, channelID string, f
 	return fileIDs, nil
 }
 
-// handleFileAttachments handles file attachments upload and returns file IDs and a message
-func handleFileAttachments(ctx context.Context, client *model.Client4, channelID string, attachments []string) ([]string, string) {
+// uploadFilesAndUrlsForStdio uploads files from URLs or file paths (STDIO transport only) and returns file IDs and status message
+func uploadFilesAndUrlsForStdio(ctx context.Context, client *model.Client4, channelID string, attachments []string, transportMode types.TransportMode) ([]string, string) {
 	var fileIDs []string
 	var attachmentMessage string
 
 	if len(attachments) > 0 {
-		uploadedFileIDs, uploadErr := uploadFiles(ctx, client, channelID, attachments)
+		if transportMode != types.TransportModeStdio {
+			attachmentMessage = " (file attachments not supported over network transports)"
+			return nil, attachmentMessage
+		}
+
+		uploadedFileIDs, uploadErr := uploadFilesForStdio(ctx, client, channelID, attachments, transportMode)
 		if uploadErr != nil {
 			attachmentMessage = fmt.Sprintf(" (file upload failed: %v)", uploadErr)
 		} else {
