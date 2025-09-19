@@ -444,6 +444,73 @@ func TestOriginValidation(t *testing.T) {
 			requestOrigin:  "",
 			expectedResult: true, // No Origin header is allowed for non-browser requests
 		},
+		{
+			name: "IPv6MattermostOriginWithDefaultPort",
+			config: mcpserver.HTTPConfig{
+				BaseConfig: mcpserver.BaseConfig{
+					MMServerURL: "http://[::1]:80",
+					DevMode:     false,
+				},
+				HTTPPort:     8080,
+				HTTPBindAddr: "127.0.0.1",
+			},
+			requestOrigin:  "http://[::1]:80",
+			expectedResult: true,
+		},
+		{
+			name: "IPv6MattermostOriginWithoutPort",
+			config: mcpserver.HTTPConfig{
+				BaseConfig: mcpserver.BaseConfig{
+					MMServerURL: "http://[::1]",
+					DevMode:     false,
+				},
+				HTTPPort:     8080,
+				HTTPBindAddr: "127.0.0.1",
+			},
+			requestOrigin:  "http://[::1]",
+			expectedResult: true,
+		},
+		{
+			name: "IPv6SiteURLOrigin",
+			config: mcpserver.HTTPConfig{
+				BaseConfig: mcpserver.BaseConfig{
+					MMServerURL: "http://localhost:8065",
+					DevMode:     false,
+				},
+				HTTPPort:     8080,
+				HTTPBindAddr: "127.0.0.1",
+				SiteURL:      "https://[2001:db8::1]:8443",
+			},
+			requestOrigin:  "https://[2001:db8::1]:8443",
+			expectedResult: true,
+		},
+		{
+			name: "IPv6SiteURLOriginWithDefaultPort",
+			config: mcpserver.HTTPConfig{
+				BaseConfig: mcpserver.BaseConfig{
+					MMServerURL: "http://localhost:8065",
+					DevMode:     false,
+				},
+				HTTPPort:     8080,
+				HTTPBindAddr: "127.0.0.1",
+				SiteURL:      "https://[2001:db8::1]:443",
+			},
+			requestOrigin:  "https://[2001:db8::1]", // Client sends without default port
+			expectedResult: true,
+		},
+		{
+			name: "IPv6LocalhostBindingOrigin",
+			config: mcpserver.HTTPConfig{
+				BaseConfig: mcpserver.BaseConfig{
+					MMServerURL: "http://localhost:8065",
+					DevMode:     false,
+				},
+				HTTPPort:     8080,
+				HTTPBindAddr: "::1", // IPv6 localhost
+			},
+			requestOrigin:  "http://[::1]:8080",
+			expectedResult: true,
+		},
 	}
 
 	for _, tt := range tests {

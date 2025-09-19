@@ -6,7 +6,9 @@ package mcpserver
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
 	"time"
@@ -171,27 +173,35 @@ func (s *MattermostHTTPMCPServer) getResourceMetadataURL() string {
 // getAllowedOrigins returns the list of allowed origins for CORS and DNS rebinding protection
 // Per MCP spec: "Servers MUST validate the Origin header on all incoming connections to prevent DNS rebinding attacks"
 func (s *MattermostHTTPMCPServer) getAllowedOrigins() []string {
-	var origins []string
+	// Use a map to avoid duplicates
+	originsMap := make(map[string]struct{})
 
 	// Add Mattermost server URL as allowed origin
 	if mmURL := s.config.GetMMServerURL(); mmURL != "" {
-		origins = append(origins, mmURL)
+		originsMap[mmURL] = struct{}{}
 	}
 
 	// Add configured site URL as allowed origin (for reverse proxy scenarios)
 	if siteURL := s.config.SiteURL; siteURL != "" {
-		origins = append(origins, siteURL)
+		originsMap[siteURL] = struct{}{}
 	}
 
-	// For localhost binding (recommended by MCP spec), allow legitimate localhost origins
-	// For 0.0.0.0 binding (discouraged by MCP spec), respect the required site-url
-	// The site-url requirement is enforced in NewHTTPServer validation
-	if s.config.HTTPBindAddr == "127.0.0.1" || s.config.HTTPBindAddr == "0.0.0.0" {
-		// site-url is required and already added to origins above, so we respect that for external access
-		// Also allow localhost access for convenience (e.g., Docker port mapping)
-		localhostURL := fmt.Sprintf("http://localhost:%d", s.config.HTTPPort)
-		localhost127URL := fmt.Sprintf("http://127.0.0.1:%d", s.config.HTTPPort)
-		origins = append(origins, localhostURL, localhost127URL)
+	// Handle localhost bindings - add all localhost variations for any localhost-like binding
+	bindAddr := s.config.HTTPBindAddr
+	isLocalhostBinding := bindAddr == "127.0.0.1" || bindAddr == "::1" ||
+		bindAddr == "localhost" || bindAddr == "0.0.0.0"
+
+	if isLocalhostBinding {
+		// Add all localhost variations to support dual-stack scenarios
+		originsMap[fmt.Sprintf("http://localhost:%d", s.config.HTTPPort)] = struct{}{}
+		originsMap[fmt.Sprintf("http://127.0.0.1:%d", s.config.HTTPPort)] = struct{}{}
+		originsMap[fmt.Sprintf("http://[::1]:%d", s.config.HTTPPort)] = struct{}{}
+	}
+
+	// Convert map to slice
+	origins := make([]string, 0, len(originsMap))
+	for origin := range originsMap {
+		origins = append(origins, origin)
 	}
 
 	return origins
@@ -236,21 +246,43 @@ func (s *MattermostHTTPMCPServer) validateOrigin(r *http.Request) bool {
 	return false
 }
 
-// normalizeURL normalizes a URL by removing default ports and converting to lowercase
+// normalizeURL normalizes a URL by removing default ports while preserving IPv6 brackets
 func normalizeURL(u *url.URL) string {
-	host := strings.ToLower(u.Hostname())
-	port := u.Port()
-
-	// Remove default ports
-	if (u.Scheme == "http" && port == "80") || (u.Scheme == "https" && port == "443") {
-		port = ""
+	// Create a copy to avoid modifying the original
+	normalized := &url.URL{
+		Scheme: strings.ToLower(u.Scheme),
+		Host:   u.Host,
+		Path:   u.Path,
 	}
 
-	if port != "" {
-		host = fmt.Sprintf("%s:%s", host, port)
+	// Try to split host and port
+	host, port, err := net.SplitHostPort(u.Host)
+	if err != nil {
+		// No port in URL - just lowercase the host
+		// This preserves IPv6 brackets if present
+		normalized.Host = strings.ToLower(u.Host)
+	} else {
+		// Check if it's a default port that should be removed
+		isDefaultPort := (u.Scheme == "http" && port == "80") ||
+			(u.Scheme == "https" && port == "443")
+
+		if isDefaultPort {
+			// Remove default port, but need to preserve IPv6 brackets
+			// Parse the host to check if it's an IPv6 address
+			if addr, err := netip.ParseAddr(host); err == nil && addr.Is6() {
+				// It's an IPv6 address - needs brackets
+				normalized.Host = strings.ToLower("[" + host + "]")
+			} else {
+				// Regular hostname or IPv4
+				normalized.Host = strings.ToLower(host)
+			}
+		} else {
+			// Keep the port - JoinHostPort handles IPv6 brackets correctly
+			normalized.Host = strings.ToLower(net.JoinHostPort(host, port))
+		}
 	}
 
-	return fmt.Sprintf("%s://%s", u.Scheme, host)
+	return normalized.String()
 }
 
 // securityMiddleware applies security headers and validation

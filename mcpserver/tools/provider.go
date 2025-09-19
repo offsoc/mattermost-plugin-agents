@@ -69,6 +69,7 @@ func NewMattermostToolProvider(authProvider auth.AuthenticationProvider, logger 
 	}
 }
 
+
 // ProvideTools provides all tools to the MCP server by registering them
 func (p *MattermostToolProvider) ProvideTools(mcpServer *server.MCPServer) {
 	mcpTools := []MCPTool{}
@@ -304,6 +305,9 @@ func isAccessAllowed(restrictionTag, currentAccessMode string) bool {
 // validateAccessRestrictions validates that no access-restricted fields are present in the JSON data
 // for the current access mode. This prevents clients from sending fields they shouldn't have access to.
 func validateAccessRestrictions(jsonData []byte, target interface{}, currentAccessMode string) error {
+	if currentAccessMode == "" {
+		panic("access mode cannot be empty - indicates uninitialized AccessMode")
+	}
 	// Get the struct type to inspect field tags
 	targetType := reflect.TypeOf(target)
 	if targetType.Kind() == reflect.Ptr {
