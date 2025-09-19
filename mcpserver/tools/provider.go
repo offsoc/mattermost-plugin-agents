@@ -69,7 +69,6 @@ func NewMattermostToolProvider(authProvider auth.AuthenticationProvider, logger 
 	}
 }
 
-
 // ProvideTools provides all tools to the MCP server by registering them
 func (p *MattermostToolProvider) ProvideTools(mcpServer *server.MCPServer) {
 	mcpTools := []MCPTool{}
