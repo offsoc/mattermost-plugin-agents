@@ -233,7 +233,7 @@ func TestDevToolsSecurityGating(t *testing.T) {
 			require.Error(t, err, "Dev tool %s should be blocked when dev mode is disabled", toolName)
 
 			// Check that the error indicates the tool is not available (correct security behavior)
-			assert.Contains(t, err.Error(), "not found",
+			assert.Contains(t, err.Error(), "unknown tool",
 				"Error should indicate tool is not available when dev mode is disabled")
 		})
 	}
