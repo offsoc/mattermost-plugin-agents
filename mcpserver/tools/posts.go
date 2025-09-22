@@ -15,33 +15,33 @@ import (
 
 // ReadPostArgs represents arguments for the read_post tool
 type ReadPostArgs struct {
-	PostID        string `json:"post_id" jsonschema_description:"The ID of the post to read"`
-	IncludeThread bool   `json:"include_thread" jsonschema_description:"Whether to include the entire thread (default: true)"`
+	PostID        string `json:"post_id" jsonschema:"The ID of the post to read"`
+	IncludeThread bool   `json:"include_thread" jsonschema:"Whether to include the entire thread (default: true)"`
 }
 
 // CreatePostArgs represents arguments for the create_post tool
 type CreatePostArgs struct {
-	ChannelID   string   `json:"channel_id" jsonschema_description:"The ID of the channel to post in"`
-	Message     string   `json:"message" jsonschema_description:"The message content"`
-	RootID      string   `json:"root_id" jsonschema_description:"Optional root post ID for replies"`
-	Attachments []string `json:"attachments,omitempty" access:"local" jsonschema_description:"Optional list of file paths or URLs to attach to the post"`
+	ChannelID   string   `json:"channel_id" jsonschema:"The ID of the channel to post in"`
+	Message     string   `json:"message" jsonschema:"The message content"`
+	RootID      string   `json:"root_id" jsonschema:"Optional root post ID for replies"`
+	Attachments []string `json:"attachments,omitempty" access:"local" jsonschema:"Optional list of file paths or URLs to attach to the post"`
 }
 
 // CreatePostAsUserArgs represents arguments for the create_post_as_user tool (dev mode only)
 type CreatePostAsUserArgs struct {
-	Username    string   `json:"username" jsonschema_description:"Username to login as"`
-	Password    string   `json:"password" jsonschema_description:"Password to login with"`
-	ChannelID   string   `json:"channel_id" jsonschema_description:"The ID of the channel to post in"`
-	Message     string   `json:"message" jsonschema_description:"The message content"`
-	RootID      string   `json:"root_id" jsonschema_description:"Optional root post ID for replies"`
-	Props       string   `json:"props" jsonschema_description:"Optional post properties (JSON string)"`
-	Attachments []string `json:"attachments,omitempty" access:"local" jsonschema_description:"Optional list of file paths or URLs to attach to the post"`
+	Username    string   `json:"username" jsonschema:"Username to login as"`
+	Password    string   `json:"password" jsonschema:"Password to login with"`
+	ChannelID   string   `json:"channel_id" jsonschema:"The ID of the channel to post in"`
+	Message     string   `json:"message" jsonschema:"The message content"`
+	RootID      string   `json:"root_id" jsonschema:"Optional root post ID for replies"`
+	Props       string   `json:"props" jsonschema:"Optional post properties (JSON string)"`
+	Attachments []string `json:"attachments,omitempty" access:"local" jsonschema:"Optional list of file paths or URLs to attach to the post"`
 }
 
 // DMSelfArgs represents arguments for the dm_self tool
 type DMSelfArgs struct {
-	Message     string   `json:"message" jsonschema_description:"The message content to send to yourself"`
-	Attachments []string `json:"attachments,omitempty" access:"local" jsonschema_description:"Optional list of file paths or URLs to attach to the message"`
+	Message     string   `json:"message" jsonschema:"The message content to send to yourself"`
+	Attachments []string `json:"attachments,omitempty" access:"local" jsonschema:"Optional list of file paths or URLs to attach to the message"`
 }
 
 // getPostTools returns all post-related tools
