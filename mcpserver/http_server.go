@@ -90,7 +90,7 @@ func NewHTTPServer(config HTTPConfig, logger *mlog.Logger) (*MattermostHTTPMCPSe
 	// Create SSE handler for backwards compatibility
 	mattermostServer.sseHandler = mcp.NewSSEHandler(func(req *http.Request) *mcp.Server {
 		return mattermostServer.mcpServer
-	})
+	}, &mcp.SSEOptions{})
 
 	// Create streamable HTTP handler for modern MCP communication
 	mattermostServer.streamableHandler = mcp.NewStreamableHTTPHandler(func(req *http.Request) *mcp.Server {

@@ -16,7 +16,7 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/mattermost/mattermost/server/public v0.1.12
 	github.com/mattermost/testcontainers-mattermost-go v0.0.0-20250129100554-3cf1ce84b0e4
-	github.com/modelcontextprotocol/go-sdk v0.5.0
+	github.com/modelcontextprotocol/go-sdk v0.6.0
 	github.com/nicksnyder/go-i18n/v2 v2.5.1
 	github.com/pgvector/pgvector-go v0.3.0
 	github.com/pkg/errors v0.9.1
