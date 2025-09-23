@@ -26,6 +26,7 @@ export type LLMService = {
     streamingTimeoutSeconds: number
     sendUserId: boolean
     outputTokenLimit: number
+    useResponsesAPI: boolean
 }
 
 export enum ChannelAccessLevel {
@@ -273,6 +274,14 @@ const ServiceItem = (props: ServiceItemProps) => {
                         onChange={(to: boolean) => props.onChange({...props.service, sendUserId: to})}
                         helpText={intl.formatMessage({defaultMessage: 'Sends the Mattermost user ID to the upstream LLM.'})}
                     />
+                    {(type === 'openai' || type === 'openaicompatible') && (
+                        <BooleanItem
+                            label={intl.formatMessage({defaultMessage: 'Use Responses API'})}
+                            value={props.service.useResponsesAPI ?? false}
+                            onChange={(to: boolean) => props.onChange({...props.service, useResponsesAPI: to})}
+                            helpText={intl.formatMessage({defaultMessage: 'Use the new OpenAI Responses API with support for reasoning summaries and other advanced features. Disable for legacy Completions API compatibility.'})}
+                        />
+                    )}
                 </>
             )}
             <TextItem

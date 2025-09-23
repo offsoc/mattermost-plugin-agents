@@ -129,5 +129,6 @@ func OpenAIConfigFromServiceConfig(serviceConfig llm.ServiceConfig) openai.Confi
 		OutputTokenLimit: serviceConfig.OutputTokenLimit,
 		StreamingTimeout: streamingTimeout,
 		SendUserID:       serviceConfig.SendUserID,
+		UseResponsesAPI:  serviceConfig.UseResponsesAPI,
 	}
 }

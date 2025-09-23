@@ -18,6 +18,10 @@ type ServiceConfig struct {
 
 	// Otherwise known as maxTokens
 	OutputTokenLimit int `json:"outputTokenLimit"`
+
+	// UseResponsesAPI determines whether to use the new OpenAI Responses API
+	// Only applicable to OpenAI and OpenAI-compatible services
+	UseResponsesAPI bool `json:"useResponsesAPI"`
 }
 
 type ChannelAccessLevel int
