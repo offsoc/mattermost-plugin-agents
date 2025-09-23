@@ -23,8 +23,11 @@ import (
 	"github.com/openai/openai-go/v2"
 	"github.com/openai/openai-go/v2/azure"
 	"github.com/openai/openai-go/v2/option"
+<<<<<<< HEAD
 	"github.com/openai/openai-go/v2/packages/param"
 	"github.com/openai/openai-go/v2/responses"
+=======
+>>>>>>> master
 	"github.com/openai/openai-go/v2/shared"
 )
 
@@ -39,7 +42,10 @@ type Config struct {
 	SendUserID          bool          `json:"sendUserID"`
 	EmbeddingModel      string        `json:"embeddingModel"`
 	EmbeddingDimensions int           `json:"embeddingDimensions"`
+<<<<<<< HEAD
 	UseResponsesAPI     bool          `json:"useResponsesAPI"`
+=======
+>>>>>>> master
 }
 
 type OpenAI struct {
