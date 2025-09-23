@@ -22,6 +22,11 @@ type ServiceConfig struct {
 	// UseResponsesAPI determines whether to use the new OpenAI Responses API
 	// Only applicable to OpenAI and OpenAI-compatible services
 	UseResponsesAPI bool `json:"useResponsesAPI"`
+
+	// EnabledNativeTools contains the list of enabled OpenAI native tools
+	// Only works when UseResponsesAPI is true
+	// Example: ["web_search", "file_search", "code_interpreter"]
+	EnabledNativeTools []string `json:"enabledNativeTools"`
 }
 
 type ChannelAccessLevel int

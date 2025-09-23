@@ -16,4 +16,5 @@ export type ServiceData = {
     sendUserId: boolean
     outputTokenLimit: number
     useResponsesAPI: boolean
+    enabledNativeTools?: string[]
 }

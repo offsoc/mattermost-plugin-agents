@@ -121,14 +121,15 @@ func OpenAIConfigFromServiceConfig(serviceConfig llm.ServiceConfig) openai.Confi
 	}
 
 	return openai.Config{
-		APIKey:           serviceConfig.APIKey,
-		APIURL:           serviceConfig.APIURL,
-		OrgID:            serviceConfig.OrgID,
-		DefaultModel:     serviceConfig.DefaultModel,
-		InputTokenLimit:  serviceConfig.InputTokenLimit,
-		OutputTokenLimit: serviceConfig.OutputTokenLimit,
-		StreamingTimeout: streamingTimeout,
-		SendUserID:       serviceConfig.SendUserID,
-		UseResponsesAPI:  serviceConfig.UseResponsesAPI,
+		APIKey:             serviceConfig.APIKey,
+		APIURL:             serviceConfig.APIURL,
+		OrgID:              serviceConfig.OrgID,
+		DefaultModel:       serviceConfig.DefaultModel,
+		InputTokenLimit:    serviceConfig.InputTokenLimit,
+		OutputTokenLimit:   serviceConfig.OutputTokenLimit,
+		StreamingTimeout:   streamingTimeout,
+		SendUserID:         serviceConfig.SendUserID,
+		UseResponsesAPI:    serviceConfig.UseResponsesAPI,
+		EnabledNativeTools: serviceConfig.EnabledNativeTools,
 	}
 }

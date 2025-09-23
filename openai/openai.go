@@ -23,11 +23,8 @@ import (
 	"github.com/openai/openai-go/v2"
 	"github.com/openai/openai-go/v2/azure"
 	"github.com/openai/openai-go/v2/option"
-<<<<<<< HEAD
 	"github.com/openai/openai-go/v2/packages/param"
 	"github.com/openai/openai-go/v2/responses"
-=======
->>>>>>> master
 	"github.com/openai/openai-go/v2/shared"
 )
 
@@ -42,10 +39,8 @@ type Config struct {
 	SendUserID          bool          `json:"sendUserID"`
 	EmbeddingModel      string        `json:"embeddingModel"`
 	EmbeddingDimensions int           `json:"embeddingDimensions"`
-<<<<<<< HEAD
 	UseResponsesAPI     bool          `json:"useResponsesAPI"`
-=======
->>>>>>> master
+	EnabledNativeTools  []string      `json:"enabledNativeTools"`
 }
 
 type OpenAI struct {
@@ -669,6 +664,13 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 			// Text output completed
 			fmt.Printf("[Responses API Debug] Text output done\n")
 
+		case "response.web_search_call.searching", "response.web_search_call.in_progress", "response.web_search_call.completed":
+			// Handle web search events
+			fmt.Printf("[Responses API Debug] Web search event: %s\n", event.Type)
+			// Web search results are typically handled as part of the response text
+			// The model will incorporate the search results into its response
+			continue
+
 		case "response.completed":
 			// Response fully completed
 			fmt.Printf("[Responses API Debug] Response completed - hasReceivedContent: %v, toolsBuffer length: %d\n", hasReceivedContent, len(toolsBuffer))
@@ -814,9 +816,11 @@ func (s *OpenAI) convertToResponseParams(params openai.ChatCompletionNewParams, 
 		}
 	}
 
-	// Convert tools if present
+	// Convert tools
+	tools := []responses.ToolUnionParam{}
+
+	// Add function tools if present
 	if len(params.Tools) > 0 {
-		tools := []responses.ToolUnionParam{}
 		for _, tool := range params.Tools {
 			// Check if this is a function tool
 			if tool.OfFunction != nil {
@@ -833,15 +837,47 @@ func (s *OpenAI) convertToResponseParams(params openai.ChatCompletionNewParams, 
 					functionTool.Parameters = tool.OfFunction.Function.Parameters
 				}
 
-				fmt.Printf("[Responses API Debug] Converting tool: %s\n", tool.OfFunction.Function.Name)
+				fmt.Printf("[Responses API Debug] Converting function tool: %s\n", tool.OfFunction.Function.Name)
 
 				tools = append(tools, responses.ToolUnionParam{
 					OfFunction: &functionTool,
 				})
 			}
 		}
+	}
+
+	// Add native tools if enabled
+	if len(s.config.EnabledNativeTools) > 0 {
+		for _, nativeTool := range s.config.EnabledNativeTools {
+			switch nativeTool {
+			case "web_search":
+				// Add web search as a built-in tool
+				webSearchTool := responses.WebSearchToolParam{
+					Type: responses.WebSearchToolTypeWebSearchPreview,
+				}
+				tools = append(tools, responses.ToolUnionParam{
+					OfWebSearchPreview: &webSearchTool,
+				})
+				fmt.Printf("[Responses API Debug] Added native tool: web_search\n")
+
+				// Future native tools can be added here
+				// case "file_search":
+				//     fileSearchTool := responses.FileSearchToolParam{...}
+				//     tools = append(tools, responses.ToolUnionParam{
+				//         OfFileSearch: &fileSearchTool,
+				//     })
+				// case "code_interpreter":
+				//     codeInterpreterTool := responses.ToolCodeInterpreterParam{...}
+				//     tools = append(tools, responses.ToolUnionParam{
+				//         OfCodeInterpreter: &codeInterpreterTool,
+				//     })
+			}
+		}
+	}
+
+	if len(tools) > 0 {
 		result.Tools = tools
-		fmt.Printf("[Responses API Debug] Total tools converted: %d\n", len(tools))
+		fmt.Printf("[Responses API Debug] Total tools (function + native): %d\n", len(tools))
 	}
 
 	// Note: Tool choice and response format conversions are omitted for simplicity

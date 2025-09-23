@@ -29,6 +29,7 @@ const defaultNewBot: LLMBotConfig = {
 		sendUserId: false,
 		outputTokenLimit: 0,
 		useResponsesAPI: false,
+		enabledNativeTools: [],
 	},
     enableVision: false,
     disableTools: false,
