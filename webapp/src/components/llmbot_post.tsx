@@ -9,7 +9,7 @@ import styled from 'styled-components';
 import {WebSocketMessage} from '@mattermost/client';
 import {GlobalState} from '@mattermost/types/store';
 
-import {SendIcon} from '@mattermost/compass-icons/components';
+import {SendIcon, ChevronRightIcon} from '@mattermost/compass-icons/components';
 
 import {doPostbackSummary, doRegenerate, doStopGenerating} from '@/client';
 
@@ -93,11 +93,114 @@ const PostSummaryHelpMessage = styled.div`
 	margin-top: 16px;
 `;
 
+const ExpandedReasoningContainer = styled.div`
+	background: rgba(var(--center-channel-color-rgb), 0.02);
+	border: 1px solid rgba(var(--center-channel-color-rgb), 0.08);
+	border-radius: 8px;
+	margin-bottom: 16px;
+	margin-top: 4px;
+	overflow: hidden;
+`;
+
+const ExpandedReasoningHeader = styled.div`
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 12px;
+	font-size: 14px;
+	color: rgba(var(--center-channel-color-rgb), 0.64);
+	cursor: pointer;
+	user-select: none;
+
+	&:hover {
+		color: rgba(var(--center-channel-color-rgb), 0.8);
+	}
+`;
+
+const ExpandedChevron = styled.div`
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 16px;
+	height: 16px;
+	transition: transform 0.2s ease;
+	transform: rotate(90deg);
+
+	svg {
+		width: 14px;
+		height: 14px;
+	}
+`;
+
+const LoadingSpinner = styled.div`
+	display: inline-block;
+	width: 14px;
+	height: 14px;
+	border: 2px solid rgba(var(--center-channel-color-rgb), 0.16);
+	border-radius: 50%;
+	border-top-color: rgba(var(--center-channel-color-rgb), 0.64);
+	animation: spin 1s linear infinite;
+
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+`;
+
+const MinimalReasoningContainer = styled.div`
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 12px;
+	font-size: 14px;
+	color: rgba(var(--center-channel-color-rgb), 0.64);
+	cursor: pointer;
+	user-select: none;
+
+	&:hover {
+		color: rgba(var(--center-channel-color-rgb), 0.8);
+	}
+`;
+
+const MinimalExpandIcon = styled.div<{isExpanded: boolean}>`
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 16px;
+	height: 16px;
+	transition: transform 0.2s ease;
+	transform: ${props => props.isExpanded ? 'rotate(180deg)' : 'rotate(0)'};
+
+	svg {
+		width: 14px;
+		height: 14px;
+	}
+`;
+
+const ReasoningContent = styled.div<{collapsed: boolean}>`
+	max-height: ${props => props.collapsed ? '0' : '600px'};
+	overflow-y: auto;
+	transition: max-height 0.3s ease-in-out;
+	opacity: ${props => props.collapsed ? '0' : '1'};
+	transition: opacity 0.2s ease-in-out, max-height 0.3s ease-in-out;
+`;
+
+const ReasoningText = styled.div`
+	padding: 16px;
+	font-size: 14px;
+	line-height: 22px;
+	color: rgba(var(--center-channel-color-rgb), 0.8);
+	white-space: pre-wrap;
+	word-break: break-word;
+`;
+
 export interface PostUpdateWebsocketMessage {
     post_id: string
     next?: string
     control?: string
     tool_call?: string
+    reasoning?: string
 }
 
 export enum ToolCallStatus {
@@ -140,11 +243,40 @@ export const LLMBotPost = (props: Props) => {
     const [toolCalls, setToolCalls] = useState<ToolCall[]>([]);
     const [error, setError] = useState('');
 
+    // State for reasoning summary display
+    // Initialize from persisted reasoning if available
+    const persistedReasoning = props.post.props?.reasoning_summary || '';
+    const [reasoningSummary, setReasoningSummary] = useState(persistedReasoning);
+    const [showReasoning, setShowReasoning] = useState(persistedReasoning !== '');
+    const [isReasoningCollapsed, setIsReasoningCollapsed] = useState(true);
+    const [isReasoningLoading, setIsReasoningLoading] = useState(false);
+
     const currentUserId = useSelector<GlobalState, string>((state) => state.entities.users.currentUserId);
     const rootPost = useSelector<GlobalState, any>((state) => state.entities.posts.posts[props.post.root_id]);
 
     // Get tool calls from post props
     const toolCallsJson = props.post.props?.pending_tool_call;
+
+    // Initialize reasoning from persisted data when navigating to different posts
+    const previousPostIdRef = useRef(props.post.id);
+    useEffect(() => {
+        if (previousPostIdRef.current !== props.post.id) {
+            const persistedReasoning = props.post.props?.reasoning_summary || '';
+            if (persistedReasoning) {
+                setReasoningSummary(persistedReasoning);
+                setShowReasoning(true);
+                setIsReasoningCollapsed(true);
+                setIsReasoningLoading(false);
+            } else {
+                // Reset reasoning state for posts without reasoning
+                setReasoningSummary('');
+                setShowReasoning(false);
+                setIsReasoningCollapsed(true);
+                setIsReasoningLoading(false);
+            }
+            previousPostIdRef.current = props.post.id;
+        }
+    }, [props.post.id, props.post.props?.reasoning_summary]);
 
     // Update tool calls from props when available
     useEffect(() => {
@@ -177,6 +309,23 @@ export const LLMBotPost = (props: Props) => {
                     return;
                 }
 
+                // Handle reasoning summary events
+                if (data.control === 'reasoning_summary' && data.reasoning) {
+                    // Replace entire reasoning with accumulated text from backend
+                    setReasoningSummary(data.reasoning);
+                    setShowReasoning(true);
+                    setIsReasoningLoading(true);
+                    return;
+                }
+
+                if (data.control === 'reasoning_summary_done' && data.reasoning) {
+                    // Final reasoning text
+                    setReasoningSummary(data.reasoning);
+                    setIsReasoningLoading(false);
+                    setIsReasoningCollapsed(true);
+                    return;
+                }
+
                 // Handle tool call events from the websocket event
                 if (data.control === 'tool_call' && data.tool_call) {
                     try {
@@ -199,6 +348,11 @@ export const LLMBotPost = (props: Props) => {
                 } else if (data.control === 'start') {
                     setGenerating(true);
                     setStopped(false);
+                    // Clear reasoning when starting new generation
+                    setReasoningSummary('');
+                    setShowReasoning(false);
+                    setIsReasoningCollapsed(true);
+                    setIsReasoningLoading(false);
 
                     if (!message) {
                         setMessage('');
@@ -220,6 +374,11 @@ export const LLMBotPost = (props: Props) => {
         setGenerating(true);
         setStopped(false);
         setMessage('');
+        // Clear reasoning summary when regenerating
+        setReasoningSummary('');
+        setShowReasoning(false);
+        setIsReasoningCollapsed(true);
+        setIsReasoningLoading(false);
         doRegenerate(props.post.id);
     };
 
@@ -267,6 +426,39 @@ export const LLMBotPost = (props: Props) => {
                 {permalinkView}
             </>
             }
+            {showReasoning && isReasoningLoading && !reasoningSummary && (
+                <MinimalReasoningContainer>
+                    <LoadingSpinner/>
+                    <span>Thinking</span>
+                </MinimalReasoningContainer>
+            )}
+            {showReasoning && reasoningSummary && isReasoningCollapsed && (
+                <MinimalReasoningContainer onClick={() => setIsReasoningCollapsed(false)}>
+                    <MinimalExpandIcon isExpanded={false}>
+                        <ChevronRightIcon/>
+                    </MinimalExpandIcon>
+                    <span>Reasoning</span>
+                </MinimalReasoningContainer>
+            )}
+            {showReasoning && reasoningSummary && !isReasoningCollapsed && (
+                <>
+                    <ExpandedReasoningHeader
+                        onClick={() => setIsReasoningCollapsed(true)}
+                    >
+                        <ExpandedChevron>
+                            <ChevronRightIcon/>
+                        </ExpandedChevron>
+                        <span>Reasoning</span>
+                    </ExpandedReasoningHeader>
+                    <ExpandedReasoningContainer>
+                        <ReasoningContent collapsed={false}>
+                            <ReasoningText>
+                                {reasoningSummary}
+                            </ReasoningText>
+                        </ReasoningContent>
+                    </ExpandedReasoningContainer>
+                </>
+            )}
             <PostText
                 message={message}
                 channelID={props.post.channel_id}

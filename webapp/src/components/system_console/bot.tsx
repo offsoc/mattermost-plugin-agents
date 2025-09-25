@@ -339,7 +339,7 @@ const ServiceItem = (props: ServiceItemProps) => {
                         onChange={(to: boolean) => props.onChange({...props.service, sendUserId: to})}
                         helpText={intl.formatMessage({defaultMessage: 'Sends the Mattermost user ID to the upstream LLM.'})}
                     />
-                    {(type === 'openai' || type === 'openaicompatible') && (
+                    {(type === 'openai' || type === 'openaicompatible' || type === 'azure') && (
                         <>
                             <BooleanItem
                                 label={intl.formatMessage({defaultMessage: 'Use Responses API'})}

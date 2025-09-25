@@ -57,7 +57,7 @@ var ErrStreamingTimeout = errors.New("timeout streaming")
 
 func NewAzure(config Config, httpClient *http.Client) *OpenAI {
 	opts := []option.RequestOption{
-		azure.WithEndpoint(strings.TrimSuffix(config.APIURL, "/"), "2024-06-01"),
+		azure.WithEndpoint(strings.TrimSuffix(config.APIURL, "/"), "2025-04-01-preview"),
 		azure.WithAPIKey(config.APIKey),
 		option.WithHTTPClient(httpClient),
 	}
@@ -427,9 +427,9 @@ func (s *OpenAI) streamCompletionsAPIToChannels(params openai.ChatCompletionNewP
 			}
 			return
 		case "":
-			// Not done yet, keep going
+		// Not done yet, keep going
 		default:
-			fmt.Printf("Unknown finish reason: %s", choice.FinishReason)
+			// Unknown finish reason, end the stream
 			return
 		}
 	}
@@ -478,10 +478,8 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 	// Convert ChatCompletionNewParams to ResponseNewParams
 	responseParams := s.convertToResponseParams(params, llmContext)
 
-	// Add debug logging for tool configuration
-	if len(responseParams.Tools) > 0 {
-		fmt.Printf("[Responses API Debug] Configured with %d tools\n", len(responseParams.Tools))
-	}
+	// Debug: Log if reasoning is configured
+	fmt.Printf("[Responses API Debug] Model: %v, Reasoning configured: %+v\n", responseParams.Model, responseParams.Reasoning)
 
 	// Create a streaming request
 	stream := s.client.Responses.NewStreaming(ctx, responseParams)
@@ -490,11 +488,11 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 	// Buffering in the case of tool use
 	var toolsBuffer map[int]*ToolBufferElement
 	var currentToolIndex int
-	var hasReceivedContent bool
+	var reasoningSummaryBuffer strings.Builder
+	var reasoningComplete bool // Track if we've sent the complete reasoning
 
 	// Define handleToolCalls as a closure to access local variables
 	handleToolCalls := func() {
-		fmt.Printf("[Responses API Debug] Handling %d tool calls\n", len(toolsBuffer))
 
 		// Verify OpenAI functions are not recursing too deep.
 		numFunctionCalls := 0
@@ -516,9 +514,8 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 
 		// Transfer the buffered tools into tool calls
 		pendingToolCalls := make([]llm.ToolCall, 0, len(toolsBuffer))
-		for idx, tool := range toolsBuffer {
+		for _, tool := range toolsBuffer {
 			if tool == nil {
-				fmt.Printf("[Responses API Debug] Warning: Tool %d is nil\n", idx)
 				continue
 			}
 
@@ -526,11 +523,8 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 			name := tool.name.String()
 			args := tool.args.String()
 
-			fmt.Printf("[Responses API Debug] Tool %d - ID: %s, Name: %s, Args: %s\n", idx, id, name, args)
-
 			// Skip if we don't have required information
 			if name == "" {
-				fmt.Printf("[Responses API Debug] Warning: Tool %d has no name, skipping\n", idx)
 				continue
 			}
 
@@ -554,8 +548,10 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 		// Ping the watchdog when we receive a response
 		watchdog <- struct{}{}
 
-		// Debug logging for event types
-		fmt.Printf("[Responses API Debug] Event type: %s, ItemID: %s, ItemType: %s\n", event.Type, event.ItemID, event.Item.Type)
+		// Debug: Log all event types to see what's coming from the API
+		fmt.Printf("[Responses API Debug] Event type: %s\n", event.Type)
+
+		// Process event types
 
 		// Handle different event types based on the Type field
 		switch event.Type {
@@ -567,8 +563,15 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 		case "response.output_text.delta":
 			// Text content delta - the text is in the Delta field
 			if event.Delta != "" {
-				hasReceivedContent = true
-				fmt.Printf("[Responses API Debug] Text delta: %s\n", event.Delta)
+				// If we haven't sent the complete reasoning yet, send it now
+				if !reasoningComplete && reasoningSummaryBuffer.Len() > 0 {
+					fmt.Printf("[Responses API Debug] Sending complete reasoning before output text, total: %d chars\n", reasoningSummaryBuffer.Len())
+					output <- llm.TextStreamEvent{
+						Type:  llm.EventTypeReasoningEnd,
+						Value: reasoningSummaryBuffer.String(),
+					}
+					reasoningComplete = true
+				}
 				output <- llm.TextStreamEvent{
 					Type:  llm.EventTypeText,
 					Value: event.Delta,
@@ -587,7 +590,6 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 			if event.OutputIndex > 0 {
 				idx = int(event.OutputIndex)
 			}
-			fmt.Printf("[Responses API Debug] Function args delta for index %d: %s\n", idx, event.Delta)
 			if toolsBuffer == nil {
 				toolsBuffer = make(map[int]*ToolBufferElement)
 			}
@@ -599,12 +601,10 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 			}
 			// Update current index for future events
 			currentToolIndex = idx
-			hasReceivedContent = true
 
 		case "response.output_item.added":
 			// A new output item was added (could be text, function call, etc.)
 			// The Item field contains the output item
-			fmt.Printf("[Responses API Debug] Output item added - Type: %s, Index: %d, Name: %s\n", event.Item.Type, event.OutputIndex, event.Item.Name)
 			if event.Item.Type == "function_call" {
 				if toolsBuffer == nil {
 					toolsBuffer = make(map[int]*ToolBufferElement)
@@ -622,18 +622,14 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 				// Capture function name from the Item
 				if event.Item.Name != "" {
 					toolsBuffer[currentToolIndex].name.WriteString(event.Item.Name)
-					fmt.Printf("[Responses API Debug] Function name captured: %s\n", event.Item.Name)
 				}
-				hasReceivedContent = true
 			}
 
 		case "response.function_call_arguments.done":
 			// Function call arguments completed
 			// Arguments have been accumulated in the buffer
-			fmt.Printf("[Responses API Debug] Function call arguments done for index %d\n", currentToolIndex)
 			// Check if we have the complete arguments in the event
 			if event.Arguments != "" {
-				fmt.Printf("[Responses API Debug] Final arguments from event: %s\n", event.Arguments)
 				// Sometimes the complete arguments come in this event
 				if toolsBuffer[currentToolIndex] != nil && toolsBuffer[currentToolIndex].args.Len() == 0 {
 					toolsBuffer[currentToolIndex].args.WriteString(event.Arguments)
@@ -642,8 +638,16 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 
 		case "response.output_item.done":
 			// Output item completed - check if it's a function call
-			fmt.Printf("[Responses API Debug] Output item done - Type: %s, Name: %s, CallID: %s\n", event.Item.Type, event.Item.Name, event.Item.CallID)
 			if event.Item.Type == "function_call" {
+				// If we haven't sent the complete reasoning yet and this is a tool call, send reasoning first
+				if !reasoningComplete && reasoningSummaryBuffer.Len() > 0 {
+					fmt.Printf("[Responses API Debug] Sending complete reasoning before tool calls, total: %d chars\n", reasoningSummaryBuffer.Len())
+					output <- llm.TextStreamEvent{
+						Type:  llm.EventTypeReasoningEnd,
+						Value: reasoningSummaryBuffer.String(),
+					}
+					reasoningComplete = true
+				}
 				// Make sure we have the function details
 				if event.Item.Name != "" && toolsBuffer[currentToolIndex] != nil {
 					// Update the name if it wasn't set before
@@ -657,23 +661,56 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 						toolsBuffer[currentToolIndex].id.WriteString(event.Item.CallID)
 					}
 				}
-				fmt.Printf("[Responses API Debug] Function call complete, will wait for response.completed event\n")
 			}
+
+		case "response.reasoning_summary_text.delta":
+			// Reasoning summary text delta
+			if event.Delta != "" {
+				fmt.Printf("[Responses API Debug] Reasoning summary delta: %s\n", event.Delta)
+				reasoningSummaryBuffer.WriteString(event.Delta)
+				// Send reasoning summary chunks as they arrive
+				output <- llm.TextStreamEvent{
+					Type:  llm.EventTypeReasoning,
+					Value: event.Delta,
+				}
+			}
+
+		case "response.reasoning_summary_part.added":
+			// A new reasoning part is starting
+			fmt.Printf("[Responses API Debug] Reasoning part added\n")
+			// Just log this for now, we continue accumulating
+
+		case "response.reasoning_summary_text.done":
+			// A reasoning part's text is complete, but there may be more parts
+			fmt.Printf("[Responses API Debug] Reasoning part text done, current total: %d chars\n", reasoningSummaryBuffer.Len())
+			// Don't send EventTypeReasoningEnd yet - there may be more parts
+
+		case "response.reasoning_summary_part.done":
+			// A reasoning part is done, but there may be more parts
+			fmt.Printf("[Responses API Debug] Reasoning part done\n")
+			// Continue accumulating, don't send end event yet
 
 		case "response.output_text.done":
 			// Text output completed
-			fmt.Printf("[Responses API Debug] Text output done\n")
 
 		case "response.web_search_call.searching", "response.web_search_call.in_progress", "response.web_search_call.completed":
 			// Handle web search events
-			fmt.Printf("[Responses API Debug] Web search event: %s\n", event.Type)
 			// Web search results are typically handled as part of the response text
 			// The model will incorporate the search results into its response
 			continue
 
 		case "response.completed":
 			// Response fully completed
-			fmt.Printf("[Responses API Debug] Response completed - hasReceivedContent: %v, toolsBuffer length: %d\n", hasReceivedContent, len(toolsBuffer))
+
+			// If we still have unsent reasoning (edge case: no output text), send it now
+			if !reasoningComplete && reasoningSummaryBuffer.Len() > 0 {
+				fmt.Printf("[Responses API Debug] Sending complete reasoning at response completion, total: %d chars\n", reasoningSummaryBuffer.Len())
+				output <- llm.TextStreamEvent{
+					Type:  llm.EventTypeReasoningEnd,
+					Value: reasoningSummaryBuffer.String(),
+				}
+				reasoningComplete = true
+			}
 
 			// Check if we have tool calls to emit
 			if len(toolsBuffer) > 0 {
@@ -696,7 +733,6 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 			} else {
 				errorMsg = "Unknown error from Responses API"
 			}
-			fmt.Printf("[Responses API Debug] Error: %s\n", errorMsg)
 			output <- llm.TextStreamEvent{
 				Type:  llm.EventTypeError,
 				Value: errors.New(errorMsg),
@@ -752,6 +788,18 @@ func (s *OpenAI) convertToResponseParams(params openai.ChatCompletionNewParams, 
 	// Convert user to safety identifier if enabled
 	if params.User.Valid() && s.config.SendUserID {
 		result.SafetyIdentifier = param.NewOpt(params.User.Value)
+	}
+
+	// Add reasoning parameters for models that support it
+	// TODO: Check if the model is reasoning-capable (o1, o1-mini, o3-mini, etc.)
+
+	result.Reasoning = shared.ReasoningParam{
+		// Set effort level for reasoning
+		// Can be "minimal", "low", "medium", or "high"
+		Effort: shared.ReasoningEffortHigh,
+		// Request a detailed summary of the reasoning
+		// Can be "auto", "concise", or "detailed"
+		Summary: shared.ReasoningSummaryAuto,
 	}
 
 	// Convert messages to a simple string input
@@ -837,8 +885,6 @@ func (s *OpenAI) convertToResponseParams(params openai.ChatCompletionNewParams, 
 					functionTool.Parameters = tool.OfFunction.Function.Parameters
 				}
 
-				fmt.Printf("[Responses API Debug] Converting function tool: %s\n", tool.OfFunction.Function.Name)
-
 				tools = append(tools, responses.ToolUnionParam{
 					OfFunction: &functionTool,
 				})
@@ -858,7 +904,6 @@ func (s *OpenAI) convertToResponseParams(params openai.ChatCompletionNewParams, 
 				tools = append(tools, responses.ToolUnionParam{
 					OfWebSearchPreview: &webSearchTool,
 				})
-				fmt.Printf("[Responses API Debug] Added native tool: web_search\n")
 
 				// Future native tools can be added here
 				// case "file_search":
@@ -877,7 +922,6 @@ func (s *OpenAI) convertToResponseParams(params openai.ChatCompletionNewParams, 
 
 	if len(tools) > 0 {
 		result.Tools = tools
-		fmt.Printf("[Responses API Debug] Total tools (function + native): %d\n", len(tools))
 	}
 
 	// Note: Tool choice and response format conversions are omitted for simplicity
