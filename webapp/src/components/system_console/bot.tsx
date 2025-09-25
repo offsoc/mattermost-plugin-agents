@@ -240,23 +240,13 @@ const NativeToolsItem = (props: NativeToolsItemProps) => {
             label: intl.formatMessage({defaultMessage: 'Web Search'}),
             helpText: intl.formatMessage({defaultMessage: 'Enable OpenAI\'s built-in web search capability'}),
         },
-        // Future tools can be added here:
-        // {
-        //     id: 'file_search',
-        //     label: intl.formatMessage({defaultMessage: 'File Search'}),
-        //     helpText: intl.formatMessage({defaultMessage: 'Enable OpenAI\'s built-in file search capability'}),
-        // },
-        // {
-        //     id: 'code_interpreter',
-        //     label: intl.formatMessage({defaultMessage: 'Code Interpreter'}),
-        //     helpText: intl.formatMessage({defaultMessage: 'Enable OpenAI\'s built-in code interpreter'}),
-        // },
+
     ];
 
     const toggleTool = (toolId: string) => {
         const currentTools = props.enabledTools || [];
         if (currentTools.includes(toolId)) {
-            props.onChange(currentTools.filter(t => t !== toolId));
+            props.onChange(currentTools.filter((t) => t !== toolId));
         } else {
             props.onChange([...currentTools, toolId]);
         }
@@ -267,11 +257,11 @@ const NativeToolsItem = (props: NativeToolsItemProps) => {
             <ItemLabel>
                 <Horizontal>
                     <FormattedMessage defaultMessage='Native OpenAI Tools'/>
-                    <Pill><FormattedMessage defaultMessage='RESPONSES API'/></Pill>
+                    <Pill><FormattedMessage defaultMessage='EXPERIMENTAL'/></Pill>
                 </Horizontal>
             </ItemLabel>
             <div>
-                {availableNativeTools.map(tool => (
+                {availableNativeTools.map((tool) => (
                     <NativeToolContainer key={tool.id}>
                         <StyledCheckbox
                             type='checkbox'

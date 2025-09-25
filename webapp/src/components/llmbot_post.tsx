@@ -170,7 +170,7 @@ const MinimalExpandIcon = styled.div<{isExpanded: boolean}>`
 	width: 16px;
 	height: 16px;
 	transition: transform 0.2s ease;
-	transform: ${props => props.isExpanded ? 'rotate(180deg)' : 'rotate(0)'};
+	transform: ${(props) => (props.isExpanded ? 'rotate(180deg)' : 'rotate(0)')};
 
 	svg {
 		width: 14px;
@@ -179,10 +179,10 @@ const MinimalExpandIcon = styled.div<{isExpanded: boolean}>`
 `;
 
 const ReasoningContent = styled.div<{collapsed: boolean}>`
-	max-height: ${props => props.collapsed ? '0' : '600px'};
+	max-height: ${(props) => (props.collapsed ? '0' : '600px')};
 	overflow-y: auto;
 	transition: max-height 0.3s ease-in-out;
-	opacity: ${props => props.collapsed ? '0' : '1'};
+	opacity: ${(props) => (props.collapsed ? '0' : '1')};
 	transition: opacity 0.2s ease-in-out, max-height 0.3s ease-in-out;
 `;
 
@@ -238,6 +238,9 @@ export const LLMBotPost = (props: Props) => {
     const [stopped, setStopped] = useState(false);
     const stoppedRef = useRef(stopped);
     stoppedRef.current = stopped;
+
+    // Ref for the expanded reasoning header to scroll to
+    const expandedReasoningHeaderRef = useRef<HTMLDivElement>(null);
 
     // State for tool calls
     const [toolCalls, setToolCalls] = useState<ToolCall[]>([]);
@@ -322,7 +325,8 @@ export const LLMBotPost = (props: Props) => {
                     // Final reasoning text
                     setReasoningSummary(data.reasoning);
                     setIsReasoningLoading(false);
-                    setIsReasoningCollapsed(true);
+
+                    // Don't change collapsed state - preserve user's choice
                     return;
                 }
 
@@ -348,6 +352,7 @@ export const LLMBotPost = (props: Props) => {
                 } else if (data.control === 'start') {
                     setGenerating(true);
                     setStopped(false);
+
                     // Clear reasoning when starting new generation
                     setReasoningSummary('');
                     setShowReasoning(false);
@@ -374,6 +379,7 @@ export const LLMBotPost = (props: Props) => {
         setGenerating(true);
         setStopped(false);
         setMessage('');
+
         // Clear reasoning summary when regenerating
         setReasoningSummary('');
         setShowReasoning(false);
@@ -426,37 +432,51 @@ export const LLMBotPost = (props: Props) => {
                 {permalinkView}
             </>
             }
-            {showReasoning && isReasoningLoading && !reasoningSummary && (
-                <MinimalReasoningContainer>
-                    <LoadingSpinner/>
-                    <span>Thinking</span>
-                </MinimalReasoningContainer>
-            )}
-            {showReasoning && reasoningSummary && isReasoningCollapsed && (
-                <MinimalReasoningContainer onClick={() => setIsReasoningCollapsed(false)}>
+            {showReasoning && isReasoningCollapsed && (
+                <MinimalReasoningContainer
+                    onClick={() => {
+                        setIsReasoningCollapsed(false);
+
+                        // Small delay to allow the expansion to start before scrolling
+                        setTimeout(() => {
+                            if (expandedReasoningHeaderRef.current) {
+                                expandedReasoningHeaderRef.current.scrollIntoView({
+                                    behavior: 'smooth',
+                                    block: 'nearest',
+                                    inline: 'nearest',
+                                });
+                            }
+                        }, 50);
+                    }}
+                >
                     <MinimalExpandIcon isExpanded={false}>
                         <ChevronRightIcon/>
                     </MinimalExpandIcon>
-                    <span>Reasoning</span>
+                    {isReasoningLoading && <LoadingSpinner/>}
+                    <span>{'Thinking'}</span>
                 </MinimalReasoningContainer>
             )}
-            {showReasoning && reasoningSummary && !isReasoningCollapsed && (
+            {showReasoning && !isReasoningCollapsed && (
                 <>
                     <ExpandedReasoningHeader
+                        ref={expandedReasoningHeaderRef}
                         onClick={() => setIsReasoningCollapsed(true)}
                     >
                         <ExpandedChevron>
                             <ChevronRightIcon/>
                         </ExpandedChevron>
-                        <span>Reasoning</span>
+                        {isReasoningLoading && <LoadingSpinner/>}
+                        <span>{'Thinking'}</span>
                     </ExpandedReasoningHeader>
-                    <ExpandedReasoningContainer>
-                        <ReasoningContent collapsed={false}>
-                            <ReasoningText>
-                                {reasoningSummary}
-                            </ReasoningText>
-                        </ReasoningContent>
-                    </ExpandedReasoningContainer>
+                    {reasoningSummary && (
+                        <ExpandedReasoningContainer>
+                            <ReasoningContent collapsed={false}>
+                                <ReasoningText>
+                                    {reasoningSummary}
+                                </ReasoningText>
+                            </ReasoningContent>
+                        </ExpandedReasoningContainer>
+                    )}
                 </>
             )}
             <PostText
