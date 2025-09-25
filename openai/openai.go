@@ -479,7 +479,6 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 	responseParams := s.convertToResponseParams(params, llmContext)
 
 	// Debug: Log if reasoning is configured
-	fmt.Printf("[Responses API Debug] Model: %v, Reasoning configured: %+v\n", responseParams.Model, responseParams.Reasoning)
 
 	// Create a streaming request
 	stream := s.client.Responses.NewStreaming(ctx, responseParams)
@@ -549,7 +548,6 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 		watchdog <- struct{}{}
 
 		// Debug: Log all event types to see what's coming from the API
-		fmt.Printf("[Responses API Debug] Event type: %s\n", event.Type)
 
 		// Process event types
 
@@ -565,7 +563,6 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 			if event.Delta != "" {
 				// If we haven't sent the complete reasoning yet, send it now
 				if !reasoningComplete && reasoningSummaryBuffer.Len() > 0 {
-					fmt.Printf("[Responses API Debug] Sending complete reasoning before output text, total: %d chars\n", reasoningSummaryBuffer.Len())
 					output <- llm.TextStreamEvent{
 						Type:  llm.EventTypeReasoningEnd,
 						Value: reasoningSummaryBuffer.String(),
@@ -641,7 +638,6 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 			if event.Item.Type == "function_call" {
 				// If we haven't sent the complete reasoning yet and this is a tool call, send reasoning first
 				if !reasoningComplete && reasoningSummaryBuffer.Len() > 0 {
-					fmt.Printf("[Responses API Debug] Sending complete reasoning before tool calls, total: %d chars\n", reasoningSummaryBuffer.Len())
 					output <- llm.TextStreamEvent{
 						Type:  llm.EventTypeReasoningEnd,
 						Value: reasoningSummaryBuffer.String(),
@@ -666,7 +662,6 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 		case "response.reasoning_summary_text.delta":
 			// Reasoning summary text delta
 			if event.Delta != "" {
-				fmt.Printf("[Responses API Debug] Reasoning summary delta: %s\n", event.Delta)
 				reasoningSummaryBuffer.WriteString(event.Delta)
 				// Send reasoning summary chunks as they arrive
 				output <- llm.TextStreamEvent{
@@ -677,17 +672,13 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 
 		case "response.reasoning_summary_part.added":
 			// A new reasoning part is starting
-			fmt.Printf("[Responses API Debug] Reasoning part added\n")
-			// Just log this for now, we continue accumulating
 
 		case "response.reasoning_summary_text.done":
 			// A reasoning part's text is complete, but there may be more parts
-			fmt.Printf("[Responses API Debug] Reasoning part text done, current total: %d chars\n", reasoningSummaryBuffer.Len())
 			// Don't send EventTypeReasoningEnd yet - there may be more parts
 
 		case "response.reasoning_summary_part.done":
 			// A reasoning part is done, but there may be more parts
-			fmt.Printf("[Responses API Debug] Reasoning part done\n")
 			// Continue accumulating, don't send end event yet
 
 		case "response.output_text.done":
@@ -704,7 +695,6 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 
 			// If we still have unsent reasoning (edge case: no output text), send it now
 			if !reasoningComplete && reasoningSummaryBuffer.Len() > 0 {
-				fmt.Printf("[Responses API Debug] Sending complete reasoning at response completion, total: %d chars\n", reasoningSummaryBuffer.Len())
 				output <- llm.TextStreamEvent{
 					Type:  llm.EventTypeReasoningEnd,
 					Value: reasoningSummaryBuffer.String(),
@@ -742,7 +732,6 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 		default:
 			// Log unhandled event types for debugging
 			if event.Type != "" {
-				fmt.Printf("[Responses API Debug] Unhandled event type: %s\n", event.Type)
 			}
 		}
 	}
@@ -796,7 +785,7 @@ func (s *OpenAI) convertToResponseParams(params openai.ChatCompletionNewParams, 
 	result.Reasoning = shared.ReasoningParam{
 		// Set effort level for reasoning
 		// Can be "minimal", "low", "medium", or "high"
-		Effort: shared.ReasoningEffortHigh,
+		Effort: shared.ReasoningEffortMedium,
 		// Request a detailed summary of the reasoning
 		// Can be "auto", "concise", or "detailed"
 		Summary: shared.ReasoningSummaryAuto,
@@ -926,6 +915,7 @@ func (s *OpenAI) convertToResponseParams(params openai.ChatCompletionNewParams, 
 
 	// Note: Tool choice and response format conversions are omitted for simplicity
 	// These would require more complex mapping between the two API formats
+	// For now, tool choice is defaulted to "auto" (as it was with completions) and response format is not enforcing a json mode, which was also the case with completions.
 
 	return result
 }
