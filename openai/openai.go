@@ -492,7 +492,6 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 
 	// Define handleToolCalls as a closure to access local variables
 	handleToolCalls := func() {
-
 		// Verify OpenAI functions are not recursing too deep.
 		numFunctionCalls := 0
 		for i := len(params.Messages) - 1; i >= 0; i-- {
@@ -699,7 +698,6 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 					Type:  llm.EventTypeReasoningEnd,
 					Value: reasoningSummaryBuffer.String(),
 				}
-				reasoningComplete = true
 			}
 
 			// Check if we have tool calls to emit
@@ -730,9 +728,7 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 			return
 
 		default:
-			// Log unhandled event types for debugging
-			if event.Type != "" {
-			}
+			// Unhandled event types are ignored
 		}
 	}
 
@@ -798,13 +794,14 @@ func (s *OpenAI) convertToResponseParams(params openai.ChatCompletionNewParams, 
 
 	// Process messages and convert to input format
 	for _, msg := range params.Messages {
-		if msg.OfSystem != nil {
+		switch {
+		case msg.OfSystem != nil:
 			// Extract system message for instructions
 			// System content is a union - check if it has a string value
 			if msg.OfSystem.Content.OfString.Valid() {
 				systemInstructions = msg.OfSystem.Content.OfString.Value
 			}
-		} else if msg.OfUser != nil {
+		case msg.OfUser != nil:
 			// Add user messages to input
 			if inputBuilder.Len() > 0 {
 				inputBuilder.WriteString("\n\nUser: ")
@@ -816,7 +813,7 @@ func (s *OpenAI) convertToResponseParams(params openai.ChatCompletionNewParams, 
 				inputBuilder.WriteString(msg.OfUser.Content.OfString.Value)
 			}
 			// Note: Array content handling would require more complex conversion
-		} else if msg.OfAssistant != nil {
+		case msg.OfAssistant != nil:
 			// Add assistant messages to input
 			if inputBuilder.Len() > 0 {
 				inputBuilder.WriteString("\n\nAssistant: ")
@@ -827,7 +824,7 @@ func (s *OpenAI) convertToResponseParams(params openai.ChatCompletionNewParams, 
 			if msg.OfAssistant.Content.OfString.Valid() {
 				inputBuilder.WriteString(msg.OfAssistant.Content.OfString.Value)
 			}
-		} else if msg.OfTool != nil {
+		case msg.OfTool != nil:
 			// Add tool results to input
 			if inputBuilder.Len() > 0 {
 				inputBuilder.WriteString("\n\nTool Result: ")
@@ -884,8 +881,7 @@ func (s *OpenAI) convertToResponseParams(params openai.ChatCompletionNewParams, 
 	// Add native tools if enabled
 	if len(s.config.EnabledNativeTools) > 0 {
 		for _, nativeTool := range s.config.EnabledNativeTools {
-			switch nativeTool {
-			case "web_search":
+			if nativeTool == "web_search" {
 				// Add web search as a built-in tool
 				webSearchTool := responses.WebSearchToolParam{
 					Type: responses.WebSearchToolTypeWebSearchPreview,
@@ -893,19 +889,19 @@ func (s *OpenAI) convertToResponseParams(params openai.ChatCompletionNewParams, 
 				tools = append(tools, responses.ToolUnionParam{
 					OfWebSearchPreview: &webSearchTool,
 				})
-
-				// Future native tools can be added here
-				// case "file_search":
-				//     fileSearchTool := responses.FileSearchToolParam{...}
-				//     tools = append(tools, responses.ToolUnionParam{
-				//         OfFileSearch: &fileSearchTool,
-				//     })
-				// case "code_interpreter":
-				//     codeInterpreterTool := responses.ToolCodeInterpreterParam{...}
-				//     tools = append(tools, responses.ToolUnionParam{
-				//         OfCodeInterpreter: &codeInterpreterTool,
-				//     })
 			}
+			// Future native tools can be added here
+			// else if nativeTool == "file_search" {
+			//     fileSearchTool := responses.FileSearchToolParam{...}
+			//     tools = append(tools, responses.ToolUnionParam{
+			//         OfFileSearch: &fileSearchTool,
+			//     })
+			// } else if nativeTool == "code_interpreter" {
+			//     codeInterpreterTool := responses.ToolCodeInterpreterParam{...}
+			//     tools = append(tools, responses.ToolUnionParam{
+			//         OfCodeInterpreter: &codeInterpreterTool,
+			//     })
+			// }
 		}
 	}
 
