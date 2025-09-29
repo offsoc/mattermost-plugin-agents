@@ -229,16 +229,20 @@ const Horizontal = styled.div`
 type NativeToolsItemProps = {
     enabledTools: string[]
     onChange: (tools: string[]) => void
+    provider?: 'openai' | 'anthropic'
 }
 
 const NativeToolsItem = (props: NativeToolsItemProps) => {
     const intl = useIntl();
+    const provider = props.provider || 'openai';
 
     const availableNativeTools = [
         {
             id: 'web_search',
             label: intl.formatMessage({defaultMessage: 'Web Search'}),
-            helpText: intl.formatMessage({defaultMessage: 'Enable OpenAI\'s built-in web search capability'}),
+            helpText: provider === 'anthropic' ?
+                intl.formatMessage({defaultMessage: 'Enable Claude\'s built-in web search capability'}) :
+                intl.formatMessage({defaultMessage: 'Enable OpenAI\'s built-in web search capability'}),
         },
 
     ];
@@ -252,11 +256,15 @@ const NativeToolsItem = (props: NativeToolsItemProps) => {
         }
     };
 
+    const titleMessage = provider === 'anthropic' ?
+        intl.formatMessage({defaultMessage: 'Native Claude Tools'}) :
+        intl.formatMessage({defaultMessage: 'Native OpenAI Tools'});
+
     return (
         <>
             <ItemLabel>
                 <Horizontal>
-                    <FormattedMessage defaultMessage='Native OpenAI Tools'/>
+                    {titleMessage}
                     <Pill><FormattedMessage defaultMessage='EXPERIMENTAL'/></Pill>
                 </Horizontal>
             </ItemLabel>
@@ -341,11 +349,19 @@ const ServiceItem = (props: ServiceItemProps) => {
                                 <NativeToolsItem
                                     enabledTools={props.service.enabledNativeTools || []}
                                     onChange={(tools: string[]) => props.onChange({...props.service, enabledNativeTools: tools})}
+                                    provider='openai'
                                 />
                             )}
                         </>
                     )}
                 </>
+            )}
+            {type === 'anthropic' && (
+                <NativeToolsItem
+                    enabledTools={props.service.enabledNativeTools || []}
+                    onChange={(tools: string[]) => props.onChange({...props.service, enabledNativeTools: tools})}
+                    provider='anthropic'
+                />
             )}
             <TextItem
                 label={intl.formatMessage({defaultMessage: 'Default model'})}
