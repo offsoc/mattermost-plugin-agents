@@ -20,6 +20,7 @@ import {PostMessagePreview} from '@/mm_webapp';
 import {SearchSources} from './search_sources';
 
 import PostText from './post_text';
+import {Annotation} from './citations/types';
 import IconRegenerate from './assets/icon_regenerate';
 import IconCancel from './assets/icon_cancel';
 import ToolApprovalSet from './tool_approval_set';
@@ -201,6 +202,7 @@ export interface PostUpdateWebsocketMessage {
     control?: string
     tool_call?: string
     reasoning?: string
+    annotations?: string
 }
 
 export enum ToolCallStatus {
@@ -254,6 +256,20 @@ export const LLMBotPost = (props: Props) => {
     const [isReasoningCollapsed, setIsReasoningCollapsed] = useState(true);
     const [isReasoningLoading, setIsReasoningLoading] = useState(false);
 
+    // State for annotations/citations
+    // Initialize from persisted annotations if available
+    const persistedAnnotations = props.post.props?.annotations || '';
+    const [annotations, setAnnotations] = useState<Annotation[]>(() => {
+        if (persistedAnnotations) {
+            try {
+                return JSON.parse(persistedAnnotations);
+            } catch (error) {
+                return [];
+            }
+        }
+        return [];
+    });
+
     const currentUserId = useSelector<GlobalState, string>((state) => state.entities.users.currentUserId);
     const rootPost = useSelector<GlobalState, any>((state) => state.entities.posts.posts[props.post.root_id]);
 
@@ -277,9 +293,22 @@ export const LLMBotPost = (props: Props) => {
                 setIsReasoningCollapsed(true);
                 setIsReasoningLoading(false);
             }
+
+            // Initialize annotations from persisted data
+            const persistedAnnotations = props.post.props?.annotations || '';
+            if (persistedAnnotations) {
+                try {
+                    setAnnotations(JSON.parse(persistedAnnotations));
+                } catch (error) {
+                    setAnnotations([]);
+                }
+            } else {
+                setAnnotations([]);
+            }
+
             previousPostIdRef.current = props.post.id;
         }
-    }, [props.post.id, props.post.props?.reasoning_summary]);
+    }, [props.post.id, props.post.props?.reasoning_summary, props.post.props?.annotations]);
 
     // Update tool calls from props when available
     useEffect(() => {
@@ -338,6 +367,18 @@ export const LLMBotPost = (props: Props) => {
                     } catch (error) {
                         // Handle error silently
                         setError('Error parsing tool call data');
+                    }
+                    return;
+                }
+
+                // Handle annotation events from the websocket
+                if (data.control === 'annotations' && data.annotations) {
+                    try {
+                        const parsedAnnotations = JSON.parse(data.annotations);
+                        setAnnotations(parsedAnnotations);
+                    } catch (error) {
+                        // Handle error silently
+                        setError('Error parsing annotation data');
                     }
                     return;
                 }
@@ -484,6 +525,7 @@ export const LLMBotPost = (props: Props) => {
                 channelID={props.post.channel_id}
                 postID={props.post.id}
                 showCursor={generating}
+                annotations={annotations.length > 0 ? annotations : undefined}
             />
             {props.post.props?.[SearchResultsPropKey] && (
                 <SearchSources

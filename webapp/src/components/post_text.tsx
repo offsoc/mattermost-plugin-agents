@@ -9,6 +9,9 @@ import {GlobalState} from '@mattermost/types/store';
 import {Channel} from '@mattermost/types/channels';
 import {Team} from '@mattermost/types/teams';
 
+import {insertAnnotationMarkers, replaceCitationMarkers} from './citations/citation_processor';
+import {Annotation} from './citations/types';
+
 export type ChannelNamesMap = {
     [name: string]: {
         display_name: string;
@@ -21,6 +24,7 @@ interface Props {
     channelID: string;
     postID: string;
     showCursor?: boolean;
+    annotations?: Annotation[];
 }
 
 const blinkKeyframes = keyframes`
@@ -82,8 +86,14 @@ const PostText = (props: Props) => {
         postId: props.postID,
     };
 
+    // Process message with annotations if they exist
+    let processedMessage = props.message;
+    if (props.annotations && props.annotations.length > 0) {
+        processedMessage = insertAnnotationMarkers(props.message, props.annotations);
+    }
+
     const text = messageHtmlToComponent(
-        formatText(props.message, markdownOptions),
+        formatText(processedMessage, markdownOptions),
         messageHtmlToComponentOptions,
     );
 
@@ -91,14 +101,20 @@ const PostText = (props: Props) => {
         return <TextContainer showCursor={props.showCursor}>{<p/>}</TextContainer>;
     }
 
+    // Post-process the rendered JSX to replace citation markers with React components
+    const processedText = props.annotations && props.annotations.length > 0 ?
+        replaceCitationMarkers(text, props.annotations) :
+        text;
+
     return (
         <TextContainer
             data-testid='posttext'
             showCursor={props.showCursor}
         >
-            {text}
+            {processedText}
         </TextContainer>
     );
 };
+
 
 export default PostText;

@@ -22,6 +22,7 @@ const PostStreamingControlStart = "start"
 
 const ToolCallProp = "pending_tool_call"
 const ReasoningSummaryProp = "reasoning_summary"
+const AnnotationsProp = "annotations"
 
 type Service interface {
 	StreamToNewPost(ctx context.Context, botID string, requesterUserID string, stream *llm.TextStreamResult, post *model.Post, respondingToPostID string) error
@@ -160,6 +161,16 @@ func (p *MMPostStreamService) sendPostStreamingReasoningEvent(post *model.Post, 
 		"post_id":   post.Id,
 		"control":   control,
 		"reasoning": reasoning,
+	}, &model.WebsocketBroadcast{
+		ChannelId: post.ChannelId,
+	})
+}
+
+func (p *MMPostStreamService) sendPostStreamingAnnotationsEvent(post *model.Post, annotations string) {
+	p.mmClient.PublishWebSocketEvent("postupdate", map[string]interface{}{
+		"post_id":     post.Id,
+		"control":     "annotations",
+		"annotations": annotations,
 	}, &model.WebsocketBroadcast{
 		ChannelId: post.ChannelId,
 	})
@@ -315,6 +326,21 @@ func (p *MMPostStreamService) StreamToPost(ctx context.Context, stream *llm.Text
 					})
 				}
 				return
+			case llm.EventTypeAnnotations:
+				// Handle annotations/citations event
+				if annotations, ok := event.Value.([]llm.Annotation); ok {
+					// Persist annotations to post props
+					annotationsJSON, err := json.Marshal(annotations)
+					if err != nil {
+						p.mmClient.LogError("Failed to marshal annotations", "error", err)
+					} else {
+						post.AddProp(AnnotationsProp, string(annotationsJSON))
+						p.mmClient.LogDebug("Added annotations to post props", "post_id", post.Id, "count", len(annotations))
+
+						// Send websocket event with annotation data
+						p.sendPostStreamingAnnotationsEvent(post, string(annotationsJSON))
+					}
+				}
 			}
 		case <-ctx.Done():
 			if err := p.mmClient.UpdatePost(post); err != nil {

@@ -490,6 +490,10 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 	var reasoningSummaryBuffer strings.Builder
 	var reasoningComplete bool // Track if we've sent the complete reasoning
 
+	// Track annotations/citations
+	var annotations []llm.Annotation
+	var textLength int // Track accumulated text length for annotation positions
+
 	// Define handleToolCalls as a closure to access local variables
 	handleToolCalls := func() {
 		// Verify OpenAI functions are not recursing too deep.
@@ -572,12 +576,31 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 					Type:  llm.EventTypeText,
 					Value: event.Delta,
 				}
+				// Track text length for annotation positioning
+				textLength += len(event.Delta)
 			}
 
-		case "response.content_part.added", "response.content_part.done":
-			// Content parts might contain text
-			// The Part field is a union, so we need to check its type
-			// For now, we'll skip this as it's not critical for basic text streaming
+		case "response.content_part.added":
+			// Content part started - nothing to do yet
+
+		case "response.content_part.done":
+			// Content part completed - extract annotations if present
+			if event.Part.Type == "output_text" && len(event.Part.Annotations) > 0 {
+				// Extract URL citations from the completed content part
+				for _, ann := range event.Part.Annotations {
+					if ann.Type == "url_citation" {
+						// OpenAI provides StartIndex and EndIndex directly
+						annotations = append(annotations, llm.Annotation{
+							Type:       llm.AnnotationTypeURLCitation,
+							StartIndex: int(ann.StartIndex),
+							EndIndex:   int(ann.EndIndex),
+							URL:        ann.URL,
+							Title:      ann.Title,
+							Index:      len(annotations) + 1, // 1-based index for display
+						})
+					}
+				}
+			}
 
 		case "response.function_call_arguments.delta":
 			// Function call arguments delta - arguments are in the Delta field
@@ -697,6 +720,14 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 				output <- llm.TextStreamEvent{
 					Type:  llm.EventTypeReasoningEnd,
 					Value: reasoningSummaryBuffer.String(),
+				}
+			}
+
+			// Emit annotations if we have any
+			if len(annotations) > 0 {
+				output <- llm.TextStreamEvent{
+					Type:  llm.EventTypeAnnotations,
+					Value: annotations,
 				}
 			}
 
