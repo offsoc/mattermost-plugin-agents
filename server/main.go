@@ -48,6 +48,7 @@ type Plugin struct {
 	indexerService       *indexer.Indexer
 	conversationsService *conversations.Conversations
 	mcpClientManager     *mcp.ClientManager
+	embeddedMCPServer    mcp.EmbeddedMCPServer
 }
 
 func (p *Plugin) OnActivate() error {
@@ -139,7 +140,19 @@ func (p *Plugin) OnActivate() error {
 	manifestID := manifest.Id
 	oauthCallbackURL := fmt.Sprintf("%s/plugins/%s/oauth/callback", *siteURL, manifestID)
 
-	mcpClientManager := mcp.NewClientManager(p.configuration.MCP(), pluginAPI.Log, pluginAPI, mcp.NewOAuthManager(mmClient, oauthCallbackURL))
+	// Create embedded MCP server if enabled
+	if p.configuration.MCP().EmbeddedServer.Enabled {
+		var err error
+		p.embeddedMCPServer, err = NewEmbeddedMCPServer(pluginAPI, pluginAPI.Log)
+		if err != nil {
+			pluginAPI.Log.Error("Failed to create embedded MCP server", "error", err)
+			// Continue without embedded server
+		} else {
+			pluginAPI.Log.Info("Embedded MCP server created successfully")
+		}
+	}
+
+	mcpClientManager := mcp.NewClientManager(p.configuration.MCP(), pluginAPI.Log, pluginAPI, mcp.NewOAuthManager(mmClient, oauthCallbackURL), p.embeddedMCPServer)
 	p.configuration.RegisterUpdateListener(func() {
 		mcpClientManager.ReInit(p.configuration.MCP())
 	})
@@ -210,7 +223,17 @@ func (p *Plugin) OnActivate() error {
 
 func (p *Plugin) OnDeactivate() error {
 	// Clean up MCP client manager if it exists
-	p.mcpClientManager.Close()
+	if p.mcpClientManager != nil {
+		p.mcpClientManager.Close()
+	}
+
+	// Close embedded MCP server if it exists
+	if p.embeddedMCPServer != nil {
+		if err := p.embeddedMCPServer.Close(); err != nil {
+			p.pluginAPI.Log.Error("Error closing embedded MCP server", "error", err)
+		}
+	}
+
 	return nil
 }
 

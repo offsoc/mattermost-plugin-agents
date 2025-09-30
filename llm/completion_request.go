@@ -4,7 +4,6 @@
 package llm
 
 import (
-	"fmt"
 	"io"
 	"slices"
 	"strings"
@@ -90,7 +89,7 @@ func (b CompletionRequest) String() string {
 		result.WriteString(post.Message)
 	}
 	result.WriteString("\n--- Context ---\n")
-	result.WriteString(fmt.Sprintf("%+v\n", b.Context))
+	result.WriteString(b.Context.String())
 
 	return result.String()
 }

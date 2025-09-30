@@ -142,19 +142,49 @@ func (a *API) handleGetMCPTools(c *gin.Context) {
 
 	mcpConfig := a.config.MCP()
 
-	// If MCP is not enabled or no servers configured, return empty response
-	if !mcpConfig.Enabled || len(mcpConfig.Servers) == 0 {
+	// If MCP is not enabled, return empty response
+	if !mcpConfig.Enabled {
 		c.JSON(http.StatusOK, MCPToolsResponse{
 			Servers: []MCPServerInfo{},
 		})
 		return
 	}
 
-	response := MCPToolsResponse{
-		Servers: make([]MCPServerInfo, 0, len(mcpConfig.Servers)),
+	// Calculate total capacity (remote servers + embedded server if enabled)
+	totalCapacity := len(mcpConfig.Servers)
+	if mcpConfig.EmbeddedServer.Enabled {
+		totalCapacity++
 	}
 
-	// Discover tools from each configured server
+	response := MCPToolsResponse{
+		Servers: make([]MCPServerInfo, 0, totalCapacity),
+	}
+
+	// Discover tools from embedded server if enabled
+	if mcpConfig.EmbeddedServer.Enabled {
+		embeddedServer := a.mcpClientManager.GetEmbeddedServer()
+		if embeddedServer != nil {
+			serverInfo := MCPServerInfo{
+				Name:  "Mattermost",
+				URL:   "embedded://mattermost",
+				Tools: []MCPToolInfo{},
+				Error: nil,
+			}
+
+			// Try to discover tools from embedded server
+			tools, err := a.discoverEmbeddedServerTools(c.Request.Context(), userID, mcpConfig.EmbeddedServer, embeddedServer)
+			if err != nil {
+				errMsg := err.Error()
+				serverInfo.Error = &errMsg
+			} else {
+				serverInfo.Tools = tools
+			}
+
+			response.Servers = append(response.Servers, serverInfo)
+		}
+	}
+
+	// Discover tools from each configured remote server
 	for _, serverConfig := range mcpConfig.Servers {
 		if !serverConfig.Enabled {
 			continue
@@ -190,6 +220,26 @@ func (a *API) handleGetMCPTools(c *gin.Context) {
 // discoverServerTools connects to a single MCP server and discovers its tools
 func (a *API) discoverServerTools(ctx context.Context, requestingAdminID string, serverConfig mcp.ServerConfig) ([]MCPToolInfo, error) {
 	toolInfos, err := mcp.DiscoverServerTools(ctx, requestingAdminID, serverConfig, a.pluginAPI.Log, a.mcpClientManager.GetOAuthManager())
+	if err != nil {
+		return nil, err
+	}
+
+	tools := make([]MCPToolInfo, 0, len(toolInfos))
+	for _, toolInfo := range toolInfos {
+		tools = append(tools, MCPToolInfo{
+			Name:        toolInfo.Name,
+			Description: toolInfo.Description,
+			InputSchema: toolInfo.InputSchema,
+		})
+	}
+
+	return tools, nil
+}
+
+// discoverEmbeddedServerTools connects to the embedded MCP server and discovers its tools
+func (a *API) discoverEmbeddedServerTools(ctx context.Context, requestingAdminID string, embeddedConfig mcp.EmbeddedServerConfig, embeddedServer mcp.EmbeddedMCPServer) ([]MCPToolInfo, error) {
+	// For discovery, use empty auth token - tool listing doesn't require authentication
+	toolInfos, err := mcp.DiscoverEmbeddedServerTools(ctx, requestingAdminID, "", embeddedConfig, embeddedServer, a.pluginAPI.Log)
 	if err != nil {
 		return nil, err
 	}

@@ -44,6 +44,7 @@ type Config interface {
 type MCPClientManager interface {
 	GetOAuthManager() *mcp.OAuthManager
 	ProcessOAuthCallback(ctx context.Context, loggedInUserID, state, code string) (*mcp.OAuthSession, error)
+	GetEmbeddedServer() mcp.EmbeddedMCPServer
 }
 
 // API represents the HTTP API functionality for the plugin

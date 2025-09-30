@@ -21,7 +21,7 @@ type ToolInfo struct {
 
 // UserClients represents a per-user MCP client with multiple server connections
 type UserClients struct {
-	clients      map[string]*Client
+	clients      map[string]*Client // serverID -> client (both remote and embedded)
 	userID       string
 	log          pluginapi.LogService
 	oauthManager *OAuthManager
@@ -36,16 +36,16 @@ func NewUserClients(userID string, log pluginapi.LogService, oauthManager *OAuth
 	}
 }
 
-// ConnectToAllServers initializes connections to all provided servers
-func (c *UserClients) ConnectToAllServers(servers []ServerConfig) *Errors {
+// ConnectToRemoteServers initializes connections to remote MCP servers
+func (c *UserClients) ConnectToRemoteServers(servers []ServerConfig) *Errors {
 	if len(servers) == 0 {
-		c.log.Debug("No MCP servers provided for user", "userID", c.userID)
+		c.log.Debug("No remote MCP servers provided for user", "userID", c.userID)
 		return nil
 	}
 
 	var mcpErrors *Errors
 
-	// Initialize clients for each server
+	// Connect to remote servers
 	for _, serverConfig := range servers {
 		if serverConfig.BaseURL == "" {
 			c.log.Warn("Skipping MCP server with empty BaseURL", "serverID", serverConfig.Name)
@@ -77,6 +77,29 @@ func (c *UserClients) ConnectToAllServers(servers []ServerConfig) *Errors {
 	return mcpErrors
 }
 
+// ConnectToEmbeddedServerIfAvailable connects to the embedded server if session token is provided
+func (c *UserClients) ConnectToEmbeddedServerIfAvailable(sessionToken string, embeddedConnector *EmbeddedServerConnector, embeddedConfig EmbeddedServerConfig) error {
+	if !embeddedConfig.Enabled || embeddedConnector == nil {
+		return nil
+	}
+
+	// Check if we already have an embedded server connection
+	if _, exists := c.clients[EmbeddedServerName]; exists {
+		return nil // Already connected
+	}
+
+	// Connect if session token is provided
+	if sessionToken != "" {
+		if err := c.connectToEmbeddedServerWithConnector(context.Background(), c.userID, sessionToken, embeddedConnector); err != nil {
+			c.log.Error("Failed to connect to embedded MCP server", "userID", c.userID, "error", err)
+			return fmt.Errorf("failed to connect to embedded server: %w", err)
+		}
+		c.log.Debug("Successfully connected to embedded MCP server", "userID", c.userID)
+	}
+
+	return nil
+}
+
 // connectToServer establishes a connection to a single server
 func (c *UserClients) connectToServer(ctx context.Context, serverID string, serverConfig ServerConfig) error {
 	serverClient, err := NewClient(ctx, c.userID, serverConfig, c.log, c.oauthManager)
@@ -87,13 +110,20 @@ func (c *UserClients) connectToServer(ctx context.Context, serverID string, serv
 	return nil
 }
 
+// connectToEmbeddedServerWithConnector establishes a connection to the embedded server using the connector
+func (c *UserClients) connectToEmbeddedServerWithConnector(ctx context.Context, userID, sessionToken string, connector *EmbeddedServerConnector) error {
+	// Use connector to create client - all complexity is encapsulated in the connector
+	serverClient, err := connector.CreateClient(ctx, userID, sessionToken)
+	if err != nil {
+		return err
+	}
+	c.clients[EmbeddedServerName] = serverClient
+	return nil
+}
+
 // Close closes all server connections for a user client
 func (c *UserClients) Close() {
-	if len(c.clients) == 0 {
-		return
-	}
-
-	// Close all MCP server clients
+	// Close all MCP server clients (both remote and embedded)
 	for serverID, client := range c.clients {
 		if err := client.Close(); err != nil {
 			c.log.Error("Failed to close MCP client", "userID", c.userID, "serverID", serverID, "error", err)

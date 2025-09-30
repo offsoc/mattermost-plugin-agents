@@ -18,6 +18,7 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/mattermost/mattermost-plugin-ai/llm"
 	"github.com/mattermost/mattermost/server/public/pluginapi"
@@ -29,11 +30,19 @@ type Errors struct {
 	Errors         []error             // Generic errors (connection, config, etc.)
 }
 
+// EmbeddedServerConfig contains configuration for the embedded MCP server
+type EmbeddedServerConfig struct {
+	Enabled bool `json:"enabled"`
+
+	// Future configuration options can be added here
+}
+
 // Config contains the configuration for the MCP  servers
 type Config struct {
-	Enabled            bool           `json:"enabled"`
-	Servers            []ServerConfig `json:"servers"`
-	IdleTimeoutMinutes int            `json:"idleTimeoutMinutes"`
+	Enabled            bool                 `json:"enabled"`
+	Servers            []ServerConfig       `json:"servers"`
+	EmbeddedServer     EmbeddedServerConfig `json:"embeddedServer"`
+	IdleTimeoutMinutes int                  `json:"idleTimeoutMinutes"`
 }
 
 // DiscoverServerTools creates a temporary connection to an MCP server and discovers its tools
@@ -44,8 +53,52 @@ func DiscoverServerTools(
 	log pluginapi.LogService,
 	oauthManger *OAuthManager,
 ) ([]ToolInfo, error) {
-	// Create and connect to the server
+	// Create and connect to the server (no embedded server for tool discovery)
 	client, err := NewClient(ctx, userID, serverConfig, log, oauthManger)
+	if err != nil {
+		return nil, err
+	}
+	defer client.Close()
+
+	serverTools := client.Tools()
+	tools := make([]ToolInfo, 0, len(serverTools))
+	for _, tool := range serverTools {
+		var inputSchema map[string]interface{}
+		if tool.InputSchema.Properties != nil {
+			inputSchema = map[string]interface{}{
+				"type":       tool.InputSchema.Type,
+				"properties": tool.InputSchema.Properties,
+				"required":   tool.InputSchema.Required,
+			}
+		}
+
+		tools = append(tools, ToolInfo{
+			Name:        tool.Name,
+			Description: tool.Description,
+			InputSchema: inputSchema,
+		})
+	}
+
+	return tools, nil
+}
+
+// DiscoverEmbeddedServerTools creates a temporary connection to an embedded MCP server and discovers its tools
+func DiscoverEmbeddedServerTools(
+	ctx context.Context,
+	userID string,
+	authToken string,
+	embeddedServerConfig EmbeddedServerConfig,
+	embeddedServer EmbeddedMCPServer,
+	log pluginapi.LogService,
+) ([]ToolInfo, error) {
+	if !embeddedServerConfig.Enabled {
+		return nil, fmt.Errorf("embedded server is not enabled")
+	}
+
+	// Create connector and connect to the embedded server
+	connector := NewEmbeddedServerConnector(embeddedServer, log)
+
+	client, err := connector.CreateClient(ctx, userID, authToken)
 	if err != nil {
 		return nil, err
 	}

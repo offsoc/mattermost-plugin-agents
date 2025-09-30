@@ -57,6 +57,10 @@ func (m *mockMCPClientManager) ProcessOAuthCallback(ctx context.Context, loggedI
 	return nil, nil
 }
 
+func (m *mockMCPClientManager) GetEmbeddedServer() mcp.EmbeddedMCPServer {
+	return nil
+}
+
 func (e *TestEnvironment) Cleanup(t *testing.T) {
 	if e.mockAPI != nil {
 		e.mockAPI.AssertExpectations(t)

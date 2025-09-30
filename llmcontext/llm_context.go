@@ -4,6 +4,7 @@
 package llmcontext
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/mattermost/mattermost-plugin-ai/bots"
@@ -21,6 +22,7 @@ type ToolProvider interface {
 // MCPToolProvider provides MCP tools for a user
 type MCPToolProvider interface {
 	GetToolsForUser(userID string) ([]llm.Tool, *mcp.Errors)
+	ConnectToEmbeddedServerForUser(userID, sessionToken string) error
 }
 
 // ConfigProvider provides configuration access
@@ -107,7 +109,28 @@ func (b *Builder) WithLLMContextRequestingUser(user *model.User) llm.ContextOpti
 	}
 }
 
+// WithLLMContextSessionID adds session information to the LLM context using session ID
+func (b *Builder) WithLLMContextSessionID(sessionID string) llm.ContextOption {
+	return func(c *llm.Context) {
+		if sessionID != "" {
+			c.SessionID = sessionID
+			// Create a resolver that fetches the token only when needed
+			c.SessionResolver = func() (string, error) {
+				session, err := b.pluginAPI.Session.Get(sessionID)
+				if err != nil {
+					return "", fmt.Errorf("failed to get session token: %w", err)
+				}
+				if session == nil {
+					return "", fmt.Errorf("session not found")
+				}
+				return session.Token, nil
+			}
+		}
+	}
+}
+
 // getToolsStoreForUser returns a tool store for a specific user, including MCP tools
+// Session information is extracted from the llm.Context
 func (b *Builder) getToolsStoreForUser(c *llm.Context, bot *bots.Bot, isDM bool, userID string) *llm.ToolStore {
 	// Check for nil bot, which is unexpected
 	if bot == nil {
@@ -134,6 +157,18 @@ func (b *Builder) getToolsStoreForUser(c *llm.Context, bot *bots.Bot, isDM bool,
 
 	// Add MCP tools if available, enabled, and in a DM
 	if b.mcpToolProvider != nil && isDM {
+		// Try to connect to embedded server if session token available
+		if c.SessionResolver != nil {
+			if sessionToken, err := c.SessionResolver(); err == nil && sessionToken != "" {
+				if connErr := b.mcpToolProvider.ConnectToEmbeddedServerForUser(userID, sessionToken); connErr != nil {
+					b.pluginAPI.Log.Debug("Failed to connect to embedded MCP server", "userID", userID, "error", connErr)
+				}
+			} else if err != nil {
+				b.pluginAPI.Log.Warn("Failed to resolve session token for MCP tools", "error", err)
+			}
+		}
+
+		// Get tools from all connected servers (remote + embedded if connected)
 		mcpTools, mcpErrors := b.mcpToolProvider.GetToolsForUser(userID)
 
 		// Add tools from successfully connected servers even if some had errors
@@ -152,16 +187,27 @@ func (b *Builder) getToolsStoreForUser(c *llm.Context, bot *bots.Bot, isDM bool,
 	return store
 }
 
-// WithLLMContextDefaultTools adds default tools to the LLM context for the requesting user
-func (b *Builder) WithLLMContextDefaultTools(bot *bots.Bot, isDM bool) llm.ContextOption {
+// WithLLMContextTools adds tools to the LLM context, using session ID for embedded server authentication
+func (b *Builder) WithLLMContextTools(bot *bots.Bot, isDM bool, sessionID string) llm.ContextOption {
 	return func(c *llm.Context) {
 		if c.RequestingUser == nil {
 			b.pluginAPI.Log.Error("Cannot add tools to context: RequestingUser is nil")
 			return
 		}
 
+		// Add session information to the context first
+		if sessionID != "" {
+			b.WithLLMContextSessionID(sessionID)(c)
+		}
+
+		// Get tools using session info from llm.Context
 		c.Tools = b.getToolsStoreForUser(c, bot, isDM, c.RequestingUser.Id)
 	}
+}
+
+// WithLLMContextDefaultTools adds default tools to the LLM context for the requesting user
+func (b *Builder) WithLLMContextDefaultTools(bot *bots.Bot, isDM bool) llm.ContextOption {
+	return b.WithLLMContextTools(bot, isDM, "")
 }
 
 // WithLLMContextNoTools explicitly disables tools for this context session only,
