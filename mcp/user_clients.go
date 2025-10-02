@@ -78,8 +78,8 @@ func (c *UserClients) ConnectToRemoteServers(servers []ServerConfig) *Errors {
 	return mcpErrors
 }
 
-// ConnectToEmbeddedServerIfAvailable connects to the embedded server if session token is provided
-func (c *UserClients) ConnectToEmbeddedServerIfAvailable(sessionToken string, embeddedClient *EmbeddedServerClient, embeddedConfig EmbeddedServerConfig) error {
+// ConnectToEmbeddedServerIfAvailable connects to the embedded server if session ID is provided
+func (c *UserClients) ConnectToEmbeddedServerIfAvailable(sessionID string, embeddedClient *EmbeddedServerClient, embeddedConfig EmbeddedServerConfig) error {
 	if !embeddedConfig.Enabled || embeddedClient == nil {
 		return nil
 	}
@@ -89,11 +89,11 @@ func (c *UserClients) ConnectToEmbeddedServerIfAvailable(sessionToken string, em
 		return nil // Already connected
 	}
 
-	// Connect if session token is provided
-	if sessionToken != "" {
+	// Connect if session ID is provided
+	if sessionID != "" {
 		ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		if err := c.connectToEmbeddedServerWithClient(ctxWithTimeout, c.userID, sessionToken, embeddedClient); err != nil {
+		if err := c.connectToEmbeddedServerWithClient(ctxWithTimeout, c.userID, sessionID, embeddedClient); err != nil {
 			c.log.Error("Failed to connect to embedded MCP server", "userID", c.userID, "error", err)
 			return fmt.Errorf("failed to connect to embedded server: %w", err)
 		}
@@ -114,8 +114,8 @@ func (c *UserClients) connectToServer(ctx context.Context, serverID string, serv
 }
 
 // connectToEmbeddedServerWithClient establishes a connection to the embedded server using the embedded client helper
-func (c *UserClients) connectToEmbeddedServerWithClient(ctx context.Context, userID, sessionToken string, embeddedClient *EmbeddedServerClient) error {
-	serverClient, err := embeddedClient.CreateClient(ctx, userID, sessionToken)
+func (c *UserClients) connectToEmbeddedServerWithClient(ctx context.Context, userID, sessionID string, embeddedClient *EmbeddedServerClient) error {
+	serverClient, err := embeddedClient.CreateClient(ctx, userID, sessionID)
 	if err != nil {
 		return err
 	}

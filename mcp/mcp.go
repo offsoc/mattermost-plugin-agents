@@ -86,19 +86,20 @@ func DiscoverServerTools(
 func DiscoverEmbeddedServerTools(
 	ctx context.Context,
 	userID string,
-	authToken string,
+	sessionID string,
 	embeddedServerConfig EmbeddedServerConfig,
 	embeddedServer EmbeddedMCPServer,
 	log pluginapi.LogService,
+	pluginAPI *pluginapi.Client,
 ) ([]ToolInfo, error) {
 	if !embeddedServerConfig.Enabled {
 		return nil, fmt.Errorf("embedded server is not enabled")
 	}
 
 	// Create embedded client helper and connect to the embedded server
-	embeddedClient := NewEmbeddedServerClient(embeddedServer, log)
+	embeddedClient := NewEmbeddedServerClient(embeddedServer, log, pluginAPI)
 
-	client, err := embeddedClient.CreateClient(ctx, userID, authToken)
+	client, err := embeddedClient.CreateClient(ctx, userID, sessionID)
 	if err != nil {
 		return nil, err
 	}

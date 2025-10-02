@@ -33,7 +33,7 @@ type ClientManager struct {
 func NewClientManager(config Config, log pluginapi.LogService, pluginAPI *pluginapi.Client, oauthManager *OAuthManager, embeddedServer EmbeddedMCPServer) *ClientManager {
 	var embeddedClient *EmbeddedServerClient
 	if embeddedServer != nil {
-		embeddedClient = NewEmbeddedServerClient(embeddedServer, log)
+		embeddedClient = NewEmbeddedServerClient(embeddedServer, log, pluginAPI)
 	}
 
 	manager := &ClientManager{
@@ -150,34 +150,20 @@ func (m *ClientManager) getClientForUser(userID string) (*UserClients, *Errors) 
 	return m.createAndStoreUserClient(userID)
 }
 
-// GetToolsForUser returns the tools available for a specific user from existing connections
-func (m *ClientManager) GetToolsForUser(userID string) ([]llm.Tool, *Errors) {
+// GetToolsForUser returns the tools available for a specific user, connecting to embedded server if session ID provided
+func (m *ClientManager) GetToolsForUser(userID, sessionID string) ([]llm.Tool, *Errors) {
 	// Get or create client for this user (connects to remote servers only)
 	userClient, mcpErrors := m.getClientForUser(userID)
 
-	// Return tools from all connected servers (remote + any existing embedded connections)
+	// Try to connect to embedded server if session ID provided
+	if sessionID != "" {
+		if embeddedErr := userClient.ConnectToEmbeddedServerIfAvailable(sessionID, m.embeddedClient, m.config.EmbeddedServer); embeddedErr != nil {
+			m.log.Debug("Failed to connect to embedded server for user", "userID", userID, "error", embeddedErr)
+		}
+	}
+
+	// Return tools from all connected servers (remote + embedded if connected)
 	return userClient.GetTools(), mcpErrors
-}
-
-// ConnectToEmbeddedServerForUser establishes connection to embedded server for a user
-func (m *ClientManager) ConnectToEmbeddedServerForUser(userID, sessionToken string) error {
-	if sessionToken == "" {
-		return nil // No token provided, skip embedded server connection
-	}
-
-	userClient, _ := m.getClientForUser(userID)
-	return userClient.ConnectToEmbeddedServerIfAvailable(sessionToken, m.embeddedClient, m.config.EmbeddedServer)
-}
-
-// GetToolsForUserWithToken returns tools for a user, connecting to embedded server if token provided
-func (m *ClientManager) GetToolsForUserWithToken(ctx context.Context, userID, sessionToken string) ([]llm.Tool, *Errors) {
-	// First, try to connect to embedded server if token provided
-	if embeddedErr := m.ConnectToEmbeddedServerForUser(userID, sessionToken); embeddedErr != nil {
-		m.log.Debug("Failed to connect to embedded server for user", "userID", userID, "error", embeddedErr)
-	}
-
-	// Then return all available tools (both remote and embedded if connected)
-	return m.GetToolsForUser(userID)
 }
 
 // ProcessOAuthCallback processes the OAuth callback for a user

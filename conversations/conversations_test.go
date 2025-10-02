@@ -48,12 +48,8 @@ func (m *mockToolProvider) GetTools(isDM bool, bot *bots.Bot) []llm.Tool {
 
 type mockMCPClientManager struct{}
 
-func (m *mockMCPClientManager) GetToolsForUser(userID string) ([]llm.Tool, *mcp.Errors) {
+func (m *mockMCPClientManager) GetToolsForUser(userID, sessionToken string) ([]llm.Tool, *mcp.Errors) {
 	return []llm.Tool{}, nil
-}
-
-func (m *mockMCPClientManager) ConnectToEmbeddedServerForUser(userID, sessionToken string) error {
-	return nil
 }
 
 type mockConfigProvider struct{}

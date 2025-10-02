@@ -14,8 +14,9 @@ import (
 )
 
 const (
-	MMUserIDHeader    = "X-Mattermost-UserID"
-	EmbeddedClientKey = "embedded:mattermost"
+	MMUserIDHeader      = "X-Mattermost-UserID"
+	EmbeddedServerName  = "Mattermost"
+	EmbeddedClientKey   = "embedded://mattermost"
 )
 
 // EmbeddedMCPServer interface for dependency injection
@@ -26,8 +27,9 @@ type EmbeddedMCPServer interface {
 // EmbeddedServerClient handles connections to the embedded MCP server
 // This encapsulates the embedded server reference and eliminates parameter drilling
 type EmbeddedServerClient struct {
-	server EmbeddedMCPServer
-	log    pluginapi.LogService
+	server    EmbeddedMCPServer
+	log       pluginapi.LogService
+	pluginAPI *pluginapi.Client
 }
 
 // Client represents the connection to a single MCP server
@@ -40,7 +42,7 @@ type Client struct {
 	oauthManager   *OAuthManager
 	isEmbedded     bool                  // true if this is an embedded server
 	embeddedClient *EmbeddedServerClient // for reconnection (nil for remote servers)
-	sessionToken   string                // session token for embedded server reconnection
+	sessionID      string                // session ID for embedded server reconnection
 }
 
 // ServerConfig contains the configuration for a single MCP server
@@ -52,17 +54,27 @@ type ServerConfig struct {
 }
 
 // NewEmbeddedServerClient creates a new client helper for the embedded MCP server
-func NewEmbeddedServerClient(server EmbeddedMCPServer, log pluginapi.LogService) *EmbeddedServerClient {
+func NewEmbeddedServerClient(server EmbeddedMCPServer, log pluginapi.LogService, pluginAPI *pluginapi.Client) *EmbeddedServerClient {
 	return &EmbeddedServerClient{
-		server: server,
-		log:    log,
+		server:    server,
+		log:       log,
+		pluginAPI: pluginAPI,
 	}
 }
 
-// CreateClient creates an embedded MCP client using direct authentication parameters
-func (c *EmbeddedServerClient) CreateClient(ctx context.Context, userID, sessionToken string) (*Client, error) {
+// CreateClient creates an embedded MCP client using session ID for authentication
+func (c *EmbeddedServerClient) CreateClient(ctx context.Context, userID, sessionID string) (*Client, error) {
+	// Resolve session token from session ID
+	mmSession, err := c.pluginAPI.Session.Get(sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get session: %w", err)
+	}
+	if mmSession == nil {
+		return nil, fmt.Errorf("session not found")
+	}
+
 	// Get the in-memory transport from the embedded server
-	transport, err := c.server.CreateClientTransport(userID, sessionToken)
+	transport, err := c.server.CreateClientTransport(userID, mmSession.Token)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create in-memory transport: %w", err)
 	}
@@ -78,33 +90,33 @@ func (c *EmbeddedServerClient) CreateClient(ctx context.Context, userID, session
 
 	// Connect to the embedded server using in-memory transport
 	// The transport already handles authentication via the embedded server
-	session, err := mcpClient.Connect(ctx, transport, nil)
+	mcpSession, err := mcpClient.Connect(ctx, transport, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to embedded MCP server: %w", err)
 	}
 
 	// Create client instance
 	client := &Client{
-		session:        session,
+		session:        mcpSession,
 		config:         ServerConfig{Name: EmbeddedClientKey},
 		tools:          make(map[string]*mcp.Tool),
 		userID:         userID,
 		log:            c.log,
 		oauthManager:   nil, // Embedded servers don't use OAuth
 		isEmbedded:     true,
-		embeddedClient: c,            // Store client helper for reconnection
-		sessionToken:   sessionToken, // Store token for reconnection
+		embeddedClient: c,         // Store client helper for reconnection
+		sessionID:      sessionID, // Store session ID for reconnection
 	}
 
 	// Initialize tools
-	initResult, err := session.ListTools(ctx, &mcp.ListToolsParams{})
+	initResult, err := mcpSession.ListTools(ctx, &mcp.ListToolsParams{})
 	if err != nil {
-		session.Close()
+		mcpSession.Close()
 		return nil, fmt.Errorf("failed to list tools: %w", err)
 	}
 
 	if len(initResult.Tools) == 0 {
-		session.Close()
+		mcpSession.Close()
 		return nil, fmt.Errorf("no tools found on MCP server %s for user %s", EmbeddedClientKey, userID)
 	}
 
@@ -164,6 +176,26 @@ func NewClient(ctx context.Context, userID string, serverConfig ServerConfig, lo
 
 	c.session = session
 	return c, nil
+}
+
+// resolveSessionToken fetches the session token from the session ID for embedded server reconnection
+func (c *Client) resolveSessionToken(ctx context.Context) (string, error) {
+	if c.sessionID == "" {
+		return "", fmt.Errorf("no session ID available")
+	}
+	if c.embeddedClient == nil || c.embeddedClient.pluginAPI == nil {
+		return "", fmt.Errorf("no pluginAPI available to resolve session token")
+	}
+
+	session, err := c.embeddedClient.pluginAPI.Session.Get(c.sessionID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get session: %w", err)
+	}
+	if session == nil {
+		return "", fmt.Errorf("session not found")
+	}
+
+	return session.Token, nil
 }
 
 func (c *Client) createSession(ctx context.Context, serverConfig ServerConfig) (*mcp.ClientSession, error) {
@@ -252,12 +284,12 @@ func (c *Client) CallTool(ctx context.Context, toolName string, args map[string]
 	if err != nil {
 		if errors.Is(err, mcp.ErrConnectionClosed) {
 			if c.isEmbedded {
-				// Reconnect to embedded server using stored client helper and session token
-				if c.embeddedClient == nil || c.sessionToken == "" {
+				// Reconnect to embedded server using stored client helper and session ID
+				if c.embeddedClient == nil || c.sessionID == "" {
 					return "", fmt.Errorf("embedded server connection lost and cannot be reconnected: missing reconnection info")
 				}
 
-				newClient, reconnectErr := c.embeddedClient.CreateClient(ctx, c.userID, c.sessionToken)
+				newClient, reconnectErr := c.embeddedClient.CreateClient(ctx, c.userID, c.sessionID)
 				if reconnectErr != nil {
 					return "", fmt.Errorf("failed to reconnect to embedded MCP server: %w", reconnectErr)
 				}

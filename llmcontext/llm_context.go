@@ -4,7 +4,6 @@
 package llmcontext
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/mattermost/mattermost-plugin-ai/bots"
@@ -21,8 +20,7 @@ type ToolProvider interface {
 
 // MCPToolProvider provides MCP tools for a user
 type MCPToolProvider interface {
-	GetToolsForUser(userID string) ([]llm.Tool, *mcp.Errors)
-	ConnectToEmbeddedServerForUser(userID, sessionToken string) error
+	GetToolsForUser(userID, sessionToken string) ([]llm.Tool, *mcp.Errors)
 }
 
 // ConfigProvider provides configuration access
@@ -109,22 +107,11 @@ func (b *Builder) WithLLMContextRequestingUser(user *model.User) llm.ContextOpti
 	}
 }
 
-// WithLLMContextSessionID adds session information to the LLM context using session ID
+// WithLLMContextSessionID adds session ID to the LLM context
 func (b *Builder) WithLLMContextSessionID(sessionID string) llm.ContextOption {
 	return func(c *llm.Context) {
 		if sessionID != "" {
 			c.SessionID = sessionID
-			// Create a resolver that fetches the token only when needed
-			c.SessionResolver = func() (string, error) {
-				session, err := b.pluginAPI.Session.Get(sessionID)
-				if err != nil {
-					return "", fmt.Errorf("failed to get session token: %w", err)
-				}
-				if session == nil {
-					return "", fmt.Errorf("session not found")
-				}
-				return session.Token, nil
-			}
 		}
 	}
 }
@@ -157,19 +144,11 @@ func (b *Builder) getToolsStoreForUser(c *llm.Context, bot *bots.Bot, isDM bool,
 
 	// Add MCP tools if available, enabled, and in a DM
 	if b.mcpToolProvider != nil && isDM {
-		// Try to connect to embedded server if session token available
-		if c.SessionResolver != nil {
-			if sessionToken, err := c.SessionResolver(); err == nil && sessionToken != "" {
-				if connErr := b.mcpToolProvider.ConnectToEmbeddedServerForUser(userID, sessionToken); connErr != nil {
-					b.pluginAPI.Log.Debug("Failed to connect to embedded MCP server", "userID", userID, "error", connErr)
-				}
-			} else if err != nil {
-				b.pluginAPI.Log.Warn("Failed to resolve session token for MCP tools", "error", err)
-			}
-		}
+		// Use session ID if available (stored in context by WithLLMContextSessionID)
+		sessionID := c.SessionID
 
-		// Get tools from all connected servers (remote + embedded if connected)
-		mcpTools, mcpErrors := b.mcpToolProvider.GetToolsForUser(userID)
+		// Get tools from all connected servers (connects to embedded server if session ID provided)
+		mcpTools, mcpErrors := b.mcpToolProvider.GetToolsForUser(userID, sessionID)
 
 		// Add tools from successfully connected servers even if some had errors
 		if len(mcpTools) > 0 {
