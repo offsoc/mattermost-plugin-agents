@@ -227,13 +227,6 @@ func (p *Plugin) OnDeactivate() error {
 		p.mcpClientManager.Close()
 	}
 
-	// Close embedded MCP server if it exists
-	if p.embeddedMCPServer != nil {
-		if err := p.embeddedMCPServer.Close(); err != nil {
-			p.pluginAPI.Log.Error("Error closing embedded MCP server", "error", err)
-		}
-	}
-
 	return nil
 }
 

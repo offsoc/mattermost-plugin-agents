@@ -13,16 +13,34 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-const MMUserIDHeader = "X-Mattermost-UserID"
+const (
+	MMUserIDHeader    = "X-Mattermost-UserID"
+	EmbeddedClientKey = "embedded:mattermost"
+)
+
+// EmbeddedMCPServer interface for dependency injection
+type EmbeddedMCPServer interface {
+	CreateClientTransport(userID, token string) (*mcp.InMemoryTransport, error)
+}
+
+// EmbeddedServerClient handles connections to the embedded MCP server
+// This encapsulates the embedded server reference and eliminates parameter drilling
+type EmbeddedServerClient struct {
+	server EmbeddedMCPServer
+	log    pluginapi.LogService
+}
 
 // Client represents the connection to a single MCP server
 type Client struct {
-	session      *mcp.ClientSession
-	config       ServerConfig
-	tools        map[string]*mcp.Tool
-	userID       string
-	log          pluginapi.LogService
-	oauthManager *OAuthManager
+	session        *mcp.ClientSession
+	config         ServerConfig
+	tools          map[string]*mcp.Tool
+	userID         string
+	log            pluginapi.LogService
+	oauthManager   *OAuthManager
+	isEmbedded     bool                  // true if this is an embedded server
+	embeddedClient *EmbeddedServerClient // for reconnection (nil for remote servers)
+	sessionToken   string                // session token for embedded server reconnection
 }
 
 // ServerConfig contains the configuration for a single MCP server
@@ -31,6 +49,80 @@ type ServerConfig struct {
 	Enabled bool              `json:"enabled"`
 	BaseURL string            `json:"baseURL"`
 	Headers map[string]string `json:"headers,omitempty"`
+}
+
+// NewEmbeddedServerClient creates a new client helper for the embedded MCP server
+func NewEmbeddedServerClient(server EmbeddedMCPServer, log pluginapi.LogService) *EmbeddedServerClient {
+	return &EmbeddedServerClient{
+		server: server,
+		log:    log,
+	}
+}
+
+// CreateClient creates an embedded MCP client using direct authentication parameters
+func (c *EmbeddedServerClient) CreateClient(ctx context.Context, userID, sessionToken string) (*Client, error) {
+	// Get the in-memory transport from the embedded server
+	transport, err := c.server.CreateClientTransport(userID, sessionToken)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create in-memory transport: %w", err)
+	}
+
+	// Create MCP client
+	mcpClient := mcp.NewClient(
+		&mcp.Implementation{
+			Name:    "mattermost-agents-embedded",
+			Version: "1.0",
+		},
+		&mcp.ClientOptions{},
+	)
+
+	// Connect to the embedded server using in-memory transport
+	// The transport already handles authentication via the embedded server
+	session, err := mcpClient.Connect(ctx, transport, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to embedded MCP server: %w", err)
+	}
+
+	// Create client instance
+	client := &Client{
+		session:        session,
+		config:         ServerConfig{Name: EmbeddedClientKey},
+		tools:          make(map[string]*mcp.Tool),
+		userID:         userID,
+		log:            c.log,
+		oauthManager:   nil, // Embedded servers don't use OAuth
+		isEmbedded:     true,
+		embeddedClient: c,            // Store client helper for reconnection
+		sessionToken:   sessionToken, // Store token for reconnection
+	}
+
+	// Initialize tools
+	initResult, err := session.ListTools(ctx, &mcp.ListToolsParams{})
+	if err != nil {
+		session.Close()
+		return nil, fmt.Errorf("failed to list tools: %w", err)
+	}
+
+	if len(initResult.Tools) == 0 {
+		session.Close()
+		return nil, fmt.Errorf("no tools found on MCP server %s for user %s", EmbeddedClientKey, userID)
+	}
+
+	// Store the tools for this server
+	for _, tool := range initResult.Tools {
+		client.tools[tool.Name] = tool
+		c.log.Debug("Registered MCP tool",
+			"userID", userID,
+			"name", tool.Name,
+			"description", tool.Description,
+			"server", EmbeddedClientKey)
+	}
+
+	c.log.Debug("Successfully connected to embedded MCP server",
+		"userID", userID,
+		"server", EmbeddedClientKey)
+
+	return client, nil
 }
 
 // NewClient creates a new MCP client for the given server and user and connects to the specified MCP server
@@ -75,14 +167,14 @@ func NewClient(ctx context.Context, userID string, serverConfig ServerConfig, lo
 }
 
 func (c *Client) createSession(ctx context.Context, serverConfig ServerConfig) (*mcp.ClientSession, error) {
-	// Prepare headers
+	// Prepare headers for remote servers
 	headers := make(map[string]string)
 	headers[MMUserIDHeader] = c.userID
 	maps.Copy(headers, serverConfig.Headers)
 
 	// TODO: Load and check cached authentication information
 
-	// We have no infomration about this server, so try to connect various ways.
+	// We have no information about this server, so try to connect various ways.
 	client := mcp.NewClient(
 		&mcp.Implementation{
 			Name:    "mattermost-agents",
@@ -159,10 +251,29 @@ func (c *Client) CallTool(ctx context.Context, toolName string, args map[string]
 	result, err := c.session.CallTool(ctx, params)
 	if err != nil {
 		if errors.Is(err, mcp.ErrConnectionClosed) {
-			c.session, err = c.createSession(ctx, c.config)
-			if err != nil {
-				return "", fmt.Errorf("failed to reconnect to MCP server %s: %w", c.config.Name, err)
+			if c.isEmbedded {
+				// Reconnect to embedded server using stored client helper and session token
+				if c.embeddedClient == nil || c.sessionToken == "" {
+					return "", fmt.Errorf("embedded server connection lost and cannot be reconnected: missing reconnection info")
+				}
+
+				newClient, reconnectErr := c.embeddedClient.CreateClient(ctx, c.userID, c.sessionToken)
+				if reconnectErr != nil {
+					return "", fmt.Errorf("failed to reconnect to embedded MCP server: %w", reconnectErr)
+				}
+
+				// Update session and tools from the new client
+				c.session = newClient.session
+				c.tools = newClient.tools
+				c.log.Debug("Successfully reconnected to embedded MCP server", "userID", c.userID)
+			} else {
+				// Reconnect to remote server
+				c.session, err = c.createSession(ctx, c.config)
+				if err != nil {
+					return "", fmt.Errorf("failed to reconnect to MCP server %s: %w", c.config.Name, err)
+				}
 			}
+
 			// Retry the tool call after reconnecting
 			result, err = c.session.CallTool(ctx, params)
 			if err != nil {

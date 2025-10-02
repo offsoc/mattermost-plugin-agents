@@ -14,22 +14,33 @@ import (
 
 // ClientManager manages MCP clients for multiple users
 type ClientManager struct {
-	config        Config
-	log           pluginapi.LogService
-	clientsMu     sync.RWMutex
-	clients       map[string]*UserClients // userID to UserClients
-	activity      map[string]time.Time    // userID to last activity time
-	cleanupTicker *time.Ticker
-	closeChan     chan struct{}
-	clientTimeout time.Duration
-	oauthManager  *OAuthManager
+	config         Config
+	log            pluginapi.LogService
+	pluginAPI      *pluginapi.Client
+	clientsMu      sync.RWMutex
+	clients        map[string]*UserClients // userID to UserClients
+	activity       map[string]time.Time    // userID to last activity time
+	cleanupTicker  *time.Ticker
+	closeChan      chan struct{}
+	clientTimeout  time.Duration
+	oauthManager   *OAuthManager
+	embeddedClient *EmbeddedServerClient // Helper for embedded server (nil if disabled)
 }
 
 // NewClientManager creates a new MCP client manager
-func NewClientManager(config Config, log pluginapi.LogService, pluginAPI *pluginapi.Client, oauthManager *OAuthManager) *ClientManager {
+// embeddedServer can be nil if embedded server is not available
+
+func NewClientManager(config Config, log pluginapi.LogService, pluginAPI *pluginapi.Client, oauthManager *OAuthManager, embeddedServer EmbeddedMCPServer) *ClientManager {
+	var embeddedClient *EmbeddedServerClient
+	if embeddedServer != nil {
+		embeddedClient = NewEmbeddedServerClient(embeddedServer, log)
+	}
+
 	manager := &ClientManager{
-		log:          log,
-		oauthManager: oauthManager,
+		log:            log,
+		pluginAPI:      pluginAPI,
+		oauthManager:   oauthManager,
+		embeddedClient: embeddedClient,
 	}
 	manager.ReInit(config)
 	return manager
@@ -78,6 +89,7 @@ func (m *ClientManager) ReInit(config Config) {
 
 // Close closes the client manager and all managed clients
 // The client manger should not be used after Close is called
+// Note: This does NOT close the embedded server - that should be managed by the plugin
 func (m *ClientManager) Close() {
 	// If already closed, do nothing
 	if m.closeChan == nil {
@@ -114,8 +126,9 @@ func (m *ClientManager) createAndStoreUserClient(userID string) (*UserClients, *
 
 	userClients := NewUserClients(userID, m.log, m.oauthManager)
 
-	// Let user client connect to all servers
-	mcpErrors := userClients.ConnectToAllServers(m.config.Servers)
+	// Let user client connect to remote servers only
+	// Embedded servers require session context and will be connected on-demand
+	mcpErrors := userClients.ConnectToRemoteServers(m.config.Servers)
 
 	// Store the client even if some servers failed to connect
 	// This allows partial success - user gets tools from working servers
@@ -137,13 +150,34 @@ func (m *ClientManager) getClientForUser(userID string) (*UserClients, *Errors) 
 	return m.createAndStoreUserClient(userID)
 }
 
-// GetToolsForUser returns the tools available for a specific user
+// GetToolsForUser returns the tools available for a specific user from existing connections
 func (m *ClientManager) GetToolsForUser(userID string) ([]llm.Tool, *Errors) {
-	// Get or create client for this user
+	// Get or create client for this user (connects to remote servers only)
 	userClient, mcpErrors := m.getClientForUser(userID)
 
-	// Return tools from successfully connected servers even if some failed
+	// Return tools from all connected servers (remote + any existing embedded connections)
 	return userClient.GetTools(), mcpErrors
+}
+
+// ConnectToEmbeddedServerForUser establishes connection to embedded server for a user
+func (m *ClientManager) ConnectToEmbeddedServerForUser(userID, sessionToken string) error {
+	if sessionToken == "" {
+		return nil // No token provided, skip embedded server connection
+	}
+
+	userClient, _ := m.getClientForUser(userID)
+	return userClient.ConnectToEmbeddedServerIfAvailable(sessionToken, m.embeddedClient, m.config.EmbeddedServer)
+}
+
+// GetToolsForUserWithToken returns tools for a user, connecting to embedded server if token provided
+func (m *ClientManager) GetToolsForUserWithToken(ctx context.Context, userID, sessionToken string) ([]llm.Tool, *Errors) {
+	// First, try to connect to embedded server if token provided
+	if embeddedErr := m.ConnectToEmbeddedServerForUser(userID, sessionToken); embeddedErr != nil {
+		m.log.Debug("Failed to connect to embedded server for user", "userID", userID, "error", embeddedErr)
+	}
+
+	// Then return all available tools (both remote and embedded if connected)
+	return m.GetToolsForUser(userID)
 }
 
 // ProcessOAuthCallback processes the OAuth callback for a user
@@ -164,4 +198,13 @@ func (m *ClientManager) ProcessOAuthCallback(ctx context.Context, userID, state,
 // GetOAuthManager returns the OAuth manager instance
 func (m *ClientManager) GetOAuthManager() *OAuthManager {
 	return m.oauthManager
+}
+
+// GetEmbeddedServer returns the embedded MCP server instance (may be nil)
+// This method is kept for API compatibility
+func (m *ClientManager) GetEmbeddedServer() EmbeddedMCPServer {
+	if m.embeddedClient == nil {
+		return nil
+	}
+	return m.embeddedClient.server
 }

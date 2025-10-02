@@ -15,7 +15,6 @@ import (
 
 	"github.com/mattermost/mattermost-plugin-ai/mcpserver/auth"
 	"github.com/mattermost/mattermost-plugin-ai/mcpserver/types"
-	"github.com/mattermost/mattermost/server/public/shared/mlog"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -29,7 +28,7 @@ type MattermostHTTPMCPServer struct {
 }
 
 // NewHTTPServer creates a new HTTP transport MCP server
-func NewHTTPServer(config HTTPConfig, logger *mlog.Logger) (*MattermostHTTPMCPServer, error) {
+func NewHTTPServer(config HTTPConfig, logger Logger) (*MattermostHTTPMCPServer, error) {
 	if config.MMServerURL == "" {
 		return nil, fmt.Errorf("server URL cannot be empty")
 	}
@@ -117,9 +116,9 @@ func NewHTTPServer(config HTTPConfig, logger *mlog.Logger) (*MattermostHTTPMCPSe
 // Serve starts the HTTP MCP server
 func (s *MattermostHTTPMCPServer) Serve() error {
 	s.logger.Info("starting HTTP MCP server with SSE support",
-		mlog.String("bind_addr", s.config.HTTPBindAddr),
-		mlog.Int("port", s.config.HTTPPort),
-		mlog.String("server_url", s.config.GetMMServerURL()),
+		"bind_addr", s.config.HTTPBindAddr,
+		"port", s.config.HTTPPort,
+		"server_url", s.config.GetMMServerURL(),
 	)
 
 	// Start the custom HTTP server with OAuth endpoints
@@ -137,10 +136,10 @@ func (s *MattermostHTTPMCPServer) recoveryMiddleware(next http.Handler) http.Han
 		defer func() {
 			if err := recover(); err != nil {
 				s.logger.Error("Panic in HTTP handler",
-					mlog.Any("error", err),
-					mlog.String("method", r.Method),
-					mlog.String("path", r.URL.Path),
-					mlog.String("remote_addr", r.RemoteAddr),
+					"error", err,
+					"method", r.Method,
+					"path", r.URL.Path,
+					"remote_addr", r.RemoteAddr,
 				)
 				// Return 500 Internal Server Error
 				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -231,8 +230,8 @@ func (s *MattermostHTTPMCPServer) validateOrigin(r *http.Request) bool {
 	originURL, err := url.Parse(origin)
 	if err != nil {
 		s.logger.Warn("invalid origin header",
-			mlog.String("origin", origin),
-			mlog.Err(err))
+			"origin", origin,
+			"error", err)
 		return false
 	}
 
@@ -250,8 +249,8 @@ func (s *MattermostHTTPMCPServer) validateOrigin(r *http.Request) bool {
 	}
 
 	s.logger.Warn("origin not in allowed list",
-		mlog.String("origin", origin),
-		mlog.Any("allowed_origins", allowedOrigins))
+		"origin", origin,
+		"allowed_origins", allowedOrigins)
 	return false
 }
 
@@ -300,9 +299,9 @@ func (s *MattermostHTTPMCPServer) securityMiddleware(next http.Handler) http.Han
 		// Validate Origin header to prevent DNS rebinding attacks
 		if !s.validateOrigin(r) {
 			s.logger.Warn("request blocked due to invalid origin",
-				mlog.String("origin", r.Header.Get("Origin")),
-				mlog.String("remote_addr", r.RemoteAddr),
-				mlog.String("user_agent", r.UserAgent()))
+				"origin", r.Header.Get("Origin"),
+				"remote_addr", r.RemoteAddr,
+				"user_agent", r.UserAgent())
 
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusForbidden)
@@ -351,18 +350,18 @@ func (s *MattermostHTTPMCPServer) loggingMiddleware(next http.Handler) http.Hand
 
 		// Log the request
 		s.logger.Debug("HTTP request received",
-			mlog.String("method", r.Method),
-			mlog.String("path", r.URL.Path),
-			mlog.String("remote_addr", r.RemoteAddr))
+			"method", r.Method,
+			"path", r.URL.Path,
+			"remote_addr", r.RemoteAddr)
 
 		// Call the next handler
 		next.ServeHTTP(recorder, r)
 
 		// Log the response
 		s.logger.Debug("HTTP request completed",
-			mlog.String("method", r.Method),
-			mlog.String("path", r.URL.Path),
-			mlog.Int("status", recorder.statusCode))
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", recorder.statusCode)
 	})
 }
 
@@ -371,7 +370,7 @@ type responseRecorder struct {
 	http.ResponseWriter
 	statusCode    int
 	headerWritten bool
-	logger        *mlog.Logger
+	logger        Logger
 	requestPath   string
 }
 
@@ -403,8 +402,8 @@ func (s *MattermostHTTPMCPServer) requireAuth(next http.HandlerFunc) http.Handle
 		token, err := extractBearerToken(r)
 		if err != nil {
 			s.logger.Warn("failed to extract bearer token for middleware",
-				mlog.String("path", r.URL.Path),
-				mlog.Err(err))
+				"path", r.URL.Path,
+				"error", err)
 
 			// Return 401 Unauthorized with WWW-Authenticate header (RFC 9728)
 			resourceMetadataURL := s.getResourceMetadataURL()
@@ -419,8 +418,8 @@ func (s *MattermostHTTPMCPServer) requireAuth(next http.HandlerFunc) http.Handle
 		ctx = context.WithValue(ctx, auth.AuthTokenContextKey, token)
 		if err := s.authProvider.ValidateAuth(ctx); err != nil {
 			s.logger.Warn("authentication failed for MCP endpoint",
-				mlog.String("path", r.URL.Path),
-				mlog.Err(err))
+				"path", r.URL.Path,
+				"error", err)
 
 			// Return 401 Unauthorized with WWW-Authenticate header (RFC 9728)
 			resourceMetadataURL := s.getResourceMetadataURL()
@@ -457,7 +456,7 @@ func (s *MattermostHTTPMCPServer) setupRoutes(httpMux *http.ServeMux) {
 
 	// Default 404 handler for any other unmatched paths
 	httpMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		s.logger.Debug("Request to unmatched path", mlog.String("path", r.URL.Path))
+		s.logger.Debug("Request to unmatched path", "path", r.URL.Path)
 		http.NotFound(w, r)
 	})
 }

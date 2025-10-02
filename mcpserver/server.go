@@ -7,7 +7,6 @@ import (
 	"github.com/mattermost/mattermost-plugin-ai/mcpserver/auth"
 	"github.com/mattermost/mattermost-plugin-ai/mcpserver/tools"
 	"github.com/mattermost/mattermost-plugin-ai/mcpserver/types"
-	"github.com/mattermost/mattermost/server/public/shared/mlog"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -16,7 +15,7 @@ import (
 type MattermostMCPServer struct {
 	mcpServer    *mcp.Server
 	authProvider auth.AuthenticationProvider
-	logger       *mlog.Logger
+	logger       Logger
 	config       ServerConfig
 }
 

@@ -95,10 +95,10 @@ func DiscoverEmbeddedServerTools(
 		return nil, fmt.Errorf("embedded server is not enabled")
 	}
 
-	// Create connector and connect to the embedded server
-	connector := NewEmbeddedServerConnector(embeddedServer, log)
+	// Create embedded client helper and connect to the embedded server
+	embeddedClient := NewEmbeddedServerClient(embeddedServer, log)
 
-	client, err := connector.CreateClient(ctx, userID, authToken)
+	client, err := embeddedClient.CreateClient(ctx, userID, authToken)
 	if err != nil {
 		return nil, err
 	}

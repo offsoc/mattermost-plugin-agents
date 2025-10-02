@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/mattermost/mattermost-plugin-ai/llm"
 	"github.com/mattermost/mattermost/server/public/pluginapi"
@@ -78,19 +79,21 @@ func (c *UserClients) ConnectToRemoteServers(servers []ServerConfig) *Errors {
 }
 
 // ConnectToEmbeddedServerIfAvailable connects to the embedded server if session token is provided
-func (c *UserClients) ConnectToEmbeddedServerIfAvailable(sessionToken string, embeddedConnector *EmbeddedServerConnector, embeddedConfig EmbeddedServerConfig) error {
-	if !embeddedConfig.Enabled || embeddedConnector == nil {
+func (c *UserClients) ConnectToEmbeddedServerIfAvailable(sessionToken string, embeddedClient *EmbeddedServerClient, embeddedConfig EmbeddedServerConfig) error {
+	if !embeddedConfig.Enabled || embeddedClient == nil {
 		return nil
 	}
 
 	// Check if we already have an embedded server connection
-	if _, exists := c.clients[EmbeddedServerName]; exists {
+	if _, exists := c.clients[EmbeddedClientKey]; exists {
 		return nil // Already connected
 	}
 
 	// Connect if session token is provided
 	if sessionToken != "" {
-		if err := c.connectToEmbeddedServerWithConnector(context.Background(), c.userID, sessionToken, embeddedConnector); err != nil {
+		ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := c.connectToEmbeddedServerWithClient(ctxWithTimeout, c.userID, sessionToken, embeddedClient); err != nil {
 			c.log.Error("Failed to connect to embedded MCP server", "userID", c.userID, "error", err)
 			return fmt.Errorf("failed to connect to embedded server: %w", err)
 		}
@@ -110,14 +113,13 @@ func (c *UserClients) connectToServer(ctx context.Context, serverID string, serv
 	return nil
 }
 
-// connectToEmbeddedServerWithConnector establishes a connection to the embedded server using the connector
-func (c *UserClients) connectToEmbeddedServerWithConnector(ctx context.Context, userID, sessionToken string, connector *EmbeddedServerConnector) error {
-	// Use connector to create client - all complexity is encapsulated in the connector
-	serverClient, err := connector.CreateClient(ctx, userID, sessionToken)
+// connectToEmbeddedServerWithClient establishes a connection to the embedded server using the embedded client helper
+func (c *UserClients) connectToEmbeddedServerWithClient(ctx context.Context, userID, sessionToken string, embeddedClient *EmbeddedServerClient) error {
+	serverClient, err := embeddedClient.CreateClient(ctx, userID, sessionToken)
 	if err != nil {
 		return err
 	}
-	c.clients[EmbeddedServerName] = serverClient
+	c.clients[EmbeddedClientKey] = serverClient
 	return nil
 }
 
