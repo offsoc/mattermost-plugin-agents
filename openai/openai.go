@@ -492,7 +492,6 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 
 	// Track annotations/citations
 	var annotations []llm.Annotation
-	var textLength int // Track accumulated text length for annotation positions
 
 	// Define handleToolCalls as a closure to access local variables
 	handleToolCalls := func() {
@@ -576,8 +575,6 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 					Type:  llm.EventTypeText,
 					Value: event.Delta,
 				}
-				// Track text length for annotation positioning
-				textLength += len(event.Delta)
 			}
 
 		case "response.content_part.added":
@@ -589,7 +586,7 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 				// Extract URL citations from the completed content part
 				for _, ann := range event.Part.Annotations {
 					if ann.Type == "url_citation" {
-						// OpenAI provides StartIndex and EndIndex directly
+						// OpenAI provides StartIndex and EndIndex directly as absolute positions
 						annotations = append(annotations, llm.Annotation{
 							Type:       llm.AnnotationTypeURLCitation,
 							StartIndex: int(ann.StartIndex),
@@ -704,7 +701,13 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 			// Continue accumulating, don't send end event yet
 
 		case "response.output_text.done":
-			// Text output completed
+			// Text output completed - check if we have accumulated annotations to send
+			if len(annotations) > 0 {
+				output <- llm.TextStreamEvent{
+					Type:  llm.EventTypeAnnotations,
+					Value: annotations,
+				}
+			}
 
 		case "response.web_search_call.searching", "response.web_search_call.in_progress", "response.web_search_call.completed":
 			// Handle web search events
@@ -720,14 +723,6 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 				output <- llm.TextStreamEvent{
 					Type:  llm.EventTypeReasoningEnd,
 					Value: reasoningSummaryBuffer.String(),
-				}
-			}
-
-			// Emit annotations if we have any
-			if len(annotations) > 0 {
-				output <- llm.TextStreamEvent{
-					Type:  llm.EventTypeAnnotations,
-					Value: annotations,
 				}
 			}
 
