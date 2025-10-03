@@ -70,13 +70,21 @@ func NewInMemoryServer(config InMemoryConfig, logger Logger) (*MattermostInMemor
 
 // CreateConnectionForUser creates a new in-memory transport connection for a specific user
 // Returns the client-side transport that should be used by the MCP client
-func (s *MattermostInMemoryMCPServer) CreateConnectionForUser(userID, token string) (*mcp.InMemoryTransport, error) {
+// Accepts either:
+// - sessionID + tokenResolver: Creates authenticated connection
+// - empty sessionID + nil tokenResolver: Creates unauthenticated connection (for tool discovery)
+func (s *MattermostInMemoryMCPServer) CreateConnectionForUser(userID, sessionID string, tokenResolver auth.TokenResolver) (*mcp.InMemoryTransport, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("userID cannot be empty")
 	}
 
-	ctx := context.WithValue(context.Background(), auth.AuthTokenContextKey, token)
-	if token != "" {
+	// Create context with sessionID and resolver
+	ctx := context.Background()
+	if sessionID != "" && tokenResolver != nil {
+		ctx = context.WithValue(ctx, auth.SessionIDContextKey, sessionID)
+		ctx = context.WithValue(ctx, auth.TokenResolverContextKey, tokenResolver)
+
+		// Validate the session at connection time
 		_, err := s.validateUserIdentity(ctx, userID)
 		if err != nil {
 			return nil, err

@@ -238,16 +238,9 @@ func (a *API) discoverServerTools(ctx context.Context, requestingAdminID string,
 
 // discoverEmbeddedServerTools connects to the embedded MCP server and discovers its tools
 func (a *API) discoverEmbeddedServerTools(ctx context.Context, requestingAdminID string, embeddedConfig mcp.EmbeddedServerConfig, embeddedServer mcp.EmbeddedMCPServer) ([]MCPToolInfo, error) {
-	// Create a temporary session for the admin user for tool discovery
-	session, err := a.pluginAPI.Session.Create(&model.Session{
-		UserId: requestingAdminID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create session for tool discovery: %w", err)
-	}
-	defer a.pluginAPI.Session.Revoke(session.Id)
-
-	toolInfos, err := mcp.DiscoverEmbeddedServerTools(ctx, requestingAdminID, session.Id, embeddedConfig, embeddedServer, a.pluginAPI.Log, a.pluginAPI)
+	// Tool discovery doesn't require authentication - just listing available tools
+	// Pass empty sessionID to create an unauthenticated connection
+	toolInfos, err := mcp.DiscoverEmbeddedServerTools(ctx, requestingAdminID, "", embeddedConfig, embeddedServer, a.pluginAPI.Log, a.pluginAPI)
 	if err != nil {
 		return nil, err
 	}

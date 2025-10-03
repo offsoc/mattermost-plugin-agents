@@ -27,8 +27,8 @@ func TestInMemoryServerCreation(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, server)
 
-	// Test creating a client transport
-	clientTransport, err := server.CreateConnectionForUser("test_user_123", "test_token_123")
+	// Test creating a client transport (without validation by passing nil resolver)
+	clientTransport, err := server.CreateConnectionForUser("test_user_123", "", nil)
 	require.NoError(t, err)
 	assert.NotNil(t, clientTransport)
 }
@@ -51,7 +51,7 @@ func TestInMemoryServerMultipleUsers(t *testing.T) {
 	users := []string{"user1", "user2", "user3"}
 
 	for _, userID := range users {
-		transport, connErr := server.CreateConnectionForUser(userID, "test_token_"+userID)
+		transport, connErr := server.CreateConnectionForUser(userID, "", nil)
 		require.NoError(t, connErr)
 		assert.NotNil(t, transport)
 	}

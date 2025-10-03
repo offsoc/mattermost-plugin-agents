@@ -45,12 +45,32 @@ func (p *SessionAuthenticationProvider) ValidateAuth(ctx context.Context) error 
 }
 
 // GetAuthenticatedMattermostClient returns a session-authenticated Mattermost client
-// The session token must be provided through the context using AuthTokenContextKey
+// Supports two authentication modes:
+// 1. Token resolver: Uses SessionIDContextKey + TokenResolverContextKey (embedded server)
+// 2. Direct token: Uses AuthTokenContextKey (OAuth flows)
 func (p *SessionAuthenticationProvider) GetAuthenticatedMattermostClient(ctx context.Context) (*model.Client4, error) {
-	// Get session token from context (required for session authentication)
-	token, ok := ctx.Value(AuthTokenContextKey).(string)
-	if !ok || token == "" {
-		return nil, fmt.Errorf("session authentication requires valid token in context")
+	var token string
+
+	// Try resolver-based authentication first (used by embedded server)
+	if resolver, ok := ctx.Value(TokenResolverContextKey).(TokenResolver); ok {
+		sessionID, ok := ctx.Value(SessionIDContextKey).(string)
+		if !ok || sessionID == "" {
+			return nil, fmt.Errorf("token resolver requires valid session ID in context")
+		}
+
+		// Resolve fresh token from session ID
+		var err error
+		token, err = resolver(sessionID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve token from session: %w", err)
+		}
+	} else {
+		// Direct token from context (used by OAuth flows)
+		var ok bool
+		token, ok = ctx.Value(AuthTokenContextKey).(string)
+		if !ok || token == "" {
+			return nil, fmt.Errorf("session authentication requires valid token in context")
+		}
 	}
 
 	// Create client and set session token
@@ -68,11 +88,32 @@ func (p *SessionAuthenticationProvider) GetAuthenticatedMattermostClient(ctx con
 }
 
 // GetAuthenticatedUser returns the authenticated Mattermost user for the session token in context.
+// Supports two authentication modes:
+// 1. Token resolver: Uses SessionIDContextKey + TokenResolverContextKey (embedded server)
+// 2. Direct token: Uses AuthTokenContextKey (OAuth flows)
 func (p *SessionAuthenticationProvider) GetAuthenticatedUser(ctx context.Context) (*model.User, error) {
-	// Get session token from context (required for session authentication)
-	token, ok := ctx.Value(AuthTokenContextKey).(string)
-	if !ok || token == "" {
-		return nil, fmt.Errorf("session authentication requires valid token in context")
+	var token string
+
+	// Try resolver-based authentication first (used by embedded server)
+	if resolver, ok := ctx.Value(TokenResolverContextKey).(TokenResolver); ok {
+		sessionID, ok := ctx.Value(SessionIDContextKey).(string)
+		if !ok || sessionID == "" {
+			return nil, fmt.Errorf("token resolver requires valid session ID in context")
+		}
+
+		// Resolve fresh token from session ID
+		var err error
+		token, err = resolver(sessionID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve token from session: %w", err)
+		}
+	} else {
+		// Direct token from context (used by OAuth flows)
+		var ok bool
+		token, ok = ctx.Value(AuthTokenContextKey).(string)
+		if !ok || token == "" {
+			return nil, fmt.Errorf("session authentication requires valid token in context")
+		}
 	}
 
 	client := model.NewAPIv4Client(p.mmServerURL)

@@ -14,14 +14,14 @@ import (
 )
 
 const (
-	MMUserIDHeader      = "X-Mattermost-UserID"
-	EmbeddedServerName  = "Mattermost"
-	EmbeddedClientKey   = "embedded://mattermost"
+	MMUserIDHeader     = "X-Mattermost-UserID"
+	EmbeddedServerName = "Mattermost"
+	EmbeddedClientKey  = "embedded://mattermost"
 )
 
 // EmbeddedMCPServer interface for dependency injection
 type EmbeddedMCPServer interface {
-	CreateClientTransport(userID, token string) (*mcp.InMemoryTransport, error)
+	CreateClientTransport(userID, sessionID string, pluginAPI *pluginapi.Client) (*mcp.InMemoryTransport, error)
 }
 
 // EmbeddedServerClient handles connections to the embedded MCP server
@@ -63,18 +63,22 @@ func NewEmbeddedServerClient(server EmbeddedMCPServer, log pluginapi.LogService,
 }
 
 // CreateClient creates an embedded MCP client using session ID for authentication
+// If sessionID is empty, creates an unauthenticated client (useful for tool discovery)
 func (c *EmbeddedServerClient) CreateClient(ctx context.Context, userID, sessionID string) (*Client, error) {
-	// Resolve session token from session ID
-	mmSession, err := c.pluginAPI.Session.Get(sessionID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get session: %w", err)
-	}
-	if mmSession == nil {
-		return nil, fmt.Errorf("session not found")
+	// Validate session exists before creating transport (unless empty for tool discovery)
+	if sessionID != "" {
+		mmSession, err := c.pluginAPI.Session.Get(sessionID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get session: %w", err)
+		}
+		if mmSession == nil {
+			return nil, fmt.Errorf("session not found")
+		}
 	}
 
 	// Get the in-memory transport from the embedded server
-	transport, err := c.server.CreateClientTransport(userID, mmSession.Token)
+	// Empty sessionID skips authentication (for tool discovery)
+	transport, err := c.server.CreateClientTransport(userID, sessionID, c.pluginAPI)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create in-memory transport: %w", err)
 	}
@@ -176,26 +180,6 @@ func NewClient(ctx context.Context, userID string, serverConfig ServerConfig, lo
 
 	c.session = session
 	return c, nil
-}
-
-// resolveSessionToken fetches the session token from the session ID for embedded server reconnection
-func (c *Client) resolveSessionToken(ctx context.Context) (string, error) {
-	if c.sessionID == "" {
-		return "", fmt.Errorf("no session ID available")
-	}
-	if c.embeddedClient == nil || c.embeddedClient.pluginAPI == nil {
-		return "", fmt.Errorf("no pluginAPI available to resolve session token")
-	}
-
-	session, err := c.embeddedClient.pluginAPI.Session.Get(c.sessionID)
-	if err != nil {
-		return "", fmt.Errorf("failed to get session: %w", err)
-	}
-	if session == nil {
-		return "", fmt.Errorf("session not found")
-	}
-
-	return session.Token, nil
 }
 
 func (c *Client) createSession(ctx context.Context, serverConfig ServerConfig) (*mcp.ClientSession, error) {

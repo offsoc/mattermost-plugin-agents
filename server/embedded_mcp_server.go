@@ -5,6 +5,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/mattermost/mattermost-plugin-ai/mcpserver"
 	"github.com/mattermost/mattermost/server/public/pluginapi"
@@ -60,15 +61,34 @@ func NewEmbeddedMCPServer(pluginAPI *pluginapi.Client, logger pluginapi.LogServi
 }
 
 // CreateClientTransport creates a new in-memory transport for a client connection
-func (e *EmbeddedMCPServer) CreateClientTransport(userID, token string) (*mcp.InMemoryTransport, error) {
-	// Create the connection through the server
-	clientTransport, err := e.server.CreateConnectionForUser(userID, token)
+// Uses sessionID + token resolver pattern for better security than storing raw tokens
+func (e *EmbeddedMCPServer) CreateClientTransport(userID, sessionID string, pluginAPI *pluginapi.Client) (*mcp.InMemoryTransport, error) {
+	// Create token resolver that has closure over pluginAPI
+	// This allows the mcpserver to get fresh tokens without storing raw tokens in context
+	tokenResolver := func(sid string) (string, error) {
+		session, err := pluginAPI.Session.Get(sid)
+		if err != nil {
+			e.logger.Debug("Failed to get session for token resolution",
+				"user_id", userID,
+				"session_id", sid,
+				"error", err)
+			return "", fmt.Errorf("failed to get session: %w", err)
+		}
+		if session == nil {
+			return "", fmt.Errorf("session not found")
+		}
+		return session.Token, nil
+	}
+
+	// Create the connection through the server with resolver
+	clientTransport, err := e.server.CreateConnectionForUser(userID, sessionID, tokenResolver)
 	if err != nil {
 		return nil, err
 	}
 
 	e.logger.Debug("Created client transport for embedded MCP server",
-		"user_id", userID)
+		"user_id", userID,
+		"session_id", sessionID)
 
 	return clientTransport, nil
 }

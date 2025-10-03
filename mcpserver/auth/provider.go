@@ -15,7 +15,14 @@ type ContextKey string
 const (
 	// AuthTokenContextKey is used to store the validated auth token in context
 	AuthTokenContextKey ContextKey = "auth_token"
+	// SessionIDContextKey is used to store the session ID in context
+	SessionIDContextKey ContextKey = "session_id"
+	// TokenResolverContextKey is used to store a function that resolves sessionID to token
+	TokenResolverContextKey ContextKey = "token_resolver"
 )
+
+// TokenResolver is a function that resolves a sessionID to a token
+type TokenResolver func(sessionID string) (string, error)
 
 // AuthenticationProvider handles authentication for MCP requests
 type AuthenticationProvider interface {
