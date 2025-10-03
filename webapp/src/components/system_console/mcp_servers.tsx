@@ -341,9 +341,6 @@ const MCPServers = ({mcpConfig, onChange}: Props) => {
                                         }}
                                         helptext={intl.formatMessage({defaultMessage: 'How long to keep an inactive user connection open before closing it automatically. Lower values save resources, higher values improve response times.'})}
                                     />
-                                </ItemList>
-
-                                <ItemList title={intl.formatMessage({defaultMessage: 'Embedded MCP Server'})}>
                                     <BooleanItem
                                         label={intl.formatMessage({defaultMessage: 'Enable Embedded Server'})}
                                         value={config.embeddedServer.enabled}
@@ -357,11 +354,6 @@ const MCPServers = ({mcpConfig, onChange}: Props) => {
                                         helpText={intl.formatMessage({defaultMessage: 'Enable the built-in Mattermost MCP server that provides tools for accessing channels, users, and posts without external OAuth setup.'})}
                                     />
                                 </ItemList>
-
-                                <ItemList title={intl.formatMessage({defaultMessage: 'Remote MCP Servers'})}>
-                                    {/* Empty content - title only for separation */}
-                                </ItemList>
-
                                 <ServersList>
                                     {!Array.isArray(config.servers) || config.servers.length < 1 ? (
                                         <EmptyState>
