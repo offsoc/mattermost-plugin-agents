@@ -89,7 +89,6 @@ func (m *ClientManager) ReInit(config Config) {
 
 // Close closes the client manager and all managed clients
 // The client manger should not be used after Close is called
-// Note: This does NOT close the embedded server - that should be managed by the plugin
 func (m *ClientManager) Close() {
 	// If already closed, do nothing
 	if m.closeChan == nil {
@@ -127,7 +126,6 @@ func (m *ClientManager) createAndStoreUserClient(userID string) (*UserClients, *
 	userClients := NewUserClients(userID, m.log, m.oauthManager)
 
 	// Let user client connect to remote servers only
-	// Embedded servers require session context and will be connected on-demand
 	mcpErrors := userClients.ConnectToRemoteServers(m.config.Servers)
 
 	// Store the client even if some servers failed to connect

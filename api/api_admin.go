@@ -197,7 +197,7 @@ func (a *API) handleGetMCPTools(c *gin.Context) {
 		}
 
 		// Try to connect to the server and discover tools
-		tools, err := a.discoverServerTools(c.Request.Context(), userID, serverConfig)
+		tools, err := a.discoverRemoteServerTools(c.Request.Context(), userID, serverConfig)
 		if err != nil {
 			var oauthErr *mcp.OAuthNeededError
 			if errors.As(err, &oauthErr) {
@@ -217,9 +217,9 @@ func (a *API) handleGetMCPTools(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// discoverServerTools connects to a single MCP server and discovers its tools
-func (a *API) discoverServerTools(ctx context.Context, requestingAdminID string, serverConfig mcp.ServerConfig) ([]MCPToolInfo, error) {
-	toolInfos, err := mcp.DiscoverServerTools(ctx, requestingAdminID, serverConfig, a.pluginAPI.Log, a.mcpClientManager.GetOAuthManager())
+// discoverRemoteServerTools connects to a single remote MCP server and discovers its tools
+func (a *API) discoverRemoteServerTools(ctx context.Context, requestingAdminID string, serverConfig mcp.ServerConfig) ([]MCPToolInfo, error) {
+	toolInfos, err := mcp.DiscoverRemoteServerTools(ctx, requestingAdminID, serverConfig, a.pluginAPI.Log, a.mcpClientManager.GetOAuthManager())
 	if err != nil {
 		return nil, err
 	}

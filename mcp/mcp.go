@@ -45,15 +45,15 @@ type Config struct {
 	IdleTimeoutMinutes int                  `json:"idleTimeoutMinutes"`
 }
 
-// DiscoverServerTools creates a temporary connection to an MCP server and discovers its tools
-func DiscoverServerTools(
+// DiscoverRemoteServerTools creates a temporary connection to a remote MCP server and discovers its tools
+func DiscoverRemoteServerTools(
 	ctx context.Context,
 	userID string,
 	serverConfig ServerConfig,
 	log pluginapi.LogService,
 	oauthManger *OAuthManager,
 ) ([]ToolInfo, error) {
-	// Create and connect to the server (no embedded server for tool discovery)
+	// Create and connect to the remote server
 	client, err := NewClient(ctx, userID, serverConfig, log, oauthManger)
 	if err != nil {
 		return nil, err

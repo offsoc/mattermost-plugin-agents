@@ -25,7 +25,6 @@ type EmbeddedMCPServer interface {
 }
 
 // EmbeddedServerClient handles connections to the embedded MCP server
-// This encapsulates the embedded server reference and eliminates parameter drilling
 type EmbeddedServerClient struct {
 	server    EmbeddedMCPServer
 	log       pluginapi.LogService
@@ -53,7 +52,6 @@ type ServerConfig struct {
 	Headers map[string]string `json:"headers,omitempty"`
 }
 
-// NewEmbeddedServerClient creates a new client helper for the embedded MCP server
 func NewEmbeddedServerClient(server EmbeddedMCPServer, log pluginapi.LogService, pluginAPI *pluginapi.Client) *EmbeddedServerClient {
 	return &EmbeddedServerClient{
 		server:    server,
@@ -63,7 +61,7 @@ func NewEmbeddedServerClient(server EmbeddedMCPServer, log pluginapi.LogService,
 }
 
 // CreateClient creates an embedded MCP client using session ID for authentication
-// If sessionID is empty, creates an unauthenticated client (useful for tool discovery)
+// If sessionID is empty, creates an unauthenticated client (used for tool discovery)
 func (c *EmbeddedServerClient) CreateClient(ctx context.Context, userID, sessionID string) (*Client, error) {
 	// Validate session exists before creating transport (unless empty for tool discovery)
 	if sessionID != "" {
@@ -77,7 +75,6 @@ func (c *EmbeddedServerClient) CreateClient(ctx context.Context, userID, session
 	}
 
 	// Get the in-memory transport from the embedded server
-	// Empty sessionID skips authentication (for tool discovery)
 	transport, err := c.server.CreateClientTransport(userID, sessionID, c.pluginAPI)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create in-memory transport: %w", err)
@@ -93,7 +90,6 @@ func (c *EmbeddedServerClient) CreateClient(ctx context.Context, userID, session
 	)
 
 	// Connect to the embedded server using in-memory transport
-	// The transport already handles authentication via the embedded server
 	mcpSession, err := mcpClient.Connect(ctx, transport, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to embedded MCP server: %w", err)
