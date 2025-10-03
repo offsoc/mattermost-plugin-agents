@@ -20,7 +20,7 @@ type ToolProvider interface {
 
 // MCPToolProvider provides MCP tools for a user
 type MCPToolProvider interface {
-	GetToolsForUser(userID, sessionToken string) ([]llm.Tool, *mcp.Errors)
+	GetToolsForUser(userID, sessionID string) ([]llm.Tool, *mcp.Errors)
 }
 
 // ConfigProvider provides configuration access

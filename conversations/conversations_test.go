@@ -48,7 +48,7 @@ func (m *mockToolProvider) GetTools(isDM bool, bot *bots.Bot) []llm.Tool {
 
 type mockMCPClientManager struct{}
 
-func (m *mockMCPClientManager) GetToolsForUser(userID, sessionToken string) ([]llm.Tool, *mcp.Errors) {
+func (m *mockMCPClientManager) GetToolsForUser(userID, sessionID string) ([]llm.Tool, *mcp.Errors) {
 	return []llm.Tool{}, nil
 }
 
