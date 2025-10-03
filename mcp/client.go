@@ -39,7 +39,6 @@ type Client struct {
 	userID         string
 	log            pluginapi.LogService
 	oauthManager   *OAuthManager
-	isEmbedded     bool                  // true if this is an embedded server
 	embeddedClient *EmbeddedServerClient // for reconnection (nil for remote servers)
 	sessionID      string                // session ID for embedded server reconnection
 }
@@ -102,8 +101,7 @@ func (c *EmbeddedServerClient) CreateClient(ctx context.Context, userID, session
 		tools:          make(map[string]*mcp.Tool),
 		userID:         userID,
 		log:            c.log,
-		oauthManager:   nil, // Embedded servers don't use OAuth
-		isEmbedded:     true,
+		oauthManager:   nil,       // Embedded servers don't use OAuth
 		embeddedClient: c,         // Store client helper for reconnection
 		sessionID:      sessionID, // Store session ID for reconnection
 	}
@@ -263,10 +261,10 @@ func (c *Client) CallTool(ctx context.Context, toolName string, args map[string]
 	result, err := c.session.CallTool(ctx, params)
 	if err != nil {
 		if errors.Is(err, mcp.ErrConnectionClosed) {
-			if c.isEmbedded {
+			if c.embeddedClient != nil {
 				// Reconnect to embedded server using stored client helper and session ID
-				if c.embeddedClient == nil || c.sessionID == "" {
-					return "", fmt.Errorf("embedded server connection lost and cannot be reconnected: missing reconnection info")
+				if c.sessionID == "" {
+					return "", fmt.Errorf("embedded server connection lost and cannot be reconnected: missing session ID")
 				}
 
 				newClient, reconnectErr := c.embeddedClient.CreateClient(ctx, c.userID, c.sessionID)
