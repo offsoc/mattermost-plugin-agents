@@ -36,7 +36,7 @@ func NewEmbeddedMCPServer(pluginAPI *pluginapi.Client, logger pluginapi.LogServi
 	config := mcpserver.InMemoryConfig{
 		BaseConfig: mcpserver.BaseConfig{
 			MMServerURL: siteURL,
-			// For embedded server, internal URL can be the same as external
+			// Just use siteURL for now. Could make this configurable later
 			MMInternalServerURL: siteURL,
 			DevMode:             false,
 		},

@@ -223,9 +223,7 @@ func (p *Plugin) OnActivate() error {
 
 func (p *Plugin) OnDeactivate() error {
 	// Clean up MCP client manager if it exists
-	if p.mcpClientManager != nil {
-		p.mcpClientManager.Close()
-	}
+	p.mcpClientManager.Close()
 
 	return nil
 }

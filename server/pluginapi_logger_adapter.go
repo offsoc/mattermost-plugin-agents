@@ -10,8 +10,6 @@ import (
 
 // PluginAPILoggerAdapter adapts pluginapi.LogService to types.Logger
 // This allows the embedded MCP server to use the plugin's logging infrastructure
-// Since both interfaces use the same method signatures with key-value pairs,
-// this adapter is now a simple pass-through
 type PluginAPILoggerAdapter struct {
 	log pluginapi.LogService
 }
