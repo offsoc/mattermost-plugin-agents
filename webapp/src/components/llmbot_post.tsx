@@ -537,7 +537,7 @@ export const LLMBotPost = (props: Props) => {
                 channelID={props.post.channel_id}
                 postID={props.post.id}
                 showCursor={generating}
-                annotations={annotations.length > 0 ? annotations : undefined}
+                annotations={annotations.length > 0 ? annotations : undefined} // eslint-disable-line no-undefined
             />
             {props.post.props?.[SearchResultsPropKey] && (
                 <SearchSources

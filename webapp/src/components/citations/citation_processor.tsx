@@ -66,8 +66,9 @@ export function replaceCitationMarkers(element: any, annotations: Annotation[]):
 
     if (React.isValidElement(element)) {
         // Recursively process children
-        if (element.props && element.props.children) {
-            const processedChildren = React.Children.map(element.props.children, (child) =>
+        const props = element.props as {children?: React.ReactNode};
+        if (props.children) {
+            const processedChildren = React.Children.map(props.children, (child) =>
                 replaceCitationMarkers(child, annotations),
             );
 
