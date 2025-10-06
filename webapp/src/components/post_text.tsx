@@ -116,5 +116,4 @@ const PostText = (props: Props) => {
     );
 };
 
-
 export default PostText;

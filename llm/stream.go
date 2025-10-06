@@ -23,7 +23,15 @@ const (
 	EventTypeReasoningEnd
 	// EventTypeAnnotations represents annotations/citations in the response
 	EventTypeAnnotations
+	// EventTypeUsage represents token usage data
+	EventTypeUsage
 )
+
+// TokenUsage represents token usage statistics for an LLM request
+type TokenUsage struct {
+	InputTokens  int64 `json:"input_tokens"`
+	OutputTokens int64 `json:"output_tokens"`
+}
 
 // TextStreamEvent represents an event in the text stream
 type TextStreamEvent struct {

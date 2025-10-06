@@ -347,6 +347,7 @@ export const LLMBotPost = (props: Props) => {
                     setReasoningSummary(data.reasoning);
                     setShowReasoning(true);
                     setIsReasoningLoading(true);
+                    setGenerating(true);
                     return;
                 }
 
@@ -390,6 +391,11 @@ export const LLMBotPost = (props: Props) => {
                 } else if (data.control === 'end') {
                     setGenerating(false);
                     setStopped(false);
+                    setIsReasoningLoading(false);
+                } else if (data.control === 'cancel') {
+                    setGenerating(false);
+                    setStopped(false);
+                    setIsReasoningLoading(false);
                 } else if (data.control === 'start') {
                     setGenerating(true);
                     setStopped(false);
@@ -426,12 +432,17 @@ export const LLMBotPost = (props: Props) => {
         setShowReasoning(false);
         setIsReasoningCollapsed(true);
         setIsReasoningLoading(false);
+
+        // Clear annotations/citations when regenerating
+        setAnnotations([]);
+
         doRegenerate(props.post.id);
     };
 
     const stopGenerating = () => {
         setStopped(true);
         setGenerating(false);
+        setIsReasoningLoading(false);
         doStopGenerating(props.post.id);
     };
 
@@ -461,7 +472,8 @@ export const LLMBotPost = (props: Props) => {
     const showRegenerate = !generating && requesterIsCurrentUser && !isNoShowRegen;
     const showPostbackButton = !generating && requesterIsCurrentUser && isTranscriptionResult;
     const showStopGeneratingButton = generating && requesterIsCurrentUser;
-    const showControlsBar = (showRegenerate || showPostbackButton || showStopGeneratingButton) && message !== '';
+    const hasContent = message !== '' || reasoningSummary !== '';
+    const showControlsBar = ((showRegenerate || showPostbackButton) && hasContent) || showStopGeneratingButton;
 
     return (
         <PostBody
