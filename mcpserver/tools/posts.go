@@ -24,7 +24,7 @@ type CreatePostArgs struct {
 	ChannelID   string   `json:"channel_id" jsonschema_description:"The ID of the channel to post in"`
 	Message     string   `json:"message" jsonschema_description:"The message content"`
 	RootID      string   `json:"root_id" jsonschema_description:"Optional root post ID for replies"`
-	Attachments []string `json:"attachments,omitempty" jsonschema_description:"Optional list of file paths or URLs to attach to the post"`
+	Attachments []string `json:"attachments,omitempty" access:"local" jsonschema_description:"Optional list of file paths or URLs to attach to the post"`
 }
 
 // CreatePostAsUserArgs represents arguments for the create_post_as_user tool (dev mode only)
@@ -35,7 +35,13 @@ type CreatePostAsUserArgs struct {
 	Message     string   `json:"message" jsonschema_description:"The message content"`
 	RootID      string   `json:"root_id" jsonschema_description:"Optional root post ID for replies"`
 	Props       string   `json:"props" jsonschema_description:"Optional post properties (JSON string)"`
-	Attachments []string `json:"attachments,omitempty" jsonschema_description:"Optional list of file paths or URLs to attach to the post"`
+	Attachments []string `json:"attachments,omitempty" access:"local" jsonschema_description:"Optional list of file paths or URLs to attach to the post"`
+}
+
+// DMSelfArgs represents arguments for the dm_self tool
+type DMSelfArgs struct {
+	Message     string   `json:"message" jsonschema_description:"The message content to send to yourself"`
+	Attachments []string `json:"attachments,omitempty" access:"local" jsonschema_description:"Optional list of file paths or URLs to attach to the message"`
 }
 
 // getPostTools returns all post-related tools
@@ -44,14 +50,20 @@ func (p *MattermostToolProvider) getPostTools() []MCPTool {
 		{
 			Name:        "read_post",
 			Description: "Read a specific post and its thread from Mattermost",
-			Schema:      llm.NewJSONSchemaFromStruct[ReadPostArgs](),
+			Schema:      NewJSONSchemaForAccessMode[ReadPostArgs](string(p.accessMode)),
 			Resolver:    p.toolReadPost,
 		},
 		{
 			Name:        "create_post",
 			Description: "Create a new post in Mattermost",
-			Schema:      llm.NewJSONSchemaFromStruct[CreatePostArgs](),
+			Schema:      NewJSONSchemaForAccessMode[CreatePostArgs](string(p.accessMode)),
 			Resolver:    p.toolCreatePost,
+		},
+		{
+			Name:        "dm_self",
+			Description: "Send a direct message to yourself. Use this when the user requests to send something to themselves (e.g., 'send me this', 'DM me that')",
+			Schema:      NewJSONSchemaForAccessMode[DMSelfArgs](string(p.accessMode)),
+			Resolver:    p.toolDMSelf,
 		},
 	}
 }
@@ -62,7 +74,7 @@ func (p *MattermostToolProvider) getDevPostTools() []MCPTool {
 		{
 			Name:        "create_post_as_user",
 			Description: "Create a post as a specific user using username/password login. Use this tool in dev mode for creating realistic multi-user scenarios. Simply provide the username and password of created users.",
-			Schema:      llm.NewJSONSchemaFromStruct[CreatePostAsUserArgs](),
+			Schema:      NewJSONSchemaForAccessMode[CreatePostAsUserArgs](string(p.accessMode)),
 			Resolver:    p.toolCreatePostAsUser,
 		},
 	}
@@ -74,6 +86,11 @@ func (p *MattermostToolProvider) toolReadPost(mcpContext *MCPToolContext, argsGe
 	err := argsGetter(&args)
 	if err != nil {
 		return "invalid parameters to function", fmt.Errorf("failed to get arguments for tool read_post: %w", err)
+	}
+
+	// Validate post ID
+	if !model.IsValidId(args.PostID) {
+		return "invalid post_id format", fmt.Errorf("post_id must be a valid ID")
 	}
 
 	// Set default for include_thread
@@ -158,11 +175,15 @@ func (p *MattermostToolProvider) toolCreatePost(mcpContext *MCPToolContext, args
 	}
 
 	// Validate required fields
-	if args.ChannelID == "" {
-		return "channel_id is required", fmt.Errorf("channel_id cannot be empty")
+	if !model.IsValidId(args.ChannelID) {
+		return "invalid channel_id format", fmt.Errorf("channel_id must be a valid ID")
 	}
 	if args.Message == "" {
 		return "message is required", fmt.Errorf("message cannot be empty")
+	}
+	// Validate root ID if provided (for replies)
+	if args.RootID != "" && !model.IsValidId(args.RootID) {
+		return "invalid root_id format", fmt.Errorf("root_id must be a valid ID")
 	}
 
 	// Get client from context
@@ -173,7 +194,7 @@ func (p *MattermostToolProvider) toolCreatePost(mcpContext *MCPToolContext, args
 	ctx := context.Background()
 
 	// Upload files if specified
-	fileIDs, attachmentMessage := handleFileAttachments(ctx, client, args.ChannelID, args.Attachments)
+	fileIDs, attachmentMessage := uploadFilesAndUrlsForLocal(ctx, client, args.ChannelID, args.Attachments, mcpContext.AccessMode)
 
 	// Create the post
 	post := &model.Post{
@@ -206,16 +227,20 @@ func (p *MattermostToolProvider) toolCreatePostAsUser(mcpContext *MCPToolContext
 	if args.Password == "" {
 		return "password is required", fmt.Errorf("password cannot be empty")
 	}
-	if args.ChannelID == "" {
-		return "channel_id is required", fmt.Errorf("channel_id cannot be empty")
+	if !model.IsValidId(args.ChannelID) {
+		return "invalid channel_id format", fmt.Errorf("channel_id must be a valid ID")
 	}
 	if args.Message == "" {
 		return "message is required", fmt.Errorf("message cannot be empty")
 	}
+	// Validate root ID if provided (for replies)
+	if args.RootID != "" && !model.IsValidId(args.RootID) {
+		return "invalid root_id format", fmt.Errorf("root_id must be a valid ID")
+	}
 
 	// Create a new client and login as the specified user
 	ctx := context.Background()
-	userClient := model.NewAPIv4Client(p.serverURL)
+	userClient := model.NewAPIv4Client(p.mmInternalServerURL)
 
 	// Login as the specified user
 	user, _, err := userClient.Login(ctx, args.Username, args.Password)
@@ -224,7 +249,7 @@ func (p *MattermostToolProvider) toolCreatePostAsUser(mcpContext *MCPToolContext
 	}
 
 	// Upload files if specified
-	fileIDs, attachmentMessage := handleFileAttachments(ctx, userClient, args.ChannelID, args.Attachments)
+	fileIDs, attachmentMessage := uploadFilesAndUrlsForLocal(ctx, userClient, args.ChannelID, args.Attachments, mcpContext.AccessMode)
 
 	// Create the post
 	post := &model.Post{
@@ -247,4 +272,59 @@ func (p *MattermostToolProvider) toolCreatePostAsUser(mcpContext *MCPToolContext
 	}
 
 	return fmt.Sprintf("Successfully created post with ID %s as user %s%s", createdPost.Id, user.Username, attachmentMessage), nil
+}
+
+// toolDMSelf implements the dm_self tool
+func (p *MattermostToolProvider) toolDMSelf(mcpContext *MCPToolContext, argsGetter llm.ToolArgumentGetter) (string, error) {
+	var args DMSelfArgs
+	err := argsGetter(&args)
+	if err != nil {
+		return "invalid parameters to function", fmt.Errorf("failed to get arguments for tool dm_self: %w", err)
+	}
+
+	// Validate required fields
+	if args.Message == "" {
+		return "message is required", fmt.Errorf("message cannot be empty")
+	}
+
+	// Get client from context
+	if mcpContext.Client == nil {
+		return "client not available", fmt.Errorf("client not available in context")
+	}
+	client := mcpContext.Client
+	ctx := context.Background()
+
+	// Get current user information
+	user, _, err := client.GetMe(ctx, "")
+	if err != nil {
+		return "failed to get current user", fmt.Errorf("error getting current user: %w", err)
+	}
+
+	// Create or get direct channel with self
+	dmChannel, _, err := client.CreateDirectChannel(ctx, user.Id, user.Id)
+	if err != nil {
+		return "failed to create DM channel", fmt.Errorf("error creating direct channel: %w", err)
+	}
+
+	// Upload files if specified
+	fileIDs, attachmentMessage := uploadFilesAndUrlsForLocal(ctx, client, dmChannel.Id, args.Attachments, mcpContext.AccessMode)
+
+	// Create the post in the DM channel
+	post := &model.Post{
+		ChannelId: dmChannel.Id,
+		Message:   args.Message,
+		FileIds:   fileIDs,
+	}
+
+	// Set props to trigger notifications
+	post.SetProps(map[string]interface{}{
+		"from_webhook": "true",
+	})
+
+	createdPost, _, err := client.CreatePost(ctx, post)
+	if err != nil {
+		return "failed to create DM post", fmt.Errorf("error creating DM post: %w", err)
+	}
+
+	return fmt.Sprintf("Successfully sent DM to yourself with ID: %s%s", createdPost.Id, attachmentMessage), nil
 }
