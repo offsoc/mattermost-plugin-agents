@@ -14,7 +14,6 @@ import (
 	"image/png"
 	"io"
 	"net/http"
-	"regexp"
 	"strings"
 	"time"
 
@@ -55,8 +54,6 @@ const (
 )
 
 var ErrStreamingTimeout = errors.New("timeout streaming")
-
-var openAICitationPattern = regexp.MustCompile(`\(([^\s:]+)\s*:\s*(https?://[^\)]+)\)`)
 
 func NewAzure(config Config, httpClient *http.Client) *OpenAI {
 	opts := []option.RequestOption{
