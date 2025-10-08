@@ -297,7 +297,6 @@ export const LLMBotPost = (props: Props) => {
                 setIsReasoningLoading(false);
             }
 
-
             // Initialize annotations from persisted data
             const persistedAnnotations = props.post.props?.annotations || '';
             if (persistedAnnotations) {
