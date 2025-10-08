@@ -79,7 +79,7 @@ Some LLMs have additional configuration that can enable rich features, like Web 
 
 | Setting | Description |
 |---------|-------------|
-| **Enable Web Search** | Enabling wen search will allow your Agent to leverage Anthropic's native web search tool, enabling Agents to respond with information more recent than the model's cutoff date.
+| **Enable Web Search** | Enabling web search will allow your Agent to leverage Anthropic's native web search tool, enabling Agents to respond with information more recent than the model's cutoff date.
 
 
 Select **Save** to create the agent.
