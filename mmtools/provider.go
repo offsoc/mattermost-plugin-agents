@@ -23,14 +23,16 @@ type MMToolProvider struct {
 	pluginAPI  mmapi.Client
 	search     *search.Search
 	httpClient *http.Client
+	webSearch  WebSearchService
 }
 
 // NewMMToolProvider creates a new tool provider
-func NewMMToolProvider(pluginAPI mmapi.Client, search *search.Search, httpClient *http.Client) *MMToolProvider {
+func NewMMToolProvider(pluginAPI mmapi.Client, search *search.Search, httpClient *http.Client, webSearch WebSearchService) *MMToolProvider {
 	return &MMToolProvider{
 		pluginAPI:  pluginAPI,
 		search:     search,
 		httpClient: httpClient,
+		webSearch:  webSearch,
 	}
 }
 
@@ -78,6 +80,13 @@ func (p *MMToolProvider) GetTools(isDM bool, bot *bots.Bot) []llm.Tool {
 				Schema:      llm.NewJSONSchemaFromStruct[GetJiraIssueArgs](),
 				Resolver:    p.toolGetJiraIssue,
 			})
+		}
+
+		if p.webSearch != nil {
+			tool := p.webSearch.Tool()
+			if tool != nil {
+				builtInTools = append(builtInTools, *tool)
+			}
 		}
 	}
 

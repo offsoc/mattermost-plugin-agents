@@ -39,11 +39,12 @@ func (c *Conversations) HandleToolCall(userID string, post *model.Post, channel 
 		return errors.New("post pending tool calls not valid JSON")
 	}
 
+	isDM := mmapi.IsDMWith(bot.GetMMBot().UserId, channel)
 	llmContext := c.contextBuilder.BuildLLMContextUserRequest(
 		bot,
 		user,
 		channel,
-		c.contextBuilder.WithLLMContextDefaultTools(bot, mmapi.IsDMWith(bot.GetMMBot().UserId, channel)),
+		c.contextBuilder.WithLLMContextDefaultTools(bot, isDM),
 	)
 
 	for i := range tools {

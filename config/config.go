@@ -25,6 +25,20 @@ type Config struct {
 	AllowedUpstreamHostnames string                           `json:"allowedUpstreamHostnames"`
 	EmbeddingSearchConfig    embeddings.EmbeddingSearchConfig `json:"embeddingSearchConfig"`
 	MCP                      mcp.Config                       `json:"mcp"`
+	WebSearch                WebSearchConfig                  `json:"webSearch"`
+}
+
+type WebSearchConfig struct {
+	Enabled  bool                  `json:"enabled"`
+	Provider string                `json:"provider"`
+	Google   WebSearchGoogleConfig `json:"google"`
+}
+
+type WebSearchGoogleConfig struct {
+	APIKey         string `json:"apiKey"`
+	SearchEngineID string `json:"searchEngineId"`
+	ResultLimit    int    `json:"resultLimit"`
+	APIURL         string `json:"apiURL"`
 }
 
 func (c *Config) Clone() *Config {
@@ -83,6 +97,10 @@ func (c *Container) RegisterUpdateListener(listener UpdateListener) {
 
 func (c *Container) EmbeddingSearchConfig() embeddings.EmbeddingSearchConfig {
 	return c.cfg.Load().EmbeddingSearchConfig
+}
+
+func (c *Container) WebSearchConfig() WebSearchConfig {
+	return c.cfg.Load().WebSearch
 }
 
 // Updates the current configuration

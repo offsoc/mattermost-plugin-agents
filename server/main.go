@@ -131,10 +131,15 @@ func (p *Plugin) OnActivate() error {
 		licenseChecker,
 	)
 
+	webSearchService := mmtools.NewWebSearchService(func() *config.Config {
+		return p.configuration.Config()
+	}, pluginAPI.Log, untrustedHTTPClient)
+
 	toolProvider := mmtools.NewMMToolProvider(
 		mmClient,
 		searchService,
 		untrustedHTTPClient,
+		webSearchService,
 	)
 
 	// Build redirect URI
