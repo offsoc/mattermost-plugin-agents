@@ -6,6 +6,8 @@ import React from 'react';
 import {CitationComponent} from './citation_component';
 import {Annotation} from './types';
 
+const openAICitationRegex = /\([^\s:]+\s*:\s*https?:\/\/[\S^)]*\)/g;
+
 // Insert special markers in the text that will survive markdown processing
 export function insertAnnotationMarkers(message: string, annotations: Annotation[]): string {
     const sortedAnnotations = [...annotations].sort((a, b) => b.start_index - a.start_index);
@@ -24,13 +26,15 @@ export function insertAnnotationMarkers(message: string, annotations: Annotation
 // Replace citation markers in the processed JSX with actual citation components
 export function replaceCitationMarkers(element: any, annotations: Annotation[]): any {
     if (typeof element === 'string') {
+        const cleanedElement = element.replace(openAICitationRegex, '').replace(/\s+\./g, '.');
+
         // Use regex to find all citation markers at once
         const markerRegex = (/!!CITE(\d+)!!/g);
-        const matches = [...element.matchAll(markerRegex)];
+        const matches = [...cleanedElement.matchAll(markerRegex)];
 
         if (matches.length > 0) {
             // Split the string by all markers and rebuild with components
-            const parts = element.split(markerRegex);
+            const parts = cleanedElement.split(markerRegex);
             const result = [];
 
             for (let i = 0; i < parts.length; i++) {
@@ -61,7 +65,7 @@ export function replaceCitationMarkers(element: any, annotations: Annotation[]):
             return result.length === 1 ? result[0] : result;
         }
 
-        return element;
+        return cleanedElement;
     }
 
     if (React.isValidElement(element)) {

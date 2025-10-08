@@ -359,6 +359,7 @@ export const LLMBotPost = (props: Props) => {
                     setShowReasoning(true);
                     setIsReasoningLoading(true);
                     setGenerating(true);
+                    setPrecontent(false); // Hide "Starting..." when reasoning begins
                     return;
                 }
 

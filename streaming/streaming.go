@@ -240,6 +240,10 @@ func (p *MMPostStreamService) StreamToPost(ctx context.Context, stream *llm.Text
 					post.Message = T("agents.stream_to_post_llm_not_return", "Sorry! The LLM did not return a result.")
 					p.sendPostStreamingUpdateEvent(post, post.Message)
 				}
+
+				// Inline citations have already been cleaned in EventTypeAnnotations handler
+				// (if there were any citations, they were cleaned before annotations were sent)
+
 				// Update post with all accumulated data
 				// This includes the message and any reasoning that was added to props in EventTypeReasoningEnd
 				if reasoningProp := post.GetProp(ReasoningSummaryProp); reasoningProp != nil {
@@ -333,17 +337,13 @@ func (p *MMPostStreamService) StreamToPost(ctx context.Context, stream *llm.Text
 				}
 				return
 			case llm.EventTypeAnnotations:
-				// Handle annotations/citations event
 				if annotations, ok := event.Value.([]llm.Annotation); ok {
-					// Persist annotations to post props
 					annotationsJSON, err := json.Marshal(annotations)
 					if err != nil {
 						p.mmClient.LogError("Failed to marshal annotations", "error", err)
 					} else {
 						post.AddProp(AnnotationsProp, string(annotationsJSON))
 						p.mmClient.LogDebug("Added annotations to post props", "post_id", post.Id, "count", len(annotations))
-
-						// Send websocket event with annotation data
 						p.sendPostStreamingAnnotationsEvent(post, string(annotationsJSON))
 					}
 				}

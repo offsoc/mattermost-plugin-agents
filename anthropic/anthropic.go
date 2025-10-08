@@ -227,7 +227,7 @@ func (a *Anthropic) streamChatWithTools(state messageState) {
 
 	message := anthropicSDK.Message{}
 	var thinkingBuffer strings.Builder
-	var isThinkingComplete bool
+	var currentBlockIsThinking bool
 
 	for stream.Next() {
 		event := stream.Current()
@@ -241,6 +241,14 @@ func (a *Anthropic) streamChatWithTools(state messageState) {
 
 		// Stream text and thinking content immediately
 		switch eventVariant := event.AsAny().(type) { //nolint:gocritic
+		case anthropicSDK.ContentBlockStartEvent:
+			// Check what type of content block is starting
+			if eventVariant.ContentBlock.Type == "thinking" {
+				currentBlockIsThinking = true
+			} else {
+				currentBlockIsThinking = false
+			}
+
 		case anthropicSDK.ContentBlockDeltaEvent:
 			switch deltaVariant := eventVariant.Delta.AsAny().(type) { //nolint:gocritic
 			case anthropicSDK.TextDelta:
@@ -260,13 +268,15 @@ func (a *Anthropic) streamChatWithTools(state messageState) {
 
 		case anthropicSDK.ContentBlockStopEvent:
 			// Check if this is the end of a thinking block
-			if thinkingBuffer.Len() > 0 && !isThinkingComplete {
-				// Send the complete thinking/reasoning
+			if currentBlockIsThinking && thinkingBuffer.Len() > 0 {
+				// Send the complete thinking/reasoning for this block
 				state.output <- llm.TextStreamEvent{
 					Type:  llm.EventTypeReasoningEnd,
 					Value: thinkingBuffer.String(),
 				}
-				isThinkingComplete = true
+				// Reset the buffer for the next potential thinking block
+				thinkingBuffer.Reset()
+				currentBlockIsThinking = false
 			}
 		}
 	}
@@ -279,8 +289,8 @@ func (a *Anthropic) streamChatWithTools(state messageState) {
 		return
 	}
 
-	// If we haven't sent the complete thinking yet, send it now before processing tool calls
-	if !isThinkingComplete && thinkingBuffer.Len() > 0 {
+	// If we have any unsent thinking (edge case), send it now before processing tool calls
+	if thinkingBuffer.Len() > 0 {
 		state.output <- llm.TextStreamEvent{
 			Type:  llm.EventTypeReasoningEnd,
 			Value: thinkingBuffer.String(),

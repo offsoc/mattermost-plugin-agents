@@ -14,6 +14,7 @@ import (
 	"image/png"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -54,6 +55,8 @@ const (
 )
 
 var ErrStreamingTimeout = errors.New("timeout streaming")
+
+var openAICitationPattern = regexp.MustCompile(`\(([^\s:]+)\s*:\s*(https?://[^\)]+)\)`)
 
 func NewAzure(config Config, httpClient *http.Client) *OpenAI {
 	opts := []option.RequestOption{
@@ -340,6 +343,7 @@ func (s *OpenAI) streamCompletionsAPIToChannels(params openai.ChatCompletionNewP
 
 	// Buffering in the case of tool use
 	var toolsBuffer map[int]*ToolBufferElement
+
 	for stream.Next() {
 		chunk := stream.Current()
 
@@ -502,9 +506,13 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 	var currentToolIndex int
 	var reasoningSummaryBuffer strings.Builder
 	var reasoningComplete bool // Track if we've sent the complete reasoning
+	// var citationAcc = newCitationAccumulator()
 
 	// Track annotations/citations
 	var annotations []llm.Annotation
+
+	// Track full message text to clean citations at the end
+	var fullMessageText strings.Builder
 
 	// Define handleToolCalls as a closure to access local variables
 	handleToolCalls := func() {
@@ -582,6 +590,9 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 					}
 					reasoningComplete = true
 				}
+				// Accumulate full text for citation cleaning
+				fullMessageText.WriteString(event.Delta)
+				// Stream the text as-is (citations will be cleaned at the end)
 				output <- llm.TextStreamEvent{
 					Type:  llm.EventTypeText,
 					Value: event.Delta,
@@ -593,19 +604,23 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 
 		case "response.content_part.done":
 			// Content part completed - extract annotations if present
-			if event.Part.Type == "output_text" && len(event.Part.Annotations) > 0 {
-				// Extract URL citations from the completed content part
-				for _, ann := range event.Part.Annotations {
-					if ann.Type == "url_citation" {
-						// OpenAI provides StartIndex and EndIndex directly as absolute positions
-						annotations = append(annotations, llm.Annotation{
-							Type:       llm.AnnotationTypeURLCitation,
-							StartIndex: int(ann.StartIndex),
-							EndIndex:   int(ann.EndIndex),
-							URL:        ann.URL,
-							Title:      ann.Title,
-							Index:      len(annotations) + 1, // 1-based index for display
-						})
+			// Check if we have a Part and if it's output text
+			if event.Part.Type == "output_text" {
+				// Check if annotations exist
+				if len(event.Part.Annotations) > 0 {
+					// Extract URL citations from the completed content part
+					for _, ann := range event.Part.Annotations {
+						if ann.Type == "url_citation" {
+							// OpenAI provides StartIndex and EndIndex directly as absolute positions
+							annotations = append(annotations, llm.Annotation{
+								Type:       llm.AnnotationTypeURLCitation,
+								StartIndex: int(ann.StartIndex),
+								EndIndex:   int(ann.EndIndex),
+								URL:        ann.URL,
+								Title:      ann.Title,
+								Index:      len(annotations) + 1, // 1-based index for display
+							})
+						}
 					}
 				}
 			}
@@ -718,6 +733,8 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 					Type:  llm.EventTypeAnnotations,
 					Value: annotations,
 				}
+				// Clear annotations after sending to avoid duplicates
+				annotations = nil
 			}
 
 		case "response.web_search_call.searching", "response.web_search_call.in_progress", "response.web_search_call.completed":
@@ -734,6 +751,14 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 				output <- llm.TextStreamEvent{
 					Type:  llm.EventTypeReasoningEnd,
 					Value: reasoningSummaryBuffer.String(),
+				}
+			}
+
+			// If we have annotations (from API or extracted from text), send them now
+			if len(annotations) > 0 {
+				output <- llm.TextStreamEvent{
+					Type:  llm.EventTypeAnnotations,
+					Value: annotations,
 				}
 			}
 
