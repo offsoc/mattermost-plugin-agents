@@ -99,10 +99,6 @@ func (c *Container) EmbeddingSearchConfig() embeddings.EmbeddingSearchConfig {
 	return c.cfg.Load().EmbeddingSearchConfig
 }
 
-func (c *Container) WebSearchConfig() WebSearchConfig {
-	return c.cfg.Load().WebSearch
-}
-
 // Updates the current configuration
 // The new configuration is deep-copied to ensure the new and old
 // configurations are independent of each other.

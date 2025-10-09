@@ -5,6 +5,7 @@ package mmtools
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/mattermost/mattermost-plugin-ai/bots"
 	"github.com/mattermost/mattermost-plugin-ai/llm"
@@ -82,13 +83,31 @@ func (p *MMToolProvider) GetTools(isDM bool, bot *bots.Bot) []llm.Tool {
 			})
 		}
 
-		if p.webSearch != nil {
+		if p.webSearch != nil && !hasNativeWebSearch(bot) {
 			tool := p.webSearch.Tool()
 			if tool != nil {
 				builtInTools = append(builtInTools, *tool)
+			}
+
+			if sourceTool := p.webSearch.SourceTool(); sourceTool != nil {
+				builtInTools = append(builtInTools, *sourceTool)
 			}
 		}
 	}
 
 	return builtInTools
+}
+
+func hasNativeWebSearch(bot *bots.Bot) bool {
+	if bot == nil {
+		return false
+	}
+
+	for _, tool := range bot.GetConfig().Service.EnabledNativeTools {
+		if strings.EqualFold(tool, "web_search") {
+			return true
+		}
+	}
+
+	return false
 }

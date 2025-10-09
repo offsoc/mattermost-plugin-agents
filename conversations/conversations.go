@@ -140,7 +140,7 @@ func (c *Conversations) ProcessUserRequestWithContext(bot *bots.Bot, postingUser
 // ProcessUserRequest processes a user request to a bot
 func (c *Conversations) ProcessUserRequest(bot *bots.Bot, postingUser *model.User, channel *model.Channel, post *model.Post) (*llm.TextStreamResult, error) {
 	// Create a context with default tools
-	context := c.contextBuilder.BuildLLMContextUserRequest(
+	llmContext := c.contextBuilder.BuildLLMContextUserRequest(
 		bot,
 		postingUser,
 		channel,
@@ -148,14 +148,14 @@ func (c *Conversations) ProcessUserRequest(bot *bots.Bot, postingUser *model.Use
 	)
 
 	// Check for auth errors in the tool store
-	if context.Tools != nil {
-		authErrors := context.Tools.GetAuthErrors()
+	if llmContext.Tools != nil {
+		authErrors := llmContext.Tools.GetAuthErrors()
 		if len(authErrors) > 0 {
 			c.sendOAuthNotifications(bot, postingUser.Id, channel.Id, post.Id, authErrors)
 		}
 	}
 
-	return c.ProcessUserRequestWithContext(bot, postingUser, channel, post, context)
+	return c.ProcessUserRequestWithContext(bot, postingUser, channel, post, llmContext)
 }
 
 func (c *Conversations) GenerateTitle(bot *bots.Bot, request string, postID string, context *llm.Context) error {
