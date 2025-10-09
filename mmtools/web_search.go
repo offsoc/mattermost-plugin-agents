@@ -4,6 +4,7 @@
 package mmtools
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -16,7 +17,8 @@ import (
 	"sync"
 	"unicode/utf8"
 
-	"github.com/k3a/html2text"
+	"github.com/go-shiori/go-readability"
+	"golang.org/x/net/html"
 
 	"github.com/mattermost/mattermost-plugin-ai/config"
 	"github.com/mattermost/mattermost-plugin-ai/llm"
@@ -29,7 +31,7 @@ const (
 	defaultGoogleSearchEndpoint = "https://www.googleapis.com/customsearch/v1"
 	minQueryLength              = 3
 	// WebSearchSourceFetchDescription describes the page retrieval tool.
-	WebSearchSourceFetchDescription = "Fetch the full HTML content at a given URL and convert it to plain text for analysis. Use this tool to fetch more content from a web search result, or when a link is provided to you by the user. Responses from this tool should be scrutinized for relevance, as some fetches may return generic pages as they don't allow AI Agents to access them."
+	WebSearchSourceFetchDescription = "Fetch the full HTML content at a given URL and convert it to plain text for analysis. Use this tool to fetch more content from a web search result, or when a link is provided to you by the user. Responses from this tool should be scrutinized for relevance, as some fetches may return generic pages as they don't allow AI Agents to access them. YOU MUST NOT USE THIS TOOL FOR MORE THAN 3 WEB SEARCHES PER ASK."
 )
 
 // WebSearchService exposes the built-in web search tool if configured.
@@ -90,7 +92,7 @@ func NewWebSearchService(cfgGetter func() *config.Config, logger WebSearchLog, h
 
 	service.tool = &llm.Tool{
 		Name:        "WebSearch",
-		Description: "Perform a live web search using Google's Custom Search API. Use this tool to retrieve current information. Keep your search queries generic and concise according to the user's ask. Cite sources in your final answer using markers like [1], wrapped in markdown formatting with the full URL of the source. ",
+		Description: "Perform a live web search using Google's Custom Search API. Use this tool to retrieve current information. Keep your search queries generic and concise according to the user's ask. Cite sources in your final answer using markers like [1], wrapped in markdown formatting with the full URL of the source. For example, for source [1] with full URL https://example.com/some/source.html, you should cite it as [[1]](https://example.com/some/source.html) so that it renders as markdown",
 		Schema:      llm.NewJSONSchemaFromStruct[WebSearchToolArgs](),
 		Resolver:    service.resolve,
 	}
@@ -309,13 +311,51 @@ func (s *webSearchService) resolveSource(llmContext *llm.Context, argsGetter llm
 		return "unable to read the response", err
 	}
 
-	text := strings.TrimSpace(html2text.HTML2Text(string(body)))
-	if text == "" {
-		s.logWarn("source fetch resulted in empty text", "url", pageURL)
-		return "fetched page contained no readable text", nil
+	// First, try go-readability to extract readable content
+	parsedURL, parseErr := url.Parse(pageURL)
+	if parseErr == nil {
+		article, err := readability.FromReader(bytes.NewReader(body), parsedURL)
+		if err == nil && strings.TrimSpace(article.TextContent) != "" {
+			responseString := "Here is the HTML content of the page: \n\n" + article.TextContent + "\n\n Content ended"
+			return responseString, nil
+		}
 	}
 
-	return text, nil
+	// Fallback: extract just the <body> tag using Go's HTML parser
+	s.logDebug("readability extraction failed, falling back to body tag extraction", "url", pageURL)
+	doc, err := html.Parse(bytes.NewReader(body))
+	if err != nil {
+		s.logError("failed to parse HTML", "error", err, "url", pageURL)
+		return "unable to parse the response", err
+	}
+
+	bodyContent := extractBodyContent(doc)
+	if strings.TrimSpace(bodyContent) == "" {
+		s.logWarn("extracted body content is empty", "url", pageURL)
+		return "fetched page contained no readable content", nil
+	}
+
+	responseString := "Here is the HTML content of the page: \n\n" + bodyContent + "\n\n Content ended"
+	return responseString, nil
+}
+
+// extractBodyContent traverses the HTML tree to find and extract the <body> tag content.
+func extractBodyContent(n *html.Node) string {
+	if n.Type == html.ElementNode && n.Data == "body" {
+		var buf bytes.Buffer
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			html.Render(&buf, c)
+		}
+		return buf.String()
+	}
+
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if result := extractBodyContent(c); result != "" {
+			return result
+		}
+	}
+
+	return ""
 }
 
 func (s *webSearchService) googleSearch(ctx *llm.Context, query string, cfg config.WebSearchGoogleConfig, desiredLimit int) ([]WebSearchResult, error) {
