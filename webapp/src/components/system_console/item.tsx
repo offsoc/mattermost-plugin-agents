@@ -23,7 +23,8 @@ export type TextItemProps = {
     step?: string,
     min?: string,
     max?: string,
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void,
+    disabled?: boolean,
 };
 
 export const TextItem = (props: TextItemProps) => {
@@ -56,6 +57,7 @@ export type SelectionItemProps = {
     onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void
     children: React.ReactNode
     helptext?: string
+    disabled?: boolean
 };
 
 export const SelectionItem = (props: SelectionItemProps) => {

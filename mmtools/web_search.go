@@ -314,8 +314,8 @@ func (s *webSearchService) resolveSource(llmContext *llm.Context, argsGetter llm
 	// First, try go-readability to extract readable content
 	parsedURL, parseErr := url.Parse(pageURL)
 	if parseErr == nil {
-		article, err := readability.FromReader(bytes.NewReader(body), parsedURL)
-		if err == nil && strings.TrimSpace(article.TextContent) != "" {
+		article, readErr := readability.FromReader(bytes.NewReader(body), parsedURL)
+		if readErr == nil && strings.TrimSpace(article.TextContent) != "" {
 			responseString := "Here is the HTML content of the page: \n\n" + article.TextContent + "\n\n Content ended"
 			return responseString, nil
 		}
@@ -344,7 +344,7 @@ func extractBodyContent(n *html.Node) string {
 	if n.Type == html.ElementNode && n.Data == "body" {
 		var buf bytes.Buffer
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			html.Render(&buf, c)
+			_ = html.Render(&buf, c) // Ignore render errors; best-effort extraction
 		}
 		return buf.String()
 	}
@@ -481,9 +481,7 @@ func FlattenWebSearchResults(values []WebSearchContextValue) []WebSearchResult {
 
 	flat := make([]WebSearchResult, 0)
 	for _, value := range values {
-		for _, result := range value.Results {
-			flat = append(flat, result)
-		}
+		flat = append(flat, value.Results...)
 	}
 
 	return flat
@@ -608,21 +606,4 @@ func buildWebSearchAnnotations(message string, results []WebSearchResult) []llm.
 	}
 
 	return annotations
-}
-
-const footnoteTemplate = "[%d] %s — %s"
-
-func formatWebSearchResults(results []WebSearchResult) string {
-	if len(results) == 0 {
-		return ""
-	}
-
-	builder := strings.Builder{}
-	builder.WriteString("\nSources:\n")
-	for _, result := range results {
-		builder.WriteString(fmt.Sprintf(footnoteTemplate, result.Index, result.Title, result.URL))
-		builder.WriteString("\n")
-	}
-
-	return builder.String()
 }
