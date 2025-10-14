@@ -138,7 +138,7 @@ func TestDirectMessageConversations(t *testing.T) {
 					Name:               "matty",
 					DisplayName:        "Matty",
 					CustomInstructions: "",
-					EnableVision:       false,
+					EnableVision:       true,
 					DisableTools:       false,
 					Service: llm.ServiceConfig{
 						DefaultModel: "mattermodel-5.4",

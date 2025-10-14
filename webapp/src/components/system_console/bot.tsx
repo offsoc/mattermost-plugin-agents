@@ -176,10 +176,7 @@ const Bot = (props: Props) => {
                             <>
                                 <BooleanItem
                                     label={
-                                        <Horizontal>
-                                            <FormattedMessage defaultMessage='Enable Vision'/>
-                                            <Pill><FormattedMessage defaultMessage='BETA'/></Pill>
-                                        </Horizontal>
+                                        <FormattedMessage defaultMessage='Enable Vision'/>
                                     }
                                     value={props.bot.enableVision}
                                     onChange={(to: boolean) => props.onChange({...props.bot, enableVision: to})}

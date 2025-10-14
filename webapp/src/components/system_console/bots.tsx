@@ -31,7 +31,7 @@ const defaultNewBot: LLMBotConfig = {
         useResponsesAPI: false,
         enabledNativeTools: [],
     },
-    enableVision: false,
+    enableVision: true,
     disableTools: false,
     channelAccessLevel: ChannelAccessLevel.All,
     channelIDs: [],
