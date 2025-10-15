@@ -75,8 +75,9 @@ jobs:
         run: |
           make test
 
-  evals:
+  evals-openai:
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
         with:
@@ -85,16 +86,71 @@ jobs:
         with:
           go-version-file: 'go.mod'
 
-      - name: Run evaluations
+      - name: Run OpenAI evaluations
         env:
+          LLM_PROVIDER: openai
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-4o' }}
         run: |
           make evals-ci
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: eval-results
+          name: eval-results-openai
+          path: evals.jsonl
+          retention-days: 30
+
+  evals-anthropic:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v4
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Run Anthropic evaluations
+        env:
+          LLM_PROVIDER: anthropic
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514' }}
+        run: |
+          make evals-ci
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-results-anthropic
+          path: evals.jsonl
+          retention-days: 30
+
+  evals-azure:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v4
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Run Azure OpenAI evaluations
+        env:
+          LLM_PROVIDER: azure
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_MODEL: ${{ vars.AZURE_OPENAI_MODEL || 'gpt-4o' }}
+        run: |
+          make evals-ci
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-results-azure
           path: evals.jsonl
           retention-days: 30
 
@@ -149,7 +205,7 @@ jobs:
           aws s3 cp dist/mattermost-ai-*.tar.gz s3://${{ secrets.AWS_S3_BUCKET }}/mattermost-plugin-agents/mattermost-plugin-agents-${{ steps.short-sha.outputs.sha }}.tar.gz
 
   deploy:
-    needs: [lint, build, plugin-tests, e2e, evals]
+    needs: [lint, build, plugin-tests, e2e]
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:

@@ -103,6 +103,11 @@ All arguments after 'check' are passed directly to 'go test'.`,
 }
 
 func runCommand(args []string) {
+	// Clean up old results
+	if err := cleanupOldResults(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to clean old results: %v\n", err)
+	}
+
 	// Execute go test with GOEVALS=1
 	fmt.Println("Running evaluations...")
 
@@ -159,6 +164,11 @@ func viewCommandWithFlags() {
 }
 
 func checkCommand(args []string) {
+	// Clean up old results
+	if err := cleanupOldResults(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to clean old results: %v\n", err)
+	}
+
 	// Execute go test with GOEVALS=1
 	fmt.Println("Running evaluations...")
 
@@ -225,34 +235,75 @@ func printSummary(results []EvalLogLine) {
 	fmt.Println("EVALUATION RESULTS SUMMARY")
 	fmt.Println(strings.Repeat("=", 80))
 
-	passed := 0
-	failed := 0
-	var failures []EvalLogLine
+	// Group results by provider
+	providerStats := make(map[string]struct {
+		passed   int
+		failed   int
+		failures []EvalLogLine
+	})
+
+	totalPassed := 0
+	totalFailed := 0
 
 	for _, result := range results {
-		if result.Pass {
-			passed++
-		} else {
-			failed++
-			failures = append(failures, result)
+		// Extract provider from test name (format: "ParentTest/[provider] test name")
+		provider := "unknown"
+		// Look for [provider] pattern anywhere in the name
+		startIdx := strings.Index(result.Name, "[")
+		if startIdx >= 0 {
+			endIdx := strings.Index(result.Name[startIdx:], "]")
+			if endIdx > 0 {
+				provider = result.Name[startIdx+1 : startIdx+endIdx]
+			}
 		}
+
+		stats := providerStats[provider]
+		if result.Pass {
+			stats.passed++
+			totalPassed++
+		} else {
+			stats.failed++
+			totalFailed++
+			stats.failures = append(stats.failures, result)
+		}
+		providerStats[provider] = stats
 	}
 
-	fmt.Printf("\nTotal Tests: %d\n", len(results))
-	fmt.Printf("Passed:      %d\n", passed)
-	fmt.Printf("Failed:      %d\n", failed)
+	// Print per-provider statistics
+	fmt.Println("\nResults by Provider:")
+	fmt.Println(strings.Repeat("-", 80))
+	for provider, stats := range providerStats {
+		total := stats.passed + stats.failed
+		fmt.Printf("  %s: %d tests (%d passed, %d failed)\n",
+			strings.ToUpper(provider), total, stats.passed, stats.failed)
+	}
 
-	if len(failures) > 0 {
+	// Print overall statistics
+	fmt.Println("\nOverall Statistics:")
+	fmt.Println(strings.Repeat("-", 80))
+	fmt.Printf("Total Tests: %d\n", len(results))
+	fmt.Printf("Passed:      %d\n", totalPassed)
+	fmt.Printf("Failed:      %d\n", totalFailed)
+
+	// Print failures grouped by provider
+	if totalFailed > 0 {
 		fmt.Println("\n" + strings.Repeat("-", 80))
 		fmt.Println("FAILED EVALUATIONS:")
 		fmt.Println(strings.Repeat("-", 80))
 
-		for i, failure := range failures {
-			fmt.Printf("\n%d. %s\n", i+1, failure.Name)
-			fmt.Printf("   Rubric: %s\n", truncateString(failure.Rubric, 70))
-			fmt.Printf("   Score:  %.2f\n", failure.Score)
-			if failure.Reasoning != "" {
-				fmt.Printf("   Reason: %s\n", truncateString(failure.Reasoning, 70))
+		failureNum := 1
+		for provider, stats := range providerStats {
+			if len(stats.failures) > 0 {
+				fmt.Printf("\n%s Failures:\n", strings.ToUpper(provider))
+				for _, failure := range stats.failures {
+					fmt.Printf("\n%d. %s\n", failureNum, failure.Name)
+					fmt.Printf("   Rubric: %s\n", truncateString(failure.Rubric, 70))
+					fmt.Printf("   Score:  %.2f\n", failure.Score)
+					if failure.Reasoning != "" {
+						fmt.Printf("   Reason: %s\n", truncateString(failure.Reasoning, 250))
+					}
+					failureNum++
+				}
 			}
 		}
 	}
@@ -265,6 +316,33 @@ func truncateString(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen-3] + "..."
+}
+
+func cleanupOldResults() error {
+	// Look for evals.jsonl in current directory and parent directories
+	dir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+
+	for {
+		evalFile := filepath.Join(dir, "evals.jsonl")
+		if _, err := os.Stat(evalFile); err == nil {
+			// File exists, remove it
+			fmt.Printf("Cleaning up old results: %s\n", evalFile)
+			return os.Remove(evalFile)
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			// Reached filesystem root, no file found
+			break
+		}
+		dir = parent
+	}
+
+	// No file found, nothing to clean up
+	return nil
 }
 
 func findEvalsFile() (string, error) {

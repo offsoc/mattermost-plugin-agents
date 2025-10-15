@@ -31,9 +31,10 @@ evalviewer run -cover ./conversations
 ```
 
 The run command will:
-1. Execute go test with GOEVALS=1
-2. Search for evals.jsonl in current and parent directories
-3. Launch the TUI to display results
+1. Clean up any existing evals.jsonl file
+2. Execute go test with GOEVALS=1
+3. Search for evals.jsonl in current and parent directories
+4. Launch the TUI to display results
 
 ### View Command  
 Display evaluation results from an existing evals.jsonl file in a TUI.
@@ -67,7 +68,55 @@ evalviewer check -v ./...
 ```
 
 The check command will:
-1. Execute go test with GOEVALS=1
-2. Display test output in real-time
-3. Print a summary of evaluation results
-4. Exit with status code 1 if any evaluations failed
+1. Clean up any existing evals.jsonl file
+2. Execute go test with GOEVALS=1
+3. Display test output in real-time
+4. Print a summary of evaluation results
+5. Exit with status code 1 if any evaluations failed
+
+## Environment Variables
+
+The evalviewer and evaluation tests support multiple LLM providers. Configure which providers to use and their settings with these environment variables:
+
+### Provider Selection
+
+- **`LLM_PROVIDER`**: Choose which provider(s) to run evaluations with
+  - Values: `openai`, `anthropic`, `azure`, `all`, or comma-separated (e.g., `openai,azure`)
+  - Default: `all` (runs all providers)
+
+### OpenAI Configuration
+
+- **`OPENAI_API_KEY`**: Your OpenAI API key (required for OpenAI)
+- **`OPENAI_MODEL`**: Model to use (default: `gpt-4o`)
+
+### Anthropic Configuration
+
+- **`ANTHROPIC_API_KEY`**: Your Anthropic API key (required for Anthropic)
+- **`ANTHROPIC_MODEL`**: Model to use (default: `claude-sonnet-4-20250514`)
+
+### Azure OpenAI Configuration
+
+- **`AZURE_OPENAI_API_KEY`**: Your Azure OpenAI API key (required for Azure)
+- **`AZURE_OPENAI_ENDPOINT`**: Your Azure OpenAI endpoint URL (required for Azure)
+- **`AZURE_OPENAI_MODEL`**: Model deployment name to use (default: `gpt-4o`)
+
+### Examples
+
+```bash
+# Run with only OpenAI
+LLM_PROVIDER=openai OPENAI_API_KEY=sk-... evalviewer run ./conversations
+
+# Run with only Anthropic
+LLM_PROVIDER=anthropic ANTHROPIC_API_KEY=sk-ant-... evalviewer run ./conversations
+
+# Run with OpenAI and Azure (skip Anthropic)
+LLM_PROVIDER=openai,azure evalviewer run ./conversations
+
+# Run with all providers (default)
+evalviewer run ./conversations
+
+# Use a specific model for OpenAI
+OPENAI_MODEL=gpt-4-turbo evalviewer run ./conversations
+```
+
+If a provider's API key is not set, that provider will be skipped with a warning.

@@ -156,7 +156,8 @@ func conversationToMessages(posts []llm.Post) (string, []anthropicSDK.MessagePar
 
 func (a *Anthropic) GetDefaultConfig() llm.LanguageModelConfig {
 	config := llm.LanguageModelConfig{
-		Model: a.defaultModel,
+		Model:          a.defaultModel,
+		EnableThinking: true,
 	}
 	if a.outputTokenLimit == 0 {
 		config.MaxGeneratedTokens = DefaultMaxTokens
@@ -216,11 +217,15 @@ func (a *Anthropic) streamChatWithTools(state messageState) {
 		thinkingBudget = 1024
 	}
 
-	params.Thinking = anthropicSDK.ThinkingConfigParamUnion{
-		OfEnabled: &anthropicSDK.ThinkingConfigEnabledParam{
-			Type:         "enabled",
-			BudgetTokens: thinkingBudget,
-		},
+	// Anthropic requires a minimum thinking budget of 1024 tokens
+	// If the thinking budget is more than the max_tokens, Anthropic will return an error.
+	if state.config.EnableThinking && thinkingBudget < int64(state.config.MaxGeneratedTokens) {
+		params.Thinking = anthropicSDK.ThinkingConfigParamUnion{
+			OfEnabled: &anthropicSDK.ThinkingConfigEnabledParam{
+				Type:         "enabled",
+				BudgetTokens: thinkingBudget,
+			},
+		}
 	}
 
 	stream := a.client.Messages.NewStreaming(context.Background(), params)

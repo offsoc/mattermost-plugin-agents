@@ -95,6 +95,26 @@ make deploy
 - Run `make evals` to run prompt evaluations interactively (with TUI)
 - Run `make evals-ci` to run prompt evaluations in CI mode (non-interactive)
 
+### Multi-Provider Evaluation Support
+
+The evaluation system supports testing with multiple LLM providers: OpenAI, Anthropic, and Azure OpenAI. By default, evaluations run against all providers, but you can target specific ones:
+
+```bash
+# Run with all providers (default)
+make evals
+
+# Run with only Anthropic
+LLM_PROVIDER=anthropic make evals
+
+# Run with OpenAI and Azure
+LLM_PROVIDER=openai,azure make evals
+
+# Use a specific model
+ANTHROPIC_MODEL=claude-3-opus-20240229 make evals
+```
+
+See `cmd/evalviewer/README.md` for complete documentation on environment variables and configuration options.
+
 
 ## License
 
