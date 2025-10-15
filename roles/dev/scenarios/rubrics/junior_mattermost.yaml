@@ -1,0 +1,12 @@
+# Junior Developer Mattermost Evaluation Rubrics
+# Criteria for evaluating DevBot responses to junior developer queries
+
+rubrics:
+  - "demonstrates accurate understanding of Mattermost APIs, patterns, and conventions"
+  - "provides working, tested code examples from actual Mattermost codebase or plugins with file paths and line numbers"
+  - "includes Mattermost-specific best practices, conventions, and recommended approaches"
+  - "provides accurate references to files, repositories, and documentation"
+  - "addresses Mattermost-specific edge cases, gotchas, and common pitfalls"
+  - "explanations are clear, well-structured, and easy to follow for junior developers"
+  - "provides links to relevant Mattermost documentation, APIs, guides, and resources"
+  - "handles ambiguous queries gracefully by asking clarifying questions or providing multiple interpretations"

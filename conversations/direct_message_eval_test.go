@@ -23,6 +23,7 @@ import (
 	"github.com/mattermost/mattermost/server/public/plugin/plugintest"
 	"github.com/mattermost/mattermost/server/public/pluginapi"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -106,6 +107,7 @@ func TestDirectMessageConversations(t *testing.T) {
 			for id, file := range threadData.Files {
 				mmClient.On("GetFile", id).Return(io.NopCloser(bytes.NewReader(file)), nil).Maybe()
 			}
+			mmClient.On("LogDebug", mock.Anything, mock.Anything).Return().Maybe()
 
 			// Create mock implementations
 			toolProvider := &mockToolProvider{}

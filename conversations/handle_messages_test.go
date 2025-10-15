@@ -4,6 +4,7 @@
 package conversations
 
 import (
+	"context"
 	"net/http"
 	"testing"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin/plugintest"
 	"github.com/mattermost/mattermost/server/public/pluginapi"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,6 +34,9 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 	mockAPI := &plugintest.API{}
 	client := pluginapi.NewClient(mockAPI, nil)
 	mmClient := mocks.NewMockClient(t)
+
+	// Allow LogDebug calls without expectations (they are optional for tests)
+	mmClient.EXPECT().LogDebug(mock.AnythingOfType("string"), mock.Anything).Maybe()
 
 	licenseChecker := enterprise.NewLicenseChecker(client)
 	botsService := bots.New(mockAPI, client, licenseChecker, nil, &http.Client{}, nil)
@@ -54,7 +59,7 @@ func TestHandleMessages(t *testing.T) {
 
 	t.Run("don't respond to remote posts", func(t *testing.T) {
 		remoteid := "remoteid"
-		err := e.conversations.handleMessages(&model.Post{
+		err := e.conversations.handleMessages(context.Background(), &model.Post{
 			UserId:    "userid",
 			ChannelId: "channelid",
 			RemoteId:  &remoteid,
@@ -68,7 +73,7 @@ func TestHandleMessages(t *testing.T) {
 			ChannelId: "channelid",
 		}
 		post.AddProp("from_plugin", true)
-		err := e.conversations.handleMessages(post)
+		err := e.conversations.handleMessages(context.Background(), post)
 		require.ErrorIs(t, err, ErrNoResponse)
 	})
 
@@ -78,7 +83,7 @@ func TestHandleMessages(t *testing.T) {
 			ChannelId: "channelid",
 		}
 		post.AddProp("from_webhook", true)
-		err := e.conversations.handleMessages(post)
+		err := e.conversations.handleMessages(context.Background(), post)
 		require.ErrorIs(t, err, ErrNoResponse)
 	})
 }

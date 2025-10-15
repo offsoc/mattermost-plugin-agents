@@ -28,7 +28,8 @@ type Config = {
     enableCallSummary: boolean,
     allowedUpstreamHostnames: string,
     embeddingSearchConfig: EmbeddingSearchConfig,
-    mcp: MCPConfig
+    mcp: MCPConfig,
+    commonDataSources?: any
 }
 
 type Props = {
@@ -99,6 +100,132 @@ const defaultConfig = {
         enabled: false,
         servers: {},
         idleTimeout: 30,
+    },
+    commonDataSources: {
+        sources: [
+            {
+                name: 'mattermost_docs',
+                enabled: true,
+                protocol: 'http',
+                endpoints: {
+                    base_url: 'https://docs.mattermost.com',
+                    admin: '/guides/administration.html',
+                    developer: '/deployment-guide/deployment-guide-index.html',
+                    api: '/administration/changelog.html',
+                    mobile: '/product-overview/mobile.html',
+                },
+                auth: {type: 'token', key: ''},
+                sections: ['admin', 'developer', 'api', 'mobile'],
+                max_docs: 5,
+                rate_limit: {
+                    requests_per_minute: 30,
+                    burst_size: 5,
+                    enabled: true,
+                },
+            },
+            {
+                name: 'github_repos',
+                enabled: true,
+                protocol: 'github_api',
+                endpoints: {
+                    owner: 'mattermost',
+                    repos: 'mattermost-server,mattermost-webapp',
+                },
+                auth: {type: 'token', key: ''},
+                sections: ['issues', 'releases', 'pulls'],
+                max_docs: 10,
+                rate_limit: {
+                    requests_per_minute: 60,
+                    burst_size: 10,
+                    enabled: true,
+                },
+            },
+            {
+                name: 'community_forum',
+                enabled: true,
+                protocol: 'mattermost',
+                endpoints: {
+                    base_url: 'https://community.mattermost.com',
+                },
+                auth: {type: 'none'},
+                sections: ['feature-requests', 'troubleshooting', 'general'],
+                max_docs: 5,
+                rate_limit: {
+                    requests_per_minute: 20,
+                    burst_size: 3,
+                    enabled: true,
+                },
+            },
+            {
+                name: 'mattermost_hub',
+                enabled: true,
+                protocol: 'mattermost',
+                endpoints: {
+                    base_url: 'https://hub.mattermost.com',
+                },
+                auth: {type: 'token', key: ''},
+                sections: ['contact-sales', 'customer-feedback'],
+                max_docs: 5,
+                rate_limit: {
+                    requests_per_minute: 20,
+                    burst_size: 3,
+                    enabled: true,
+                },
+            },
+            {
+                name: 'confluence_docs',
+                enabled: true,
+                protocol: 'confluence',
+                endpoints: {
+                    base_url: 'https://mattermost.atlassian.net/wiki',
+                    spaces: 'CLOUD,DATAENG,DE,DES,FF,ICU,TW,WD,WKFL',
+                    email: '',
+                },
+                auth: {type: 'api_key', key: ''},
+                sections: ['product-requirements', 'market-research', 'feature-specs', 'roadmaps', 'competitive-analysis', 'customer-insights'],
+                max_docs: 5,
+                rate_limit: {
+                    requests_per_minute: 15,
+                    burst_size: 3,
+                    enabled: true,
+                },
+            },
+            {
+                name: 'plugin_marketplace',
+                enabled: true,
+                protocol: 'http',
+                endpoints: {
+                    base_url: 'https://integrations.mattermost.com',
+                },
+                auth: {type: 'none'},
+                sections: ['plugins', 'integrations'],
+                max_docs: 5,
+                rate_limit: {
+                    requests_per_minute: 30,
+                    burst_size: 5,
+                    enabled: true,
+                },
+            },
+            {
+                name: 'feature_requests',
+                enabled: true,
+                protocol: 'uservoice',
+                endpoints: {
+                    base_url: 'https://mattermost.uservoice.com',
+                },
+                auth: {type: 'none'},
+                sections: ['feature-requests'],
+                max_docs: 5,
+                rate_limit: {
+                    requests_per_minute: 20,
+                    burst_size: 3,
+                    enabled: true,
+                },
+            },
+        ],
+        allowed_domains: ['docs.mattermost.com', 'api.github.com', 'community.mattermost.com', 'hub.mattermost.com', 'mattermost.atlassian.net', 'integrations.mattermost.com', 'mattermost.uservoice.com'],
+        github_token: '',
+        cache_ttl: '24h',
     },
 };
 

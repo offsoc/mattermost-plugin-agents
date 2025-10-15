@@ -1,0 +1,51 @@
+# Junior PM Mattermost-Centric Scenarios - Tactical Execution with Data Sources
+# These scenarios test PM skills with Mattermost-specific context and require data source usage
+
+scenarios:
+  - name: "sprint_planning_conflict"
+    message: "Engineering estimates a critical SAML/SSO security fix for enterprise customers will take 2 weeks, but Marketing announced the new Boards collaboration features launch for next week. Legal says the security issue must be fixed before any releases affecting authentication. Search Mattermost JIRA for the security ticket details and assess impact. How do you manage this conflict?"
+    trials: 1
+
+  - name: "dependency_management"
+    message: "Your Q4 Playbooks major release depends on: (1) Channels API updates from Platform team (60% confidence), (2) Mobile app UI components from Mobile team (80% ready), (3) Webhook integration library from open-source contributor (40% confidence). Check Mattermost GitHub for related PRs and issues. Draft a risk mitigation plan with specific links to dependencies."
+    trials: 1
+
+  - name: "resource_allocation"
+    message: "You have 2 senior engineers and 1 junior for Q1 Calls plugin work. CEO wants WebRTC rewrite (3 months), Sales needs screen sharing improvements for government demos (2 months), and you've identified mobile performance issues (1.5 months). Search Mattermost JIRA for related tickets and GitHub for technical complexity. Draft your allocation strategy with justification."
+    trials: 1
+
+  - name: "cross_team_communication"
+    message: "The Playbooks Engineering team is frustrated that Design keeps changing checklist UI mid-sprint. Design team argues user research from community forums requires iteration. Search forums for relevant user feedback on Playbooks checklists. Create a sustainable process that respects both engineering velocity and user-driven design."
+    trials: 1
+
+  - name: "metric_interpretation"
+    message: "After the latest Mattermost mobile app release, self-hosted customer installations increased 15% but average session duration dropped 25%. Community forums show doubled complaints about mobile performance. Search GitHub and forums for performance-related issues. Walk through your diagnosis process and immediate action plan with specific links."
+    trials: 1
+
+  - name: "ab_test_design"
+    message: "You want to test a new onboarding flow for Mattermost Channels that emphasizes security/compliance features for enterprise users. Goal: improve 7-day retention from 45% to 55% for self-hosted instances. Design the experiment including sample size, success metrics, guardrails, and timeline. Consider that many customers run air-gapped instances with limited telemetry."
+    trials: 1
+
+  - name: "problem_validation"
+    message: "Sales reports 3 defense/government prospects asked about real-time collaborative document editing (like Google Docs) during demos. Search Mattermost forums, UserVoice, and GitHub for related feature requests. Determine if this is a real need worth significant engineering investment or if Boards plugin addresses it. Include links to relevant discussions."
+    trials: 1
+
+  - name: "bug_triage_prioritization"
+    message: "Three bugs in Mattermost Channels: (1) Channel search returns incorrect results for 10% of queries on PostgreSQL, (2) Message export to CSV crashes on files >50MB for compliance customers, (3) Mention badge misaligned on iOS mobile app. Sprint capacity allows fixing 2. Search JIRA and GitHub for severity and customer impact. Prioritize with justification and links."
+    trials: 1
+
+  - name: "sprint_planning_capacity"
+    message: "Your Playbooks team has 80 story points capacity this sprint. Backlog: (1) P1 bug - playbook runs fail on LDAP sync (13 pts), (2) committed feature - status page integration (45 pts), (3) tech debt - refactor webhook system (21 pts), (4) CEO request - Slack import for playbooks (34 pts). Search JIRA for ticket details and plan the sprint with rationale."
+    trials: 1
+
+  - name: "stakeholder_status_update"
+    message: "The Compliance Export v2.0 feature for Mattermost is delayed 2 weeks due to unexpected changes in eDiscovery API requirements. Sales VP needs this for a financial services customer demo next week. Check docs.mattermost.com for current Compliance Export capabilities. Draft a status update and mitigation plan with workaround options for the demo."
+    trials: 1
+
+  - name: "technical_spec_review"
+    message: "Engineering proposed a solution requiring 3 new microservices and 4 months to build. The user story is: 'As a Channels user, I want to filter @mentions by priority/sender.' Search GitHub for similar feature discussions and existing notification filtering code. Review this for feasibility and suggest simpler alternatives using existing Channels architecture."
+    trials: 1
+
+  - name: "customer_support_escalation"
+    message: "Support escalated 5 tickets this week about enterprise customers unable to export Compliance data from Mattermost. Search GitHub (mattermost-server repo) and JIRA for 'compliance export' or 'data export' bugs. Determine severity based on affected customer tier, check if it's a known issue, and recommend immediate next steps with specific ticket links."
+    trials: 1

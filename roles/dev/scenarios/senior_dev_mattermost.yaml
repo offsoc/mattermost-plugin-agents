@@ -1,0 +1,159 @@
+# Senior Developer Mattermost Scenarios
+# These scenarios test DevBot's ability to help senior developers with complex Mattermost architecture and design
+
+scenarios:
+  - id: senior_dev_01
+    name: "Design Plugin for HA Deployments"
+    query: "I need to design a plugin architecture that works correctly in Mattermost HA deployments with multiple app servers. What considerations should I keep in mind for state management and coordination?"
+    category: "architecture_design"
+    expected_tools:
+      - "FindArchitecture"
+      - "ExplainCodePattern"
+    expected_content:
+      - "high availability"
+      - "state management"
+      - "database"
+      - "KV store"
+      - "cluster coordination"
+      - "stateless design"
+    difficulty: "advanced"
+
+  - id: senior_dev_02
+    name: "Analyze Message Routing Architecture"
+    query: "Analyze Mattermost's message routing architecture. How are messages routed from sender to all recipients across different channels and teams?"
+    category: "architecture_analysis"
+    expected_tools:
+      - "FindArchitecture"
+      - "ExplainCodePattern"
+    expected_content:
+      - "websocket delivery"
+      - "channel membership"
+      - "message fan-out"
+      - "performance"
+      - "database queries"
+    difficulty: "advanced"
+
+  - id: senior_dev_03
+    name: "Channel Scalability Patterns"
+    query: "What are the scalability patterns for Mattermost channels? How does Mattermost handle channels with thousands of users?"
+    category: "scalability"
+    expected_tools:
+      - "FindArchitecture"
+      - "SummarizePRs"
+    expected_content:
+      - "channel size limits"
+      - "database indexing"
+      - "websocket optimization"
+      - "message pagination"
+      - "performance benchmarks"
+    difficulty: "advanced"
+
+  - id: senior_dev_04
+    name: "Database Migration Strategy"
+    query: "Explain Mattermost's database migration strategy. How are schema changes managed across versions and what's the rollback approach?"
+    category: "architecture_analysis"
+    expected_tools:
+      - "FindArchitecture"
+      - "ExplainCodePattern"
+    expected_content:
+      - "migration files"
+      - "schema versions"
+      - "upgrade process"
+      - "rollback strategy"
+      - "backward compatibility"
+    difficulty: "advanced"
+
+  - id: senior_dev_05
+    name: "Design Disaster Recovery"
+    query: "Design a disaster recovery strategy for a Mattermost Enterprise cluster. What components need to be backed up and how do we ensure zero data loss?"
+    category: "architecture_design"
+    expected_tools:
+      - "FindArchitecture"
+    expected_content:
+      - "backup strategy"
+      - "database replication"
+      - "file storage"
+      - "S3 integration"
+      - "recovery procedures"
+      - "RTO/RPO"
+    difficulty: "advanced"
+
+  - id: senior_dev_06
+    name: "Plugin State Management"
+    query: "How does Mattermost handle plugin state management? What are the best practices for storing and retrieving plugin data in a multi-server environment?"
+    category: "architecture_analysis"
+    expected_tools:
+      - "FindArchitecture"
+      - "GetAPIExamples"
+    expected_content:
+      - "KV store API"
+      - "database access"
+      - "distributed state"
+      - "consistency"
+      - "performance"
+      - "best practices"
+    difficulty: "advanced"
+
+  - id: senior_dev_07
+    name: "Plugin Hook Performance Impact"
+    query: "Analyze the performance impact of plugin hooks. How do hooks like MessageWillBePosted affect message throughput and what are the optimization strategies?"
+    category: "performance"
+    expected_tools:
+      - "FindArchitecture"
+      - "ExplainCodePattern"
+    expected_content:
+      - "hook execution model"
+      - "synchronous vs async"
+      - "timeout handling"
+      - "performance metrics"
+      - "optimization patterns"
+      - "benchmarks"
+    difficulty: "advanced"
+
+  - id: senior_dev_08
+    name: "Authentication and Session Architecture"
+    query: "Explain Mattermost's authentication and session architecture. How are sessions managed, and what security considerations apply to plugin development?"
+    category: "security"
+    expected_tools:
+      - "FindArchitecture"
+      - "ExplainCodePattern"
+    expected_content:
+      - "session tokens"
+      - "authentication flow"
+      - "CSRF protection"
+      - "OAuth integration"
+      - "security best practices"
+      - "plugin security"
+    difficulty: "advanced"
+
+  - id: senior_dev_09
+    name: "Plugin API Security Considerations"
+    query: "What are the critical security considerations when developing Mattermost plugins? Focus on API access, data handling, and common vulnerabilities."
+    category: "security"
+    expected_tools:
+      - "FindArchitecture"
+      - "DebugIssue"
+    expected_content:
+      - "permission checks"
+      - "input validation"
+      - "SQL injection"
+      - "XSS prevention"
+      - "secrets management"
+      - "audit logging"
+    difficulty: "advanced"
+
+  - id: senior_dev_10
+    name: "Architectural Changes in Version 8"
+    query: "Summarize the major architectural changes in Mattermost v8. What are the key system-level improvements and how do they affect plugin development?"
+    category: "architecture_analysis"
+    expected_tools:
+      - "SummarizePRs"
+      - "FindArchitecture"
+    expected_content:
+      - "architectural improvements"
+      - "breaking changes"
+      - "performance enhancements"
+      - "plugin API changes"
+      - "migration impact"
+      - "ADR references"
+    difficulty: "advanced"

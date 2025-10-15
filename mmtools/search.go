@@ -39,7 +39,7 @@ func (p *MMToolProvider) toolSearchServer(llmContext *llm.Context, argsGetter ll
 	}
 
 	// Check if search service is available and enabled
-	if !p.search.Enabled() {
+	if p.search == nil || !p.search.Enabled() {
 		return "search functionality is not configured", errors.New("search is not configured")
 	}
 

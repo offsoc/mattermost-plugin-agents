@@ -1,0 +1,51 @@
+# Junior PM Generic Scenarios - Tactical Execution Skills
+# These scenarios test generic PM skills without requiring domain-specific knowledge
+
+scenarios:
+  - name: "sprint_planning_conflict"
+    message: "Engineering estimates the critical security fix at 2 weeks, but Marketing has already announced the new feature launch for next week to press. Legal says the security issue must be fixed before any new releases. How do you manage this?"
+    trials: 1
+
+  - name: "dependency_management"
+    message: "Your Q4 launch depends on: API from Platform team (60% likely to be ready), design system from Design team (80% ready), and external vendor integration (40% ready). What's your risk mitigation plan?"
+    trials: 1
+
+  - name: "resource_allocation"
+    message: "You have 2 senior engineers and 1 junior for Q1. CEO wants the mobile rewrite (3-month project), Sales needs the API improvements (2-month project), and you've identified critical performance debt (1.5-month project). What's your allocation strategy?"
+    trials: 1
+
+  - name: "cross_team_communication"
+    message: "Engineering is frustrated that designs keep changing mid-sprint. Design argues that user research findings require iterations. How do you create a sustainable process for both teams?"
+    trials: 1
+
+  - name: "metric_interpretation"
+    message: "Your app's DAU increased 15% but session duration dropped 25% after the latest release. User complaints about performance have doubled. Walk through your diagnosis process and immediate action plan."
+    trials: 1
+
+  - name: "ab_test_design"
+    message: "You want to test a new onboarding flow that you believe will improve 7-day retention from 45% to 55%. Design the experiment including sample size, success metrics, guardrails, and timeline."
+    trials: 1
+
+  - name: "problem_validation"
+    message: "Sales reports that 3 prospects asked about real-time collaboration features during demos. How do you validate if this is a real market need worth significant engineering investment?"
+    trials: 1
+
+  - name: "bug_triage_prioritization"
+    message: "You have 3 bugs reported: (1) Search returns incorrect results for 10% of queries, (2) Export function crashes on files >50MB, (3) UI button misaligned on mobile. Sprint capacity allows fixing 2. Which do you prioritize and why?"
+    trials: 1
+
+  - name: "sprint_planning_capacity"
+    message: "Your team has 80 story points capacity this sprint. You have: critical P1 bug (13 pts), committed feature work (45 pts), tech debt item (21 pts), and new feature request from CEO (34 pts). Plan the sprint."
+    trials: 1
+
+  - name: "stakeholder_status_update"
+    message: "Your feature is delayed 2 weeks due to unexpected API changes. The Sales VP is expecting this for a demo next week. Draft the status update and mitigation plan you'd send to stakeholders."
+    trials: 1
+
+  - name: "technical_spec_review"
+    message: "Engineering proposed a solution that requires 3 new microservices and 4 months to build. The user story is 'As a user, I want to filter my notifications.' Review this for feasibility and suggest alternatives."
+    trials: 1
+
+  - name: "customer_support_escalation"
+    message: "Support escalated 5 tickets this week about users unable to export data. Check GitHub issues and Jira for related bugs, determine severity, and recommend immediate next steps for the team."
+    trials: 1

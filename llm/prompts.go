@@ -19,7 +19,7 @@ type Prompts struct {
 const PromptExtension = "tmpl"
 
 func NewPrompts(input fs.FS) (*Prompts, error) {
-	templates, err := template.ParseFS(input, "*.tmpl")
+	templates, err := template.ParseFS(input, "*.tmpl", "pm/*.tmpl", "dev/*.tmpl")
 	if err != nil {
 		return nil, fmt.Errorf("unable to parse prompt templates: %w", err)
 	}

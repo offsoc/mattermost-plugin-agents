@@ -525,6 +525,74 @@ func TestGetModelConstant(t *testing.T) {
 	}
 }
 
+func TestSanitizeJSONSchemaForOpenAI_AdditionalPropertiesNotPattern(t *testing.T) {
+	// Build a schema map that imitates the problematic pattern
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"a": map[string]any{
+				"type":       "object",
+				"properties": map[string]any{},
+				"additionalProperties": map[string]any{
+					"not": map[string]any{},
+				},
+			},
+			// Variant where additionalProperties has extra siblings in addition to `not: {}`
+			"b": map[string]any{
+				"type": "object",
+				"additionalProperties": map[string]any{
+					"not":         map[string]any{},
+					"description": "ignored by sanitizer",
+					"$comment":    "will be replaced by false",
+				},
+			},
+		},
+		"additionalProperties": map[string]any{
+			"not": map[string]any{},
+		},
+	}
+
+	schema = map[string]any(sanitizeJSONSchemaForOpenAI(schema))
+
+	// Root additionalProperties -> false
+	if ap, ok := schema["additionalProperties"]; assert.True(t, ok) {
+		assert.Equal(t, false, ap)
+	}
+
+	props := schema["properties"].(map[string]any)
+
+	// Nested property a
+	a := props["a"].(map[string]any)
+	if ap, ok := a["additionalProperties"]; assert.True(t, ok) {
+		assert.Equal(t, false, ap)
+	}
+
+	// Nested property b (with extra keys) should also be coerced to false
+	b := props["b"].(map[string]any)
+	if ap, ok := b["additionalProperties"]; assert.True(t, ok) {
+		assert.Equal(t, false, ap)
+	}
+}
+
+func TestSanitizeJSONSchemaForOpenAI_WithinItems(t *testing.T) {
+	schema := map[string]any{
+		"type": "array",
+		"items": map[string]any{
+			"type": "object",
+			"additionalProperties": map[string]any{
+				"not": map[string]any{},
+			},
+		},
+	}
+
+	schema = map[string]any(sanitizeJSONSchemaForOpenAI(schema))
+
+	items := schema["items"].(map[string]any)
+	if ap, ok := items["additionalProperties"]; assert.True(t, ok) {
+		assert.Equal(t, false, ap)
+	}
+}
+
 func TestGetEmbeddingModelConstant(t *testing.T) {
 	tests := []struct {
 		name     string

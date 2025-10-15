@@ -1,0 +1,63 @@
+# Senior PM Mattermost-Centric Scenarios - Strategic Vision with Data Sources
+# These scenarios test strategic PM skills with Mattermost-specific context and require data source usage
+
+scenarios:
+  - name: "vision_alignment"
+    message: "Search docs.mattermost.com for Mattermost's product vision and 'Mission Critical Work' strategy. Then analyze how the 'Channels with AI' feature launch aligns with this vision. Cite specific documentation pages and explain the strategic connection. Consider our differentiation vs Slack/Teams in secure, self-hosted environments."
+    trials: 1
+
+  - name: "feature_request_prioritization"
+    message: "Search the Mattermost community forums and UserVoice for feature requests related to 'scheduled messages' or 'message scheduling'. Find the top 2 use cases mentioned by users (include links and quotes). Apply RICE framework to prioritize this against fixing a critical mobile crash bug. Consider that our core users are enterprise/security-focused teams."
+    trials: 1
+
+  - name: "bugs_vs_features"
+    message: "Search Mattermost JIRA for recent critical mobile app bugs related to channel search or crashes. Also search community forums for requests about analytics or reporting dashboards. Using Mattermost's mission (from docs.mattermost.com) as a guide, recommend prioritization with specific links to issues, forum threads, and mission documentation. Consider impact on enterprise/self-hosted users."
+    trials: 1
+
+  - name: "near_term_vs_long_term"
+    message: "Search docs.mattermost.com and GitHub for Mattermost's roadmap regarding integrations and interoperability. A regulated industry customer needs Microsoft Teams integration urgently, but our long-term vision emphasizes open protocols. Search UserVoice and forums for related customer requests. Balance immediate customer needs with strategic differentiation, citing specific roadmap documents and customer feedback."
+    trials: 1
+
+  - name: "revenue_prioritization"
+    message: "Review Mattermost's pricing tiers at docs.mattermost.com. A new 'Advanced Compliance Export' feature is proposed - it could go in Professional or Enterprise tier. Search UserVoice and forums for compliance/export-related requests to understand customer willingness to pay. Analyze tier placement impact on revenue and adoption, citing specific pricing docs and customer feedback with links."
+    trials: 1
+
+  - name: "stakeholder_management"
+    message: "Sales wants enhanced SAML/SSO capabilities for a key government customer. Engineering says it adds significant maintenance complexity. Search Mattermost JIRA and GitHub for existing SSO/SAML issues and technical debt. Search forums and UserVoice for SSO-related requests. Build a data-driven case for prioritization or deprioritization, citing specific tickets, technical concerns, and customer demand with links."
+    trials: 1
+
+  - name: "technical_debt_prioritization"
+    message: "Search Mattermost GitHub repos (mattermost-server, mattermost-mobile, mattermost-webapp) for issues labeled 'tech-debt' or 'refactoring'. Also search developer forums for discussions about technical limitations affecting new features. Identify the most impactful technical debt, propose a remediation plan, and justify why it's higher priority than the top UserVoice feature request. Include links to specific issues and forum threads."
+    trials: 1
+
+  - name: "visionary_features"
+    message: "Search docs.mattermost.com and the Mattermost blog for the AI Agent vision and strategy. Research industry trends around AI-powered collaboration. Draft a go/no-go document for 'On-Premise AI Meeting Summaries for Playbooks' that work in air-gapped environments. Analyze market fit, technical feasibility (self-hosted LLMs), and alignment with MM's security-first positioning. Cite specific strategy docs and competitive intelligence."
+    trials: 1
+
+  - name: "private_data_prioritization"
+    message: "A key financial services enterprise customer shows declining Playbooks adoption. Search their UserVoice submissions and forum posts for feature gaps. Cross-reference with Mattermost's Playbooks roadmap (docs.mattermost.com) and GitHub issues. Recommend roadmap adjustments to address churn risk while maintaining strategic focus on compliance and security features. Include specific links to customer feedback and roadmap documentation."
+    trials: 1
+
+  - name: "ultimate_prioritization_challenge"
+    message: "Generate a go-to-market plan for the next Mattermost major release. Search docs.mattermost.com for current roadmap and strategy. Search JIRA for critical bugs affecting enterprise customers. Search UserVoice for top-voted features. Search GitHub for innovative community contributions. Balance: (1) near-term revenue feature, (2) stability/security fix, (3) visionary initiative. Justify prioritization using RICE framework with citations from all sources."
+    trials: 1
+
+  - name: "user_feedback_synthesis"
+    message: "Search Mattermost UserVoice and community forums for discussions about end-to-end encryption (E2EE) in Channels. Synthesize feedback: supporters emphasize privacy, opponents cite complexity and key management challenges for enterprise IT. Engineering estimates 6 months. Search docs.mattermost.com for current security positioning. Decide and draft executive communication with citations to specific user concerns and strategic docs."
+    trials: 1
+
+  - name: "churn_analysis"
+    message: "Search Mattermost forums and UserVoice for enterprise customer complaints about 'missing features' compared to Slack or Teams. Search GitHub and JIRA for feature parity gaps. Customer success reports cite 'lack of native video conferencing' (we have Calls plugin). Draft a 90-day plan addressing competitive gaps while maintaining our self-hosted/security differentiation. Cite specific customer feedback and competitor comparison data."
+    trials: 1
+
+  - name: "market_opportunity_sizing"
+    message: "Slack just announced AI-powered 'Canvas' for collaborative documents, claiming major engagement gains. Compare Slack Canvas capabilities (from public docs) to Mattermost Boards (search docs.mattermost.com). Search UserVoice and forums for Boards feedback and requests for AI features. Assess market opportunity for 'AI-Enhanced Boards for Regulated Industries' considering our on-premise/air-gapped positioning. Include competitive analysis with citations."
+    trials: 1
+
+  - name: "pricing_strategy"
+    message: "Search docs.mattermost.com for current pricing and feature breakdown (Free vs Professional vs Enterprise). Enterprise prospects want advanced Compliance features (data retention policies, audit logs, eDiscovery). Search UserVoice for compliance feature requests and vote counts. Analyze: build enterprise compliance suite, improve Professional tier conversion, or OSS plugin approach? Consider self-hosted business model implications. Cite pricing docs and customer feedback."
+    trials: 1
+
+  - name: "competitive_response"
+    message: "Microsoft Teams just made their 'Advanced Meeting Features' free for all tiers, directly competing with Mattermost Calls (which drives significant adoption for defense/government customers). Search docs.mattermost.com for Calls positioning and features. Search forums and UserVoice for Calls feedback. Draft strategic response: double down on air-gapped/on-premise capabilities, add Teams-missing features, or pivot to different differentiator? Include competitive analysis with citations."
+    trials: 1

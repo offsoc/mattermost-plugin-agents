@@ -1,0 +1,181 @@
+# Junior Developer Mattermost Scenarios
+# These scenarios test DevBot's ability to help junior developers with Mattermost-specific tasks
+
+scenarios:
+  - id: junior_dev_01
+    name: "Implement Slash Command in Plugin"
+    query: "How do I implement a slash command in my Mattermost plugin? I want to create a /summarize command."
+    category: "plugin_development"
+    expected_tools:
+      - "ExplainCodePattern"
+      - "GetAPIExamples"
+    expected_content:
+      - "RegisterCommand"
+      - "ExecuteCommand"
+      - "plugin.Hooks interface"
+      - "manifest.yml"
+      - "code example"
+    difficulty: "beginner"
+
+  - id: junior_dev_02
+    name: "Debug Plugin Hooks Not Being Called"
+    query: "My plugin hooks aren't being called. I've implemented MessageWillBePosted but it never runs. How do I debug this?"
+    category: "debugging"
+    expected_tools:
+      - "DebugIssue"
+      - "ExplainCodePattern"
+    expected_content:
+      - "plugin activation"
+      - "manifest configuration"
+      - "server logs"
+      - "plugin.Hooks interface"
+      - "common mistakes"
+    difficulty: "beginner"
+
+  - id: junior_dev_03
+    name: "Explain Post Creation Workflow"
+    query: "Explain the Mattermost post creation workflow. What happens when a user sends a message?"
+    category: "architecture"
+    expected_tools:
+      - "FindArchitecture"
+      - "ExplainCodePattern"
+    expected_content:
+      - "CreatePost"
+      - "websocket"
+      - "database"
+      - "plugin hooks"
+      - "workflow diagram"
+    difficulty: "intermediate"
+
+  - id: junior_dev_04
+    name: "Find API Examples for Creating Channels"
+    query: "Find examples of how to create channels programmatically using the Mattermost API"
+    category: "api_usage"
+    expected_tools:
+      - "GetAPIExamples"
+    expected_content:
+      - "CreateChannel"
+      - "API endpoint"
+      - "code example"
+      - "channel types"
+      - "permissions"
+    difficulty: "beginner"
+
+  - id: junior_dev_05
+    name: "Plugin API Changes in Version 8"
+    query: "What changed in the Mattermost plugin API v8? I need to upgrade my plugin from v7."
+    category: "version_updates"
+    expected_tools:
+      - "SummarizePRs"
+      - "ExplainCodePattern"
+    expected_content:
+      - "breaking changes"
+      - "migration guide"
+      - "deprecated APIs"
+      - "new features"
+      - "v7 to v8"
+    difficulty: "intermediate"
+
+  - id: junior_dev_06
+    name: "Explain Websocket Connections"
+    query: "How does Mattermost handle websocket connections? I want to understand the client-server communication."
+    category: "architecture"
+    expected_tools:
+      - "FindArchitecture"
+      - "ExplainCodePattern"
+    expected_content:
+      - "websocket protocol"
+      - "connection lifecycle"
+      - "events"
+      - "authentication"
+      - "reconnection"
+    difficulty: "intermediate"
+
+  - id: junior_dev_07
+    name: "Debug User Not Found Error"
+    query: "I'm getting a 'user not found' error when calling GetUser in my plugin. The user definitely exists. What's wrong?"
+    category: "debugging"
+    expected_tools:
+      - "DebugIssue"
+      - "GetAPIExamples"
+    expected_content:
+      - "user ID vs username"
+      - "GetUser API"
+      - "permissions"
+      - "error handling"
+      - "debugging steps"
+    difficulty: "beginner"
+
+  - id: junior_dev_08
+    name: "Explain Permission System"
+    query: "Explain Mattermost's permission system. How do I check if a user has permission to do something?"
+    category: "architecture"
+    expected_tools:
+      - "ExplainCodePattern"
+      - "FindArchitecture"
+    expected_content:
+      - "permission schemes"
+      - "roles"
+      - "HasPermissionTo"
+      - "system admin"
+      - "team/channel permissions"
+    difficulty: "intermediate"
+
+  - id: junior_dev_09
+    name: "Find Interactive Dialog Examples"
+    query: "Find examples of plugins using interactive dialogs. I want to create a form for users to fill out."
+    category: "api_usage"
+    expected_tools:
+      - "GetAPIExamples"
+      - "ExplainCodePattern"
+    expected_content:
+      - "OpenInteractiveDialog"
+      - "dialog structure"
+      - "submission handler"
+      - "validation"
+      - "plugin example"
+    difficulty: "intermediate"
+
+  - id: junior_dev_10
+    name: "Add Custom Slash Command"
+    query: "How do I add a custom slash command to Mattermost? What files do I need to modify?"
+    category: "plugin_development"
+    expected_tools:
+      - "ExplainCodePattern"
+      - "GetAPIExamples"
+    expected_content:
+      - "plugin structure"
+      - "RegisterCommand"
+      - "manifest.yml"
+      - "ExecuteCommand"
+      - "response format"
+    difficulty: "beginner"
+
+  - id: junior_dev_11
+    name: "Debug Plugin Manifest Validation"
+    query: "My plugin manifest validation is failing with 'invalid min_server_version'. How do I fix this?"
+    category: "debugging"
+    expected_tools:
+      - "DebugIssue"
+      - "ExplainCodePattern"
+    expected_content:
+      - "manifest.yml format"
+      - "min_server_version"
+      - "semantic versioning"
+      - "validation rules"
+      - "example manifest"
+    difficulty: "beginner"
+
+  - id: junior_dev_12
+    name: "Summarize Security PRs"
+    query: "Summarize recent security-related PRs in the mattermost/mattermost repository from the last month"
+    category: "version_updates"
+    expected_tools:
+      - "SummarizePRs"
+    expected_content:
+      - "security fixes"
+      - "CVE references"
+      - "pull request links"
+      - "affected versions"
+      - "severity"
+    difficulty: "intermediate"

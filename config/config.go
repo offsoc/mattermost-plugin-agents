@@ -25,6 +25,10 @@ type Config struct {
 	AllowedUpstreamHostnames string                           `json:"allowedUpstreamHostnames"`
 	EmbeddingSearchConfig    embeddings.EmbeddingSearchConfig `json:"embeddingSearchConfig"`
 	MCP                      mcp.Config                       `json:"mcp"`
+
+	// Role-specific configurations - extensible without changing core
+	// Shared resources (like datasources) should be stored in RoleConfigs["shared"]
+	RoleConfigs map[string]json.RawMessage `json:"roleConfigs,omitempty"`
 }
 
 func (c *Config) Clone() *Config {
@@ -50,23 +54,43 @@ func (c *Container) Config() *Config {
 }
 
 func (c *Container) GetEnableLLMTrace() bool {
-	return c.cfg.Load().EnableLLMTrace
+	cfg := c.cfg.Load()
+	if cfg == nil {
+		return false
+	}
+	return cfg.EnableLLMTrace
 }
 
 func (c *Container) GetTranscriptGenerator() string {
-	return c.cfg.Load().TranscriptGenerator
+	cfg := c.cfg.Load()
+	if cfg == nil {
+		return ""
+	}
+	return cfg.TranscriptGenerator
 }
 
 func (c *Container) GetBots() []llm.BotConfig {
-	return c.cfg.Load().Bots
+	cfg := c.cfg.Load()
+	if cfg == nil {
+		return nil
+	}
+	return cfg.Bots
 }
 
 func (c *Container) GetDefaultBotName() string {
-	return c.cfg.Load().DefaultBotName
+	cfg := c.cfg.Load()
+	if cfg == nil {
+		return ""
+	}
+	return cfg.DefaultBotName
 }
 
 func (c *Container) EnableLLMLogging() bool {
-	return c.cfg.Load().EnableLLMTrace
+	cfg := c.cfg.Load()
+	if cfg == nil {
+		return false
+	}
+	return cfg.EnableLLMTrace
 }
 
 func (c *Container) EnableTokenUsageLogging() bool {
@@ -74,7 +98,26 @@ func (c *Container) EnableTokenUsageLogging() bool {
 }
 
 func (c *Container) MCP() mcp.Config {
-	return c.cfg.Load().MCP
+	cfg := c.cfg.Load()
+	if cfg == nil {
+		return mcp.Config{}
+	}
+	return cfg.MCP
+}
+
+// GetRoleConfig retrieves and unmarshals a role-specific configuration
+func (c *Container) GetRoleConfig(roleName string, target interface{}) error {
+	cfg := c.cfg.Load()
+	if cfg == nil || cfg.RoleConfigs == nil {
+		return fmt.Errorf("no role configurations available")
+	}
+
+	rawConfig, exists := cfg.RoleConfigs[roleName]
+	if !exists {
+		return fmt.Errorf("no configuration found for role: %s", roleName)
+	}
+
+	return json.Unmarshal(rawConfig, target)
 }
 
 func (c *Container) RegisterUpdateListener(listener UpdateListener) {
@@ -82,7 +125,11 @@ func (c *Container) RegisterUpdateListener(listener UpdateListener) {
 }
 
 func (c *Container) EmbeddingSearchConfig() embeddings.EmbeddingSearchConfig {
-	return c.cfg.Load().EmbeddingSearchConfig
+	cfg := c.cfg.Load()
+	if cfg == nil {
+		return embeddings.EmbeddingSearchConfig{}
+	}
+	return cfg.EmbeddingSearchConfig
 }
 
 // Updates the current configuration
@@ -93,6 +140,7 @@ func (c *Container) Update(newConfig *Config) {
 		c.cfg.Store(nil)
 		return
 	}
+
 	// Create a deep copy of the new configuration
 	clone, err := DeepCopyJSON(*newConfig)
 	if err != nil {
@@ -136,5 +184,6 @@ func OpenAIConfigFromServiceConfig(serviceConfig llm.ServiceConfig) openai.Confi
 		SendUserID:         serviceConfig.SendUserID,
 		UseResponsesAPI:    serviceConfig.UseResponsesAPI,
 		EnabledNativeTools: serviceConfig.EnabledNativeTools,
+		DefaultTemperature: serviceConfig.DefaultTemperature,
 	}
 }

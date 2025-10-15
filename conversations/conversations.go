@@ -26,7 +26,8 @@ import (
 )
 
 const ThreadIDProp = "referenced_thread"
-const AnalysisTypeProp = "prompt_type"
+const AnalysisTypeProp = "analysis_type"
+const PromptTypeProp = "prompt_type"
 
 // AIThread represents a user's conversation with an AI
 type AIThread struct {
@@ -38,6 +39,9 @@ type AIThread struct {
 	UpdateAt   int64  `json:"update_at"`
 }
 
+// BotProcessor handles special conversation flows for specific bot types
+type BotProcessor func(bot *bots.Bot, postingUser *model.User, channel *model.Channel, post *model.Post, context *llm.Context) (*llm.TextStreamResult, error)
+
 type Conversations struct {
 	prompts          *llm.Prompts
 	mmClient         mmapi.Client
@@ -48,6 +52,10 @@ type Conversations struct {
 	licenseChecker   *enterprise.LicenseChecker
 	i18n             *i18n.Bundle
 	meetingsService  MeetingsService
+	intentDetector   *IntentDetector
+
+	// Simple bot type processors - registered by type name
+	botProcessors map[string]BotProcessor
 }
 
 // MeetingsService defines the interface for meetings functionality needed by conversations
@@ -77,6 +85,7 @@ func New(
 		licenseChecker:   licenseChecker,
 		i18n:             i18nBundle,
 		meetingsService:  meetingsService,
+		intentDetector:   NewIntentDetector(),
 	}
 }
 
@@ -85,15 +94,56 @@ func (c *Conversations) SetMeetingsService(meetingsService MeetingsService) {
 	c.meetingsService = meetingsService
 }
 
+// RegisterBotProcessor registers a processor for a specific bot type pattern
+func (c *Conversations) RegisterBotProcessor(pattern string, processor BotProcessor) {
+	if c.botProcessors == nil {
+		c.botProcessors = make(map[string]BotProcessor)
+	}
+	c.botProcessors[pattern] = processor
+}
+
+// RegisterIntent registers an intent handler
+func (c *Conversations) RegisterIntent(intent Intent) {
+	c.intentDetector.RegisterIntent(intent)
+}
+
 // ProcessUserRequestWithContext is an internal helper that uses an existing context to process a message
 func (c *Conversations) ProcessUserRequestWithContext(bot *bots.Bot, postingUser *model.User, channel *model.Channel, post *model.Post, context *llm.Context) (*llm.TextStreamResult, error) {
 	var posts []llm.Post
+
+	// Check if there's a registered processor for this bot type
+	if c.botProcessors != nil {
+		botName := strings.ToLower(bot.GetConfig().Name)
+		for pattern, processor := range c.botProcessors {
+			if strings.Contains(botName, pattern) {
+				c.mmClient.LogDebug("Using specialized processor for bot",
+					"post_id", post.Id,
+					"bot_name", bot.GetConfig().Name,
+					"pattern", pattern)
+				return processor(bot, postingUser, channel, post, context)
+			}
+		}
+	}
+
+	c.mmClient.LogDebug("Using standard conversation flow", "post_id", post.Id, "bot_name", bot.GetConfig().Name)
+
+	// Standard conversation flow
 	if post.RootId == "" {
-		// A new conversation
-		prompt, err := c.prompts.Format(prompts.PromptDirectMessageQuestionSystem, context)
+		c.mmClient.LogDebug("New conversation - detecting intent", "post_id", post.Id, "message", post.Message)
+		// A new conversation - detect intent and select appropriate prompt
+		templateName := c.intentDetector.DetectIntent(post.Message)
+		c.mmClient.LogDebug("Intent detected", "post_id", post.Id, "intent", templateName, "message", post.Message)
+
+		// Persist the prompt choice for this conversation thread
+		post.AddProp(PromptTypeProp, templateName)
+		c.mmClient.LogDebug("Prompt type saved to post props", "post_id", post.Id, "template", templateName)
+
+		prompt, err := c.prompts.Format(templateName, context)
 		if err != nil {
+			c.mmClient.LogError("Failed to format prompt", "error", err, "post_id", post.Id, "template", templateName)
 			return nil, fmt.Errorf("failed to format prompt: %w", err)
 		}
+		c.mmClient.LogDebug("Prompt formatted successfully", "post_id", post.Id, "template", templateName)
 		posts = []llm.Post{
 			{
 				Role:    llm.PostRoleSystem,
@@ -109,7 +159,7 @@ func (c *Conversations) ProcessUserRequestWithContext(bot *bots.Bot, postingUser
 		previousConversation.CutoffBeforePostID(post.Id)
 
 		var err error
-		posts, err = c.existingConversationToLLMPosts(bot, previousConversation, context)
+		posts, err = c.ExistingConversationToLLMPosts(bot, previousConversation, context)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert existing conversation to LLM posts: %w", err)
 		}
@@ -178,8 +228,13 @@ func (c *Conversations) GenerateTitle(bot *bots.Bot, request string, postID stri
 	return nil
 }
 
-// existingConversationToLLMPosts converts existing conversation to LLM posts format
-func (c *Conversations) existingConversationToLLMPosts(bot *bots.Bot, conversation *mmapi.ThreadData, context *llm.Context) ([]llm.Post, error) {
+// ExistingConversationToLLMPosts converts existing conversation to LLM posts format
+func (c *Conversations) ExistingConversationToLLMPosts(bot *bots.Bot, conversation *mmapi.ThreadData, context *llm.Context) ([]llm.Post, error) {
+	// Check if conversation has posts
+	if len(conversation.Posts) == 0 {
+		return []llm.Post{}, nil
+	}
+
 	// Handle thread summarization requests
 	originalThreadID, ok := conversation.Posts[0].GetProp(ThreadIDProp).(string)
 	if ok && originalThreadID != "" && conversation.Posts[0].UserId == bot.GetMMBot().UserId {
@@ -219,8 +274,19 @@ func (c *Conversations) existingConversationToLLMPosts(bot *bots.Bot, conversati
 		return posts, nil
 	}
 
-	// Plain DM conversation
-	prompt, err := c.prompts.Format(prompts.PromptDirectMessageQuestionSystem, context)
+	// Plain DM conversation - check for saved prompt type
+	var templateName string
+	if rootPost := conversation.Posts[0]; rootPost != nil {
+		if savedPrompt, ok := rootPost.GetProp(PromptTypeProp).(string); ok && savedPrompt != "" {
+			templateName = savedPrompt
+		} else {
+			templateName = prompts.PromptDirectMessageQuestionSystem
+		}
+	} else {
+		templateName = prompts.PromptDirectMessageQuestionSystem
+	}
+
+	prompt, err := c.prompts.Format(templateName, context)
 	if err != nil {
 		return nil, fmt.Errorf("failed to format prompt: %w", err)
 	}

@@ -16,30 +16,77 @@ type viewMode int
 
 const (
 	listView viewMode = iota
+	groupedByRubricView
+	groupedByModelView
 	detailView
 )
 
+type RubricGroup struct {
+	Rubric  string
+	Results []EvalLogLine
+}
+
 type model struct {
-	results      []EvalLogLine
-	filtered     []EvalLogLine
-	cursor       int
-	mode         viewMode
-	showFailures bool
-	width        int
-	height       int
-	viewport     viewport.Model
-	ready        bool
+	results       []EvalLogLine
+	filtered      []EvalLogLine
+	groupedRubric []RubricGroup
+	groupedModel  []RubricGroup
+	cursor        int
+	mode          viewMode
+	showFailures  bool
+	width         int
+	height        int
+	viewport      viewport.Model
+	ready         bool
 }
 
 func initialModel(results []EvalLogLine) model {
 	m := model{
-		results:      results,
-		filtered:     results,
-		cursor:       0,
-		mode:         listView,
-		showFailures: false,
+		results:       results,
+		filtered:      results,
+		groupedRubric: groupByRubric(results),
+		groupedModel:  groupByModel(results),
+		cursor:        0,
+		mode:          listView,
+		showFailures:  false,
 	}
 	return m
+}
+
+func groupByRubric(results []EvalLogLine) []RubricGroup {
+	rubricMap := make(map[string][]EvalLogLine)
+
+	for _, result := range results {
+		rubricMap[result.Rubric] = append(rubricMap[result.Rubric], result)
+	}
+
+	var groups []RubricGroup
+	for rubric, results := range rubricMap {
+		groups = append(groups, RubricGroup{
+			Rubric:  rubric,
+			Results: results,
+		})
+	}
+
+	return groups
+}
+
+func groupByModel(results []EvalLogLine) []RubricGroup {
+	modelMap := make(map[string][]EvalLogLine)
+
+	for _, result := range results {
+		modelMap[result.Model] = append(modelMap[result.Model], result)
+	}
+
+	var groups []RubricGroup
+	for model, results := range modelMap {
+		groups = append(groups, RubricGroup{
+			Rubric:  model,
+			Results: results,
+		})
+	}
+
+	return groups
 }
 
 func (m model) Init() tea.Cmd {
@@ -74,15 +121,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "up", "k":
-			if m.mode == listView {
+			if m.mode == listView || m.mode == groupedByRubricView || m.mode == groupedByModelView {
 				if m.cursor > 0 {
 					m.cursor--
 				}
 			}
 
 		case "down", "j":
-			if m.mode == listView {
-				if m.cursor < len(m.filtered)-1 {
+			if m.mode == listView || m.mode == groupedByRubricView || m.mode == groupedByModelView {
+				var maxCursor int
+				if m.mode == listView {
+					maxCursor = len(m.filtered) - 1
+				} else if m.mode == groupedByRubricView {
+					maxCursor = len(m.groupedRubric) - 1
+				} else if m.mode == groupedByModelView {
+					maxCursor = len(m.groupedModel) - 1
+				}
+				if m.cursor < maxCursor {
 					m.cursor++
 				}
 			}
@@ -102,11 +157,37 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.mode = listView
 			}
 
+		case "g":
+			switch m.mode {
+			case listView:
+				m.mode = groupedByRubricView
+				m.cursor = 0
+			case groupedByRubricView:
+				m.mode = groupedByModelView
+				m.cursor = 0
+			case groupedByModelView:
+				m.mode = listView
+				m.cursor = 0
+			}
+
 		case "f":
 			m.showFailures = !m.showFailures
 			m.filtered = m.filterResults()
-			if m.cursor >= len(m.filtered) {
-				m.cursor = len(m.filtered) - 1
+			m.groupedRubric = m.filterGroupedRubric()
+			m.groupedModel = m.filterGroupedModel()
+
+			// Reset cursor based on current mode
+			var maxCursor int
+			if m.mode == listView {
+				maxCursor = len(m.filtered) - 1
+			} else if m.mode == groupedByRubricView {
+				maxCursor = len(m.groupedRubric) - 1
+			} else if m.mode == groupedByModelView {
+				maxCursor = len(m.groupedModel) - 1
+			}
+
+			if m.cursor > maxCursor {
+				m.cursor = maxCursor
 			}
 			if m.cursor < 0 {
 				m.cursor = 0
@@ -138,9 +219,59 @@ func (m model) filterResults() []EvalLogLine {
 	return filtered
 }
 
+func (m model) filterGroupedRubric() []RubricGroup {
+	if !m.showFailures {
+		return m.groupedRubric
+	}
+
+	var filtered []RubricGroup
+	for _, group := range m.groupedRubric {
+		var failedResults []EvalLogLine
+		for _, result := range group.Results {
+			if !result.Pass {
+				failedResults = append(failedResults, result)
+			}
+		}
+		if len(failedResults) > 0 {
+			filtered = append(filtered, RubricGroup{
+				Rubric:  group.Rubric,
+				Results: failedResults,
+			})
+		}
+	}
+	return filtered
+}
+
+func (m model) filterGroupedModel() []RubricGroup {
+	if !m.showFailures {
+		return m.groupedModel
+	}
+
+	var filtered []RubricGroup
+	for _, group := range m.groupedModel {
+		var failedResults []EvalLogLine
+		for _, result := range group.Results {
+			if !result.Pass {
+				failedResults = append(failedResults, result)
+			}
+		}
+		if len(failedResults) > 0 {
+			filtered = append(filtered, RubricGroup{
+				Rubric:  group.Rubric,
+				Results: failedResults,
+			})
+		}
+	}
+	return filtered
+}
+
 func (m model) View() string {
 	if m.mode == detailView {
 		return m.renderDetailViewWithViewport()
+	} else if m.mode == groupedByRubricView {
+		return m.renderGroupedByRubricView()
+	} else if m.mode == groupedByModelView {
+		return m.renderGroupedByModelView()
 	}
 	return m.renderListView()
 }
@@ -167,6 +298,14 @@ func (m model) buildDetailContent() string {
 	contentStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("255")).
 		MarginLeft(2)
+
+	// Model
+	if result.Model != "" {
+		b.WriteString(sectionStyle.Render("Model:"))
+		b.WriteString("\n")
+		b.WriteString(contentStyle.Render(result.Model))
+		b.WriteString("\n\n")
+	}
 
 	// Rubric
 	b.WriteString(sectionStyle.Render("Rubric:"))
@@ -272,11 +411,15 @@ func (m model) renderListView() string {
 	// Header
 	passed := 0
 	failed := 0
+	modelSet := make(map[string]bool)
 	for _, result := range m.results {
 		if result.Pass {
 			passed++
 		} else {
 			failed++
+		}
+		if result.Model != "" {
+			modelSet[result.Model] = true
 		}
 	}
 
@@ -289,6 +432,20 @@ func (m model) renderListView() string {
 
 	header := fmt.Sprintf("Evaluation Results - %d tests | %d passed | %d failed",
 		len(m.results), passed, failed)
+
+	if len(modelSet) > 0 {
+		var models []string
+		for model := range modelSet {
+			models = append(models, model)
+		}
+		if len(models) == 1 {
+			header += fmt.Sprintf(" | Model: %s", models[0])
+		} else if len(models) <= 3 {
+			header += fmt.Sprintf(" | Models: %s", strings.Join(models, ", "))
+		} else {
+			header += fmt.Sprintf(" | %d models", len(models))
+		}
+	}
 
 	if m.showFailures {
 		header += " (showing failures only)"
@@ -372,7 +529,285 @@ func (m model) renderListView() string {
 		Padding(0, 1).
 		Width(width)
 
-	footer := "[↑↓] Navigate  [Enter] View Details  [f] Filter Failures  [q] Quit"
+	footer := "[↑↓] Navigate  [Enter] View Details  [g] Toggle Grouping  [f] Filter Failures  [q] Quit"
+	b.WriteString(footerStyle.Render(footer))
+
+	return b.String()
+}
+
+func (m model) renderGroupedByRubricView() string {
+	var b strings.Builder
+
+	// Calculate available space
+	width := m.width
+	if width == 0 {
+		width = 80 // fallback
+	}
+
+	// Header
+	passed := 0
+	failed := 0
+	modelSet := make(map[string]bool)
+	for _, result := range m.results {
+		if result.Pass {
+			passed++
+		} else {
+			failed++
+		}
+		if result.Model != "" {
+			modelSet[result.Model] = true
+		}
+	}
+
+	headerStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("15")).
+		Background(lipgloss.Color("62")).
+		Padding(0, 1).
+		Width(width)
+
+	header := fmt.Sprintf("Grouped by Rubric - %d tests | %d passed | %d failed",
+		len(m.results), passed, failed)
+
+	if len(modelSet) > 0 {
+		var models []string
+		for model := range modelSet {
+			models = append(models, model)
+		}
+		if len(models) == 1 {
+			header += fmt.Sprintf(" | Model: %s", models[0])
+		} else if len(models) <= 3 {
+			header += fmt.Sprintf(" | Models: %s", strings.Join(models, ", "))
+		} else {
+			header += fmt.Sprintf(" | %d models", len(models))
+		}
+	}
+
+	if m.showFailures {
+		header += " (showing failures only)"
+	}
+
+	b.WriteString(headerStyle.Render(header))
+	b.WriteString("\n\n")
+
+	// Grouped results
+	for i, group := range m.groupedRubric {
+		cursor := " "
+		if i == m.cursor {
+			cursor = ">"
+		}
+
+		// Group header with rubric
+		groupHeaderStyle := lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("33"))
+
+		// Truncate rubric if too long
+		rubric := group.Rubric
+		maxRubricLength := width - 10
+		if len(rubric) > maxRubricLength {
+			rubric = rubric[:maxRubricLength-3] + "..."
+		}
+
+		// Count pass/fail per model for this rubric
+		modelStats := make(map[string]struct{ passed, failed int })
+		for _, result := range group.Results {
+			stats := modelStats[result.Model]
+			if result.Pass {
+				stats.passed++
+			} else {
+				stats.failed++
+			}
+			modelStats[result.Model] = stats
+		}
+
+		// Build model performance summary
+		var modelSummary strings.Builder
+		for model, stats := range modelStats {
+			if modelSummary.Len() > 0 {
+				modelSummary.WriteString(" | ")
+			}
+			total := stats.passed + stats.failed
+			if stats.passed == total {
+				modelSummary.WriteString(fmt.Sprintf("%s: ✓%d", model, total))
+			} else if stats.failed == total {
+				modelSummary.WriteString(fmt.Sprintf("%s: ✗%d", model, total))
+			} else {
+				modelSummary.WriteString(fmt.Sprintf("%s: ✓%d/✗%d", model, stats.passed, stats.failed))
+			}
+		}
+
+		// Format the group header
+		groupLine := fmt.Sprintf("%s%s", cursor, rubric)
+
+		// Highlight current row
+		rowStyle := lipgloss.NewStyle().Width(width)
+		if i == m.cursor {
+			rowStyle = rowStyle.Background(lipgloss.Color("237"))
+		}
+
+		b.WriteString(rowStyle.Render(groupHeaderStyle.Render(groupLine)))
+		b.WriteString("\n")
+
+		// Model performance line
+		perfStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("246")).
+			MarginLeft(2)
+
+		b.WriteString(rowStyle.Render(perfStyle.Render(modelSummary.String())))
+		b.WriteString("\n\n")
+	}
+
+	// Footer
+	footerStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("240")).
+		Background(lipgloss.Color("236")).
+		Padding(0, 1).
+		Width(width)
+
+	footer := "[↑↓] Navigate  [g] Toggle View  [f] Filter Failures  [q] Quit"
+	b.WriteString(footerStyle.Render(footer))
+
+	return b.String()
+}
+
+func (m model) renderGroupedByModelView() string {
+	var b strings.Builder
+
+	// Calculate available space
+	width := m.width
+	if width == 0 {
+		width = 80 // fallback
+	}
+
+	// Header
+	passed := 0
+	failed := 0
+	modelSet := make(map[string]bool)
+	for _, result := range m.results {
+		if result.Pass {
+			passed++
+		} else {
+			failed++
+		}
+		if result.Model != "" {
+			modelSet[result.Model] = true
+		}
+	}
+
+	headerStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("15")).
+		Background(lipgloss.Color("62")).
+		Padding(0, 1).
+		Width(width)
+
+	header := fmt.Sprintf("Grouped by Model - %d tests | %d passed | %d failed",
+		len(m.results), passed, failed)
+
+	if len(modelSet) > 1 {
+		header += fmt.Sprintf(" | %d models", len(modelSet))
+	}
+
+	if m.showFailures {
+		header += " (showing failures only)"
+	}
+
+	b.WriteString(headerStyle.Render(header))
+	b.WriteString("\n\n")
+
+	// Grouped results
+	for i, group := range m.groupedModel {
+		cursor := " "
+		if i == m.cursor {
+			cursor = ">"
+		}
+
+		// Group header with model name
+		groupHeaderStyle := lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("33"))
+
+		// Truncate model name if too long
+		modelName := group.Rubric
+		maxModelLength := width - 10
+		if len(modelName) > maxModelLength {
+			modelName = modelName[:maxModelLength-3] + "..."
+		}
+
+		// Count pass/fail per rubric for this model
+		rubricStats := make(map[string]struct{ passed, failed int })
+		for _, result := range group.Results {
+			stats := rubricStats[result.Rubric]
+			if result.Pass {
+				stats.passed++
+			} else {
+				stats.failed++
+			}
+			rubricStats[result.Rubric] = stats
+		}
+
+		// Build rubric performance summary
+		var rubricSummary strings.Builder
+		for rubric, stats := range rubricStats {
+			if rubricSummary.Len() > 0 {
+				rubricSummary.WriteString(" | ")
+			}
+			total := stats.passed + stats.failed
+			if stats.passed == total {
+				rubricSummary.WriteString(fmt.Sprintf("✓%d", total))
+			} else if stats.failed == total {
+				rubricSummary.WriteString(fmt.Sprintf("✗%d", total))
+			} else {
+				rubricSummary.WriteString(fmt.Sprintf("✓%d/✗%d", stats.passed, stats.failed))
+			}
+		}
+
+		// Overall stats for this model
+		totalPassed := 0
+		totalFailed := 0
+		for _, result := range group.Results {
+			if result.Pass {
+				totalPassed++
+			} else {
+				totalFailed++
+			}
+		}
+
+		// Format the group header
+		groupLine := fmt.Sprintf("%s%s (%d tests: ✓%d/✗%d)", cursor, modelName, len(group.Results), totalPassed, totalFailed)
+
+		// Highlight current row
+		rowStyle := lipgloss.NewStyle().Width(width)
+		if i == m.cursor {
+			rowStyle = rowStyle.Background(lipgloss.Color("237"))
+		}
+
+		b.WriteString(rowStyle.Render(groupHeaderStyle.Render(groupLine)))
+		b.WriteString("\n")
+
+		// Rubric performance line
+		perfStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("246")).
+			MarginLeft(2)
+
+		perfText := fmt.Sprintf("Rubrics: %s", rubricSummary.String())
+		if len(perfText) > width-4 {
+			perfText = perfText[:width-7] + "..."
+		}
+
+		b.WriteString(rowStyle.Render(perfStyle.Render(perfText)))
+		b.WriteString("\n\n")
+	}
+
+	// Footer
+	footerStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("240")).
+		Background(lipgloss.Color("236")).
+		Padding(0, 1).
+		Width(width)
+
+	footer := "[↑↓] Navigate  [g] Toggle View  [f] Filter Failures  [q] Quit"
 	b.WriteString(footerStyle.Render(footer))
 
 	return b.String()

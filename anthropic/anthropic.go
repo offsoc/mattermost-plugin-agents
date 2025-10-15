@@ -22,6 +22,56 @@ const (
 	MaxToolResolutionDepth = 10
 )
 
+var modelAliases = map[string]string{
+	"claude-3-5-sonnet": "claude-3-5-sonnet-20241022",
+	"claude-3-5-haiku":  "claude-3-5-haiku-20241022",
+	"claude-3-opus":     "claude-3-opus-20240229",
+	"claude-3-sonnet":   "claude-3-sonnet-20240229",
+	"claude-3-haiku":    "claude-3-haiku-20240307",
+	"claude-sonnet-4":   "claude-sonnet-4-20250514",
+}
+
+// modelMaxTokens defines the maximum output tokens for each model
+var modelMaxTokens = map[string]int{
+	"claude-3-haiku-20240307":    4096,
+	"claude-3-sonnet-20240229":   4096,
+	"claude-3-opus-20240229":     4096,
+	"claude-3-5-haiku-20241022":  8192,
+	"claude-3-5-sonnet-20241022": 8192,
+	"claude-sonnet-4-20250514":   8192,
+	// Alias mappings
+	"claude-3-haiku":    4096,
+	"claude-3-sonnet":   4096,
+	"claude-3-opus":     4096,
+	"claude-3-5-haiku":  8192,
+	"claude-3-5-sonnet": 8192,
+	"claude-sonnet-4":   8192,
+}
+
+func resolveModelName(model string) string {
+	if resolvedModel, exists := modelAliases[model]; exists {
+		return resolvedModel
+	}
+	return model
+}
+
+// getModelMaxTokens returns the maximum output tokens for a given model
+func getModelMaxTokens(model string) int {
+	// Check both the model name and its resolved name
+	if maxTokens, exists := modelMaxTokens[model]; exists {
+		return maxTokens
+	}
+
+	// Check with resolved name
+	resolvedModel := resolveModelName(model)
+	if maxTokens, exists := modelMaxTokens[resolvedModel]; exists {
+		return maxTokens
+	}
+
+	// Default to 8192 for unknown models
+	return DefaultMaxTokens
+}
+
 type messageState struct {
 	messages []anthropicSDK.MessageParam
 	system   string
@@ -39,9 +89,11 @@ type Anthropic struct {
 	inputTokenLimit    int
 	outputTokenLimit   int
 	enabledNativeTools []string
+	defaultTemperature *float32
+	disableThinking    bool
 }
 
-func New(llmService llm.ServiceConfig, httpClient *http.Client) *Anthropic {
+func New(llmService llm.ServiceConfig, httpClient *http.Client, disableThinking bool) *Anthropic {
 	client := anthropicSDK.NewClient(
 		option.WithAPIKey(llmService.APIKey),
 		option.WithHTTPClient(httpClient),
@@ -53,6 +105,8 @@ func New(llmService llm.ServiceConfig, httpClient *http.Client) *Anthropic {
 		inputTokenLimit:    llmService.InputTokenLimit,
 		outputTokenLimit:   llmService.OutputTokenLimit,
 		enabledNativeTools: llmService.EnabledNativeTools,
+		defaultTemperature: llmService.DefaultTemperature,
+		disableThinking:    disableThinking,
 	}
 }
 
@@ -159,7 +213,8 @@ func (a *Anthropic) GetDefaultConfig() llm.LanguageModelConfig {
 		Model: a.defaultModel,
 	}
 	if a.outputTokenLimit == 0 {
-		config.MaxGeneratedTokens = DefaultMaxTokens
+		// Use model-specific max tokens
+		config.MaxGeneratedTokens = getModelMaxTokens(a.defaultModel)
 	} else {
 		config.MaxGeneratedTokens = a.outputTokenLimit
 	}
@@ -170,6 +225,11 @@ func (a *Anthropic) createConfig(opts []llm.LanguageModelOption) llm.LanguageMod
 	cfg := a.GetDefaultConfig()
 	for _, opt := range opts {
 		opt(&cfg)
+	}
+	// If model was changed by options and we're using default output token limit,
+	// update MaxGeneratedTokens for the new model
+	if a.outputTokenLimit == 0 && cfg.Model != a.defaultModel {
+		cfg.MaxGeneratedTokens = getModelMaxTokens(cfg.Model)
 	}
 	return cfg
 }
@@ -183,15 +243,33 @@ func (a *Anthropic) streamChatWithTools(state messageState) {
 		return
 	}
 
+	// Ensure max tokens doesn't exceed model limit
+	maxTokens := state.config.MaxGeneratedTokens
+	modelMaxTokens := getModelMaxTokens(state.config.Model)
+	if maxTokens > modelMaxTokens {
+		maxTokens = modelMaxTokens
+	}
+
 	// Set up parameters for the Anthropic API
 	params := anthropicSDK.MessageNewParams{
-		Model:     anthropicSDK.Model(state.config.Model),
-		MaxTokens: int64(state.config.MaxGeneratedTokens),
+		Model:     anthropicSDK.Model(resolveModelName(state.config.Model)),
+		MaxTokens: int64(maxTokens),
 		Messages:  state.messages,
-		System: []anthropicSDK.TextBlockParam{{
+		Tools:     convertTools(state.tools),
+	}
+
+	// Apply temperature: explicit config takes precedence, then provider default
+	if state.config.Temperature != nil {
+		params.Temperature = anthropicSDK.Float(float64(*state.config.Temperature))
+	} else if a.defaultTemperature != nil {
+		params.Temperature = anthropicSDK.Float(float64(*a.defaultTemperature))
+	}
+
+	// Only set System if we have a non-empty system message
+	if state.system != "" {
+		params.System = []anthropicSDK.TextBlockParam{{
 			Text: state.system,
-		}},
-		Tools: convertTools(state.tools),
+		}}
 	}
 
 	// Add native tools if enabled
@@ -206,21 +284,22 @@ func (a *Anthropic) streamChatWithTools(state messageState) {
 		})
 	}
 
-	// Enable thinking/reasoning for models that support it
-	// We'll allocate a reasonable budget for thinking tokens (1/4 of max tokens, capped at 8192)
-	thinkingBudget := int64(state.config.MaxGeneratedTokens / 4)
-	if thinkingBudget > 8192 {
-		thinkingBudget = 8192
-	}
-	if thinkingBudget < 1024 {
-		thinkingBudget = 1024
-	}
+	// Enable thinking/reasoning for models that support it (unless disabled via flag)
+	if !a.disableThinking {
+		thinkingBudget := int64(state.config.MaxGeneratedTokens / 4)
+		if thinkingBudget > 8192 {
+			thinkingBudget = 8192
+		}
+		if thinkingBudget < 1024 {
+			thinkingBudget = 1024
+		}
 
-	params.Thinking = anthropicSDK.ThinkingConfigParamUnion{
-		OfEnabled: &anthropicSDK.ThinkingConfigEnabledParam{
-			Type:         "enabled",
-			BudgetTokens: thinkingBudget,
-		},
+		params.Thinking = anthropicSDK.ThinkingConfigParamUnion{
+			OfEnabled: &anthropicSDK.ThinkingConfigEnabledParam{
+				Type:         "enabled",
+				BudgetTokens: thinkingBudget,
+			},
+		}
 	}
 
 	stream := a.client.Messages.NewStreaming(context.Background(), params)

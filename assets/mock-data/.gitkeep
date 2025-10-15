@@ -1,0 +1,24 @@
+# Mock Data Directory
+
+This directory is for optional mock files used when testing PM/Dev tools without real internal search data.
+
+## Usage
+
+When mock mode is enabled in configuration, the MockLoader will look for files in this directory:
+
+- **Exact match**: `{key}.txt` (e.g., `competitor_mentions.txt`)
+- **Pattern match**: `{key}_*.txt` (e.g., `competitor_mentions_slack.txt`)
+
+## Examples
+
+For PM tools internal search mocking:
+- `competitor_mentions.txt` - Mock data for competitor analysis
+- `market_trends.txt` - Mock data for market trends
+- `customer_requests.txt` - Mock data for customer feedback
+
+For Dev tools internal search mocking:
+- `code_discussions.txt` - Mock internal code discussions
+- `error_discussions.txt` - Mock error/debugging conversations
+- `architecture_discussions.txt` - Mock architecture discussions
+
+These files are optional - if not present, internal search will simply return no results when real data is unavailable.

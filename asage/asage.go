@@ -13,20 +13,22 @@ import (
 )
 
 type Provider struct {
-	client           *Client
-	defaultModel     string
-	inputTokenLimit  int
-	outputTokenLimit int
+	client             *Client
+	defaultModel       string
+	inputTokenLimit    int
+	outputTokenLimit   int
+	defaultTemperature *float32
 }
 
 func New(llmService llm.ServiceConfig, httpClient *http.Client) *Provider {
 	client := NewClient(llmService.APIKey, httpClient, llmService.APIURL)
 
 	return &Provider{
-		client:           client,
-		defaultModel:     llmService.DefaultModel,
-		inputTokenLimit:  llmService.InputTokenLimit,
-		outputTokenLimit: llmService.OutputTokenLimit,
+		client:             client,
+		defaultModel:       llmService.DefaultModel,
+		inputTokenLimit:    llmService.InputTokenLimit,
+		outputTokenLimit:   llmService.OutputTokenLimit,
+		defaultTemperature: llmService.DefaultTemperature,
 	}
 }
 
@@ -65,9 +67,18 @@ func (s *Provider) createConfig(opts []llm.LanguageModelOption) llm.LanguageMode
 }
 
 func (s *Provider) queryParamsFromConfig(cfg llm.LanguageModelConfig) QueryParams {
-	return QueryParams{
+	params := QueryParams{
 		Model: cfg.Model,
 	}
+
+	// Apply temperature: explicit config takes precedence, then provider default
+	if cfg.Temperature != nil {
+		params.Temperature = float64(*cfg.Temperature)
+	} else if s.defaultTemperature != nil {
+		params.Temperature = float64(*s.defaultTemperature)
+	}
+
+	return params
 }
 
 func (s *Provider) ChatCompletion(request llm.CompletionRequest, opts ...llm.LanguageModelOption) (*llm.TextStreamResult, error) {

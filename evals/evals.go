@@ -4,13 +4,14 @@
 package evals
 
 import (
-	"errors"
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/mattermost/mattermost-plugin-ai/anthropic"
 	"github.com/mattermost/mattermost-plugin-ai/llm"
 	"github.com/mattermost/mattermost-plugin-ai/openai"
 	"github.com/mattermost/mattermost-plugin-ai/prompts"
@@ -31,27 +32,44 @@ type Eval struct {
 }
 
 func NewEval() (*Eval, error) {
-	// Setup prompts
 	prompts, err := llm.NewPrompts(prompts.PromptsFolder)
 	if err != nil {
 		return nil, err
 	}
 
-	// Setup real LLM
-	httpClient := http.Client{}
-	provider := openai.New(openai.Config{
-		APIKey:           os.Getenv("OPENAI_API_KEY"),
-		DefaultModel:     "gpt-4o",
-		StreamingTimeout: 20 * time.Second,
-	}, &httpClient)
-	if provider == nil {
-		return nil, errors.New("failed to create LLM provider")
+	// Determine model from environment or default
+	defaultModel := "gpt-4o"
+	if envModel := os.Getenv("TEST_MODEL"); envModel != "" {
+		defaultModel = envModel
+	}
+
+	httpClient := &http.Client{}
+
+	var provider llm.LanguageModel
+
+	// Route to appropriate provider based on model name
+	if strings.HasPrefix(strings.ToLower(defaultModel), "claude-") {
+		// Use Anthropic for Claude models
+		config := llm.ServiceConfig{
+			APIKey:       os.Getenv("ANTHROPIC_API_KEY"),
+			DefaultModel: defaultModel,
+			Type:         "anthropic",
+		}
+		provider = anthropic.New(config, httpClient, false)
+	} else {
+		// Use OpenAI for other models (default)
+		config := openai.Config{
+			APIKey:           os.Getenv("OPENAI_API_KEY"),
+			DefaultModel:     defaultModel,
+			StreamingTimeout: 20 * time.Second,
+		}
+		provider = openai.New(config, httpClient)
 	}
 
 	return &Eval{
 		Prompts:   prompts,
 		LLM:       provider,
-		GraderLLM: provider, // TODO: use a different LLM for grading
+		GraderLLM: provider,
 	}, nil
 }
 

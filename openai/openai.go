@@ -14,6 +14,7 @@ import (
 	"image/png"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -41,6 +42,7 @@ type Config struct {
 	EmbeddingDimensions int           `json:"embeddingDimensions"`
 	UseResponsesAPI     bool          `json:"useResponsesAPI"`
 	EnabledNativeTools  []string      `json:"enabledNativeTools"`
+	DefaultTemperature  *float32      `json:"defaultTemperature"`
 }
 
 type OpenAI struct {
@@ -962,12 +964,41 @@ func (s *OpenAI) completionRequestFromConfig(cfg llm.LanguageModelConfig) openai
 		params.MaxCompletionTokens = openai.Int(int64(cfg.MaxGeneratedTokens))
 	}
 
+	// Apply temperature: explicit config takes precedence, then provider default
+	if cfg.Temperature != nil {
+		// The SDK helper expects a float32/float64 depending on version; use float64 for compatibility
+		params.Temperature = openai.Float(float64(*cfg.Temperature))
+	} else if s.config.DefaultTemperature != nil {
+		// Use provider's default temperature when no explicit temperature is set
+		params.Temperature = openai.Float(float64(*s.config.DefaultTemperature))
+	}
+
 	if cfg.JSONOutputFormat != nil {
+		// Convert the JSON schema into a plain map and sanitize it so it's compatible
+		// with OpenAI's expectations for response_format JSON schemas.
+		schema := schemaToFunctionParameters(cfg.JSONOutputFormat)
+
+		// Debug: capture pre-sanitization schema if enabled via env var
+		debugSchema := os.Getenv("MM_AI_DEBUG_JSON_SCHEMA")
+		var beforeJSON []byte
+		if strings.EqualFold(debugSchema, "1") || strings.EqualFold(debugSchema, "true") {
+			beforeJSON, _ = json.MarshalIndent(schema, "", "  ")
+		}
+
+		schema = sanitizeJSONSchemaForOpenAI(schema)
+
+		// Debug: print before/after sanitized schema
+		if len(beforeJSON) > 0 {
+			afterJSON, _ := json.MarshalIndent(schema, "", "  ")
+			fmt.Printf("[OpenAI] response_format JSON schema (before sanitize):\n%s\n", string(beforeJSON))
+			fmt.Printf("[OpenAI] response_format JSON schema (after sanitize):\n%s\n", string(afterJSON))
+		}
+
 		params.ResponseFormat = openai.ChatCompletionNewParamsResponseFormatUnion{
 			OfJSONSchema: &shared.ResponseFormatJSONSchemaParam{
 				JSONSchema: shared.ResponseFormatJSONSchemaJSONSchemaParam{
 					Name:   "output_format",
-					Schema: cfg.JSONOutputFormat,
+					Schema: schema,
 					Strict: openai.Bool(true),
 				},
 			},
@@ -975,6 +1006,83 @@ func (s *OpenAI) completionRequestFromConfig(cfg llm.LanguageModelConfig) openai
 	}
 
 	return params
+}
+
+// sanitizeJSONSchemaForOpenAI makes a JSON Schema map compatible with OpenAI's
+// response_format schema validator by applying a few normalizations:
+//   - Ensure that any representation of "no additional properties" is encoded
+//     as `additionalProperties: false` instead of `{ "additionalProperties": { "not": {} } }`
+//   - Recursively sanitize nested subschemas.
+func sanitizeJSONSchemaForOpenAI(node any) shared.FunctionParameters {
+	// Convert the node to a map[string]any using JSON marshal/unmarshal
+	// This handles any type including OpenAI's shared.FunctionParameters
+	jsonBytes, err := json.Marshal(node)
+	if err != nil {
+		return shared.FunctionParameters{}
+	}
+
+	var nodeMap map[string]any
+	err = json.Unmarshal(jsonBytes, &nodeMap)
+	if err != nil {
+		return shared.FunctionParameters{}
+	}
+
+	// Normalize additionalProperties
+	if ap, ok := nodeMap["additionalProperties"]; ok {
+		if apMap, isMap := ap.(map[string]any); isMap {
+			// Check for {"not": {}} pattern
+			if notValue, hasNot := apMap["not"]; hasNot {
+				if notMap, isNotMap := notValue.(map[string]any); isNotMap && len(notMap) == 0 {
+					nodeMap["additionalProperties"] = false
+				}
+			}
+		}
+	}
+
+	// Handle recursion with the cleaned nodeMap
+	// Recurse into common subschema containers
+	if props, ok := nodeMap["properties"].(map[string]any); ok {
+		for key, pv := range props {
+			result := sanitizeJSONSchemaForOpenAI(pv)
+			props[key] = map[string]any(result)
+		}
+	}
+	if items, ok := nodeMap["items"]; ok {
+		result := sanitizeJSONSchemaForOpenAI(items)
+		nodeMap["items"] = map[string]any(result)
+	}
+	if allOf, ok := nodeMap["allOf"].([]any); ok {
+		for i, it := range allOf {
+			result := sanitizeJSONSchemaForOpenAI(it)
+			allOf[i] = map[string]any(result)
+		}
+	}
+	if anyOf, ok := nodeMap["anyOf"].([]any); ok {
+		for i, it := range anyOf {
+			result := sanitizeJSONSchemaForOpenAI(it)
+			anyOf[i] = map[string]any(result)
+		}
+	}
+	if oneOf, ok := nodeMap["oneOf"].([]any); ok {
+		for i, it := range oneOf {
+			result := sanitizeJSONSchemaForOpenAI(it)
+			oneOf[i] = map[string]any(result)
+		}
+	}
+	if defs, ok := nodeMap["$defs"].(map[string]any); ok {
+		for key, dv := range defs {
+			result := sanitizeJSONSchemaForOpenAI(dv)
+			defs[key] = map[string]any(result)
+		}
+	}
+	if defs, ok := nodeMap["definitions"].(map[string]any); ok {
+		for key, dv := range defs {
+			result := sanitizeJSONSchemaForOpenAI(dv)
+			defs[key] = map[string]any(result)
+		}
+	}
+
+	return shared.FunctionParameters(nodeMap)
 }
 
 // getModelConstant converts string model names to the SDK's model constants

@@ -41,6 +41,7 @@ type Client interface {
 	GetFileInfo(fileID string) (*model.FileInfo, error)
 	GetFile(fileID string) (io.ReadCloser, error)
 	SendEphemeralPost(userID string, post *model.Post)
+	GetBundlePath() (string, error)
 }
 
 func NewClient(pluginAPI *pluginapi.Client) Client {
@@ -132,4 +133,8 @@ func (m *client) GetFile(fileID string) (io.ReadCloser, error) {
 
 func (m *client) SendEphemeralPost(userID string, post *model.Post) {
 	m.PostService.SendEphemeralPost(userID, post)
+}
+
+func (m *client) GetBundlePath() (string, error) {
+	return m.pluginAPI.System.GetBundlePath()
 }

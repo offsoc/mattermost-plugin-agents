@@ -78,6 +78,20 @@ func (s *Search) Enabled() bool {
 	return s != nil && s.EmbeddingSearch != nil
 }
 
+// SearchWithMetadata performs a search and returns enriched results with channel and user metadata
+func (s *Search) SearchWithMetadata(ctx context.Context, query string, opts embeddings.SearchOptions) ([]RAGResult, error) {
+	if !s.Enabled() {
+		return nil, fmt.Errorf("search functionality is not configured")
+	}
+
+	searchResults, err := s.Search(ctx, query, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.convertToRAGResults(searchResults), nil
+}
+
 // convertToRAGResults converts embeddings.EmbeddingSearchResult to RAGResult with enriched metadata
 func (s *Search) convertToRAGResults(searchResults []embeddings.SearchResult) []RAGResult {
 	var ragResults []RAGResult

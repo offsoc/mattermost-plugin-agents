@@ -95,7 +95,7 @@ func (c *Conversations) HandleToolCall(userID string, post *model.Post, channel 
 	previousConversation.CutoffBeforePostID(post.Id)
 	previousConversation.Posts = append(previousConversation.Posts, post)
 
-	posts, err := c.existingConversationToLLMPosts(bot, previousConversation, llmContext)
+	posts, err := c.ExistingConversationToLLMPosts(bot, previousConversation, llmContext)
 	if err != nil {
 		return fmt.Errorf("failed to convert existing conversation to LLM posts: %w", err)
 	}

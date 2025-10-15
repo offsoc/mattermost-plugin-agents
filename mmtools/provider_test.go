@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/mattermost/mattermost-plugin-ai/bots"
+	"github.com/mattermost/mattermost-plugin-ai/config"
 	"github.com/mattermost/mattermost-plugin-ai/embeddings"
 	"github.com/mattermost/mattermost-plugin-ai/embeddings/mocks"
 	"github.com/mattermost/mattermost-plugin-ai/llm"
@@ -44,17 +45,22 @@ func TestMMToolProvider_GetTools(t *testing.T) {
 			expectedSearchToolPresent: false,
 		},
 		{
-			name:                      "search tool not available - not in DM (channel context)",
+			name:                      "search tool available - not in DM (channel context)",
 			searchService:             search.New(mocks.NewMockEmbeddingSearch(t), nil, nil, nil, nil),
 			isDM:                      false,
-			expectedSearchToolPresent: false,
+			expectedSearchToolPresent: true,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			// Create test config container with initialized config
+			testConfig := &config.Config{}
+			configContainer := &config.Container{}
+			configContainer.Update(testConfig)
+
 			// Create tool provider
-			provider := NewMMToolProvider(nil, test.searchService, &http.Client{})
+			provider := NewMMToolProvider(nil, test.searchService, &http.Client{}, configContainer, nil)
 
 			// Create a mock bot
 			bot := &bots.Bot{}
@@ -124,8 +130,13 @@ func TestMMToolProvider_toolSearchServer(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			// Create test config container with initialized config
+			testConfig := &config.Config{}
+			configContainer := &config.Container{}
+			configContainer.Update(testConfig)
+
 			// Create tool provider
-			provider := NewMMToolProvider(nil, test.searchService, &http.Client{})
+			provider := NewMMToolProvider(nil, test.searchService, &http.Client{}, configContainer, nil)
 
 			// Create mock LLM context
 			llmContext := &llm.Context{

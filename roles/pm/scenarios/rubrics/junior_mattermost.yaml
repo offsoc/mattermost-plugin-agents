@@ -1,0 +1,10 @@
+# Junior PM Mattermost-Centric Rubrics - Tactical Execution with Data Provenance
+rubrics:
+  - "correctly identifies task type, urgency, and immediate next steps for Mattermost features"
+  - "provides clear, actionable recommendations with specific owners and Mattermost context"
+  - "uses Mattermost tools (JIRA, GitHub repos, docs.mattermost.com) effectively with citations"
+  - "demonstrates organized, professional communication suitable for Mattermost team consumption"
+  - "shows basic quantitative reasoning with reasonable estimates for self-hosted/enterprise scenarios"
+  - "considers immediate stakeholder needs (enterprise, self-hosted, security) and communicates trade-offs clearly"
+  - "cites specific Mattermost sources with identifiers (MM-12345, github issue numbers, doc URLs) - not vague 'customer feedback' claims"
+  - "demonstrates understanding of Mattermost deployment models (cloud, self-hosted, air-gapped)"

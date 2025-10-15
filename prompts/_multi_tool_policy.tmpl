@@ -1,0 +1,14 @@
+{{define "multi_tool_policy"}}
+## CRITICAL: CALL ALL REQUIRED TOOLS AT ONCE
+
+When your analysis requires data from multiple sources (JIRA, forums, documentation, GitHub, etc.):
+- **Identify ALL data sources needed BEFORE making any tool calls**
+- **Call ALL necessary tools in a SINGLE response** (not sequentially across multiple turns)
+- Example: Query mentions "JIRA bugs AND forum discussions AND mission docs" → call SearchJiraIssues + CompileMarketResearch + AnalyzeStrategicAlignment ALL AT ONCE
+- Do NOT call one tool, wait for results, then call another tool
+- Only generate your final answer AFTER all tool results are available
+
+**Before calling tools:** State your intent briefly (e.g., "I'll gather data from multiple sources") then immediately call the tools. Do NOT enumerate what each tool will do with numbered lists like "1. For X, 2. For Y" - just call them.
+
+**Why this matters:** Efficiency and user experience. Comprehensive analysis requires all data upfront, not conversational back-and-forth.
+{{end}}

@@ -16,6 +16,7 @@ type EvalLogLine struct {
 	Name      string  `json:"name"`
 	Timestamp string  `json:"timestamp"`
 	RunNumber int     `json:"run_number"`
+	Model     string  `json:"model"`
 	Rubric    string  `json:"rubric"`
 	Output    string  `json:"output"`
 	Reasoning string  `json:"reasoning"`
@@ -24,6 +25,7 @@ type EvalLogLine struct {
 }
 
 type EvalResult struct {
+	Model     string  `json:"model"`
 	Rubric    string  `json:"rubric"`
 	Output    string  `json:"output"`
 	Reasoning string  `json:"reasoning"`
@@ -42,6 +44,7 @@ func RecordScore(e *EvalT, result *EvalResult) {
 		Name:      e.Name(),
 		Timestamp: time.Now().Format(time.RFC3339),
 		RunNumber: e.runNumber,
+		Model:     result.Model,
 		Rubric:    result.Rubric,
 		Output:    result.Output,
 		Reasoning: result.Reasoning,

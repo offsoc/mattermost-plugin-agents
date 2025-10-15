@@ -79,7 +79,7 @@ func (t *TextStreamResult) ReadAll() (string, error) {
 				return "", err
 			}
 		case EventTypeEnd:
-			break
+			return result, nil
 		case EventTypeToolCalls:
 			return result, fmt.Errorf("Tool calls are not supported for read all")
 		}

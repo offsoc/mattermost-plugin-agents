@@ -1,0 +1,12 @@
+# Senior PM Mattermost-Centric Rubrics - Strategic Vision with Data Provenance
+rubrics:
+  - "identifies core PM challenge and Mattermost business context clearly"
+  - "cites Mattermost-specific sources with identifiers (MM-12345, github.com/mattermost/mattermost#123, doc URLs) - not vague 'based on customer feedback' claims"
+  - "includes quantitative reasoning with estimates considering Mattermost's deployment models"
+  - "applies PM frameworks (RICE, OKRs) correctly to Mattermost features and competitive landscape"
+  - "provides specific, actionable recommendations with clear owners and Mattermost strategic alignment"
+  - "considers multiple stakeholder perspectives (enterprise, open-source, security, compliance)"
+  - "demonstrates strategic thinking connecting tactics to Mattermost's vision and competitive differentiation"
+  - "structures response professionally for executive consumption with Mattermost context"
+  - "demonstrates understanding of Mattermost's security-first, self-hosted positioning vs competitors"
+  - "explicitly states assumptions and data limitations (Known Unknowns section)"

@@ -1,0 +1,63 @@
+# Senior PM Generic Scenarios - Strategic Vision and Synthesis
+# These scenarios test strategic PM skills without requiring domain-specific knowledge
+
+scenarios:
+  - name: "vision_alignment"
+    message: "Based on your company's product vision, how does a recent AI-powered feature launch align with the company's long-term goal of enabling mission-critical work?"
+    trials: 1
+
+  - name: "feature_request_prioritization"
+    message: "A user in the public forum has requested a new feature for 'scheduled messages.' Based on typical forum discussions, what are the top two use cases they would provide, and how would you apply the RICE framework (Reach, Impact, Confidence, Effort) to prioritize this against a bug fix?"
+    trials: 1
+
+  - name: "bugs_vs_features"
+    message: "A JIRA ticket reports a critical bug where the mobile app crashes during a search. A separate feature request on forums is for a new analytics dashboard. Using your company's mission as a guide, which should be prioritized, and why?"
+    trials: 1
+
+  - name: "near_term_vs_long_term"
+    message: "The public roadmap lists a major project for federated communications as a long-term initiative. A customer has opened a high-priority ticket requesting a simpler, near-term integration with Microsoft Teams. How would you balance this immediate customer need with the long-term vision?"
+    trials: 1
+
+  - name: "revenue_prioritization"
+    message: "A new feature has been proposed that could be a 'Professional' tier feature or an 'Enterprise' tier feature. Explain the pros and cons of placing it in each tier, considering the impact on revenue and product adoption."
+    trials: 1
+
+  - name: "stakeholder_management"
+    message: "The Head of Sales is pushing for a specific feature request from a key customer, arguing it's 'revenue-critical.' The Engineering Lead argues the feature is technically complex and would introduce long-term maintenance debt. How would you present a case for either prioritizing or de-prioritizing the request?"
+    trials: 1
+
+  - name: "technical_debt_prioritization"
+    message: "Based on public JIRA tickets and developer forum discussions over the past six months, identify the most significant piece of technical debt that is affecting new feature development velocity. Propose a long-term plan to address it, explaining why this is a higher priority than the most-requested new feature from forums."
+    trials: 1
+
+  - name: "visionary_features"
+    message: "Based on your company's vision for AI Agents and latest AI industry trends, draft a 'go/no-go' document for a visionary, long-term AI-powered feature. The document should analyze potential market fit, technical feasibility, and alignment with existing product offerings."
+    trials: 1
+
+  - name: "private_data_prioritization"
+    message: "Based on internal customer engagement metrics and sales data, a key enterprise customer has shown a decline in usage. Correlate this with their top three feature requests from internal ticketing. How would you adjust the product roadmap to address this churn risk?"
+    trials: 1
+
+  - name: "ultimate_prioritization_challenge"
+    message: "Generate a go-to-market plan for the next major release. The plan must prioritize a new feature (near-term revenue opportunity), a major bug fix (long-term stability), and a visionary initiative (long-term vision). Justify the balance of these three competing priorities."
+    trials: 1
+
+  - name: "user_feedback_synthesis"
+    message: "You received 500 user survey responses about a proposed feature. 60% want it, 25% are neutral, 15% strongly oppose it citing privacy concerns. The engineering estimate is 3 months. How do you decide and communicate the decision?"
+    trials: 1
+
+  - name: "churn_analysis"
+    message: "Enterprise customer churn increased from 8% to 15% quarterly. Customer success reports 'lack of advanced features' as the top reason. Sales wants immediate feature parity with competitors. What's your 90-day plan?"
+    trials: 1
+
+  - name: "market_opportunity_sizing"
+    message: "A PM at a competitor just launched an AI writing assistant feature and claims '300% engagement boost.' Your CEO asks for a market opportunity assessment for a similar feature. What's your approach?"
+    trials: 1
+
+  - name: "pricing_strategy"
+    message: "Your freemium model has 100K free users with 2% conversion to paid ($20/month). Enterprise prospects want features that would cost $500K to build. Do you build for enterprise, improve conversion, or explore other options?"
+    trials: 1
+
+  - name: "competitive_response"
+    message: "A well-funded competitor just launched a feature identical to your differentiator, but free. Your feature drives 40% of new signups. Leadership wants an immediate response. What's your strategic approach?"
+    trials: 1

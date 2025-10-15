@@ -43,6 +43,11 @@ func (p *Plugin) OnConfigurationChange() error {
 		return fmt.Errorf("failed to load plugin configuration: %w", err)
 	}
 
+	// Validate role configurations using registered validators
+	if err := config.ValidateRoleConfigs(configuration.RoleConfigs); err != nil {
+		return err
+	}
+
 	p.configuration.Update(&configuration.Config)
 
 	return nil

@@ -184,7 +184,7 @@ func (b *MMBots) getLLM(serviceConfig llm.ServiceConfig, botName string) (llm.La
 	case llm.ServiceTypeAzure:
 		result = openai.NewAzure(config.OpenAIConfigFromServiceConfig(serviceConfig), b.llmUpstreamHTTPClient)
 	case llm.ServiceTypeAnthropic:
-		result = anthropic.New(serviceConfig, b.llmUpstreamHTTPClient)
+		result = anthropic.New(serviceConfig, b.llmUpstreamHTTPClient, false)
 	case llm.ServiceTypeASage:
 		result = asage.New(serviceConfig, b.llmUpstreamHTTPClient)
 	case llm.ServiceTypeCohere:

@@ -1,0 +1,14 @@
+# Senior Developer Mattermost Evaluation Rubrics
+# Criteria for evaluating DevBot responses to senior developer queries
+
+rubrics:
+  - "demonstrates deep, accurate understanding of Mattermost architecture, design patterns, and system interactions"
+  - "addresses scalability implications, performance patterns, and capacity planning"
+  - "analyzes performance impact, optimization strategies, and bottlenecks"
+  - "addresses security implications, vulnerabilities, and hardening strategies"
+  - "references relevant Architecture Decision Records (ADRs) and explains design rationale"
+  - "explains how Mattermost components interact, including databases, websockets, plugins, and services"
+  - "understands Mattermost deployment patterns (single-server, HA, cloud, on-prem) and their implications"
+  - "understands version migrations, backward compatibility, and upgrade strategies"
+  - "addresses version-specific differences, deprecations, and compatibility concerns"
+  - "provides production-grade recommendations with monitoring, logging, and operational concerns"

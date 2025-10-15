@@ -12,9 +12,10 @@ type ServiceConfig struct {
 	APIURL       string `json:"apiURL"`
 
 	// Renaming the JSON field to inputTokenLimit would require a migration, leaving as is for now.
-	InputTokenLimit         int  `json:"tokenLimit"`
-	StreamingTimeoutSeconds int  `json:"streamingTimeoutSeconds"`
-	SendUserID              bool `json:"sendUserID"`
+	InputTokenLimit         int      `json:"tokenLimit"`
+	StreamingTimeoutSeconds int      `json:"streamingTimeoutSeconds"`
+	SendUserID              bool     `json:"sendUserID"`
+	DefaultTemperature      *float32 `json:"defaultTemperature"`
 
 	// Otherwise known as maxTokens
 	OutputTokenLimit int `json:"outputTokenLimit"`

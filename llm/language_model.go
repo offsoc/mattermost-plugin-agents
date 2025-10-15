@@ -37,6 +37,7 @@ type LanguageModelConfig struct {
 	MaxGeneratedTokens int
 	EnableVision       bool
 	JSONOutputFormat   *jsonschema.Schema
+	Temperature        *float32
 }
 
 type LanguageModelOption func(*LanguageModelConfig)
@@ -54,6 +55,12 @@ func WithMaxGeneratedTokens(maxGeneratedTokens int) LanguageModelOption {
 func WithJSONOutput[T any]() LanguageModelOption {
 	return func(cfg *LanguageModelConfig) {
 		cfg.JSONOutputFormat = NewJSONSchemaFromStruct[T]()
+	}
+}
+
+func WithTemperature(temperature float32) LanguageModelOption {
+	return func(cfg *LanguageModelConfig) {
+		cfg.Temperature = &temperature
 	}
 }
 

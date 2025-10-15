@@ -26,7 +26,9 @@ import (
 	"github.com/mattermost/mattermost-plugin-ai/mmapi"
 	"github.com/mattermost/mattermost-plugin-ai/mmtools"
 	"github.com/mattermost/mattermost-plugin-ai/prompts"
+	"github.com/mattermost/mattermost-plugin-ai/roles"
 	"github.com/mattermost/mattermost-plugin-ai/search"
+	roleproviders "github.com/mattermost/mattermost-plugin-ai/server/roles"
 	"github.com/mattermost/mattermost-plugin-ai/streaming"
 	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin"
@@ -91,7 +93,13 @@ func (p *Plugin) OnActivate() error {
 		}
 	})
 
-	if ensureBotsErr := bots.EnsureBots(newCfg.Bots); ensureBotsErr != nil {
+	// Use the appropriate bots configuration based on migration result
+	botsConfig := p.configuration.GetBots()
+	if updated {
+		botsConfig = newCfg.Bots
+	}
+
+	if ensureBotsErr := bots.EnsureBots(botsConfig); ensureBotsErr != nil {
 		// If we fail to ensure bots, we log the error but do not return
 		// as it would leave the plugin in a state where it can't be configured from the system console.
 		pluginAPI.Log.Error("failed to ensure bots", "error", ensureBotsErr)
@@ -135,7 +143,13 @@ func (p *Plugin) OnActivate() error {
 		mmClient,
 		searchService,
 		untrustedHTTPClient,
+		&p.configuration,
+		dbClient.DB.DB,
 	)
+
+	// Register role-specific tool providers (PM, Dev, etc.)
+	// This is done here to keep role-specific logic out of core mmtools package
+	roleproviders.RegisterToolProviders(pluginAPI, toolProvider, searchService, untrustedHTTPClient, mmClient, &p.configuration)
 
 	// Build redirect URI
 	siteURL := pluginAPI.Configuration.GetConfig().ServiceSettings.SiteURL
@@ -185,6 +199,10 @@ func (p *Plugin) OnActivate() error {
 	// TODO: Refactor to avoid circular dependency
 	conversationsService.SetMeetingsService(meetingsService)
 
+	// Register specialized bot roles (PM, Dev, etc.)
+	roleService := roles.NewRoleService(mmClient, prompts, &p.configuration)
+	roleService.RegisterAll(conversationsService)
+
 	apiService := api.New(
 		bots,
 		conversationsService,
@@ -222,39 +240,56 @@ func (p *Plugin) OnDeactivate() error {
 }
 
 func (p *Plugin) MessageHasBeenPosted(c *plugin.Context, post *model.Post) {
+	// Defensive check: these should always be set after OnActivate
+	if p.pluginAPI == nil || p.indexerService == nil || p.conversationsService == nil {
+		return
+	}
+
 	// Index the new message in the vector database
-	if p.indexerService != nil {
-		// Get channel to retrieve team ID
-		channel, err := p.API.GetChannel(post.ChannelId)
-		if err != nil {
-			p.pluginAPI.Log.Error("Failed to get channel for post indexing", "error", err)
+	p.pluginAPI.Log.Debug("Starting post indexing", "post_id", post.Id)
+
+	// Get channel to retrieve team ID
+	channel, err := p.API.GetChannel(post.ChannelId)
+	if err != nil {
+		p.pluginAPI.Log.Error("Failed to get channel for post indexing", "error", err)
+	} else {
+		if err := p.indexerService.IndexPost(context.Background(), post, channel); err != nil {
+			p.pluginAPI.Log.Error("Failed to index post in vector database", "error", err)
 		} else {
-			if err := p.indexerService.IndexPost(context.Background(), post, channel); err != nil {
-				p.pluginAPI.Log.Error("Failed to index post in vector database", "error", err)
-			}
+			p.pluginAPI.Log.Debug("Post indexed successfully", "post_id", post.Id)
 		}
 	}
 
+	p.pluginAPI.Log.Debug("Delegating to conversations service", "post_id", post.Id)
 	p.conversationsService.MessageHasBeenPosted(c, post)
 }
 
 func (p *Plugin) MessageHasBeenUpdated(c *plugin.Context, newPost, oldPost *model.Post) {
-	// Handle indexing of updated posts
-	if p.indexerService != nil {
-		// Delete the old post from index
-		if err := p.indexerService.DeletePost(context.Background(), oldPost.Id); err != nil {
-			p.pluginAPI.Log.Error("Failed to delete post from vector database", "error", err)
-		}
+	// Defensive check: these should always be set after OnActivate
+	if p.pluginAPI == nil || p.indexerService == nil {
+		return
+	}
 
-		// Get channel to retrieve team ID
-		channel, err := p.API.GetChannel(newPost.ChannelId)
-		if err != nil {
-			p.pluginAPI.Log.Error("Failed to get channel for post indexing", "error", err)
+	// Handle indexing of updated posts
+	p.pluginAPI.Log.Debug("Starting post update indexing", "new_post_id", newPost.Id, "old_post_id", oldPost.Id)
+
+	// Delete the old post from index
+	if err := p.indexerService.DeletePost(context.Background(), oldPost.Id); err != nil {
+		p.pluginAPI.Log.Error("Failed to delete post from vector database", "error", err)
+	} else {
+		p.pluginAPI.Log.Debug("Old post deleted from index", "old_post_id", oldPost.Id)
+	}
+
+	// Get channel to retrieve team ID
+	channel, err := p.API.GetChannel(newPost.ChannelId)
+	if err != nil {
+		p.pluginAPI.Log.Error("Failed to get channel for post indexing", "error", err)
+	} else {
+		// Index the updated post
+		if err := p.indexerService.IndexPost(context.Background(), newPost, channel); err != nil {
+			p.pluginAPI.Log.Error("Failed to index updated post in vector database", "error", err)
 		} else {
-			// Index the updated post
-			if err := p.indexerService.IndexPost(context.Background(), newPost, channel); err != nil {
-				p.pluginAPI.Log.Error("Failed to index updated post in vector database", "error", err)
-			}
+			p.pluginAPI.Log.Debug("Updated post indexed successfully", "new_post_id", newPost.Id)
 		}
 	}
 }
