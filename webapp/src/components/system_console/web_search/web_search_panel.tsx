@@ -91,10 +91,7 @@ const WebSearchPanel = ({value, onChange}: Props) => {
                     label={intl.formatMessage({defaultMessage: 'Domain Blacklist (optional)'})}
                     value={(value.google.domainBlacklist || []).join(', ')}
                     onChange={(e) => {
-                        const domains = e.target.value
-                            .split(',')
-                            .map((d) => d.trim())
-                            .filter((d) => d !== '');
+                        const domains = e.target.value.split(',').map((d) => d.trim()).filter((d) => d !== '');
                         handleGoogleUpdate({domainBlacklist: domains});
                     }}
                     helptext={intl.formatMessage({defaultMessage: 'Comma-separated list of domains to exclude from search results (e.g., example.com, spam-site.org). Results from these domains will be filtered out and the LLM will never see them.'})}
