@@ -156,11 +156,45 @@ func NewEvalWithProvider(providerName string) (*Eval, error) {
 		return nil, err
 	}
 
+	// Setup grader LLM (separate from main LLM)
+	graderLLM, err := createGraderLLM()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create grader LLM: %w", err)
+	}
+
 	return &Eval{
 		Prompts:   prompts,
 		LLM:       provider,
-		GraderLLM: provider, // TODO: use a different LLM for grading
+		GraderLLM: graderLLM,
 	}, nil
+}
+
+// createGraderLLM creates a separate LLM for grading based on environment variables
+// Defaults to OpenAI with gpt-5 model if not specified
+func createGraderLLM() (llm.LanguageModel, error) {
+	// Get grader provider name from environment, default to "openai"
+	graderProvider := os.Getenv("GRADER_LLM_PROVIDER")
+	if graderProvider == "" {
+		graderProvider = "openai"
+	}
+
+	// Get provider configuration (uses existing API key env vars)
+	graderConfig, err := getProviderConfig(graderProvider)
+	if err != nil {
+		return nil, err
+	}
+
+	// Override model if GRADER_LLM_MODEL is set, otherwise default to gpt-5
+	graderModel := os.Getenv("GRADER_LLM_MODEL")
+	if graderModel != "" {
+		graderConfig.Model = graderModel
+	} else if graderProvider == "openai" {
+		// Default to gpt-5 for OpenAI grader
+		graderConfig.Model = "gpt-5"
+	}
+
+	// Create grader provider
+	return createProvider(graderProvider, graderConfig)
 }
 
 func NumEvalsOrSkip(t *testing.T) int {

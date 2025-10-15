@@ -100,6 +100,17 @@ The evalviewer and evaluation tests support multiple LLM providers. Configure wh
 - **`AZURE_OPENAI_ENDPOINT`**: Your Azure OpenAI endpoint URL (required for Azure)
 - **`AZURE_OPENAI_MODEL`**: Model deployment name to use (default: `gpt-4o`)
 
+### Grader Configuration
+
+The grader LLM is used to evaluate the quality of responses from the main LLM. By default, it uses OpenAI with the `gpt-5` model. You can configure a different provider or model for grading:
+
+- **`GRADER_LLM_PROVIDER`**: Provider to use for grading (e.g., `openai`, `anthropic`, `azure`)
+  - Default: `openai`
+  - Uses the same API key environment variables as the main LLM (e.g., `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`)
+- **`GRADER_LLM_MODEL`**: Model to use for grading
+  - Default: `gpt-5` (for OpenAI provider)
+  - For other providers, uses their default model unless specified
+
 ### Examples
 
 ```bash
@@ -117,6 +128,15 @@ evalviewer run ./conversations
 
 # Use a specific model for OpenAI
 OPENAI_MODEL=gpt-4-turbo evalviewer run ./conversations
+
+# Use Anthropic for the main LLM and OpenAI gpt-5 for grading (default grader)
+LLM_PROVIDER=anthropic ANTHROPIC_API_KEY=sk-ant-... OPENAI_API_KEY=sk-... evalviewer run ./conversations
+
+# Use OpenAI gpt-4o for main LLM and Anthropic for grading
+LLM_PROVIDER=openai GRADER_LLM_PROVIDER=anthropic OPENAI_API_KEY=sk-... ANTHROPIC_API_KEY=sk-ant-... evalviewer run ./conversations
+
+# Use a specific model for grading
+GRADER_LLM_MODEL=gpt-4o evalviewer run ./conversations
 ```
 
 If a provider's API key is not set, that provider will be skipped with a warning.
