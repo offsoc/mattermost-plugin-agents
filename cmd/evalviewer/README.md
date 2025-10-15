@@ -139,4 +139,4 @@ LLM_PROVIDER=openai GRADER_LLM_PROVIDER=anthropic OPENAI_API_KEY=sk-... ANTHROPI
 GRADER_LLM_MODEL=gpt-4o evalviewer run ./conversations
 ```
 
-If a provider's API key is not set, that provider will be skipped with a warning.
+If a provider's API key is not set, an error will be thrown.
