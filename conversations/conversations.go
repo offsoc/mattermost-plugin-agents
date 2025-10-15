@@ -17,6 +17,7 @@ import (
 	"github.com/mattermost/mattermost-plugin-ai/llm"
 	"github.com/mattermost/mattermost-plugin-ai/llmcontext"
 	"github.com/mattermost/mattermost-plugin-ai/mmapi"
+	"github.com/mattermost/mattermost-plugin-ai/mmtools"
 	"github.com/mattermost/mattermost-plugin-ai/prompts"
 	"github.com/mattermost/mattermost-plugin-ai/streaming"
 	"github.com/mattermost/mattermost-plugin-ai/subtitles"
@@ -124,6 +125,13 @@ func (c *Conversations) ProcessUserRequestWithContext(bot *bots.Bot, postingUser
 	result, err := bot.LLM().ChatCompletion(completionRequest)
 	if err != nil {
 		return nil, err
+	}
+
+	// Decorate the stream with web search annotations if available
+	webSearchData := mmtools.ConsumeWebSearchContexts(context)
+	c.mmClient.LogDebug("Checking for web search data in ProcessUserRequestWithContext", "has_data", len(webSearchData) > 0, "num_contexts", len(webSearchData))
+	if len(webSearchData) > 0 {
+		result = mmtools.DecorateStreamWithAnnotations(result, webSearchData, nil)
 	}
 
 	go func() {

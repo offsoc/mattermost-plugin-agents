@@ -2,9 +2,9 @@
 // See LICENSE.txt for license information.
 
 import React from 'react';
-import styled from 'styled-components';
 import {FormattedMessage, useIntl} from 'react-intl';
 
+import Panel from '../panel';
 import {BooleanItem, ItemList, SelectionItem, SelectionItemOption, TextItem} from '../item';
 
 export type WebSearchGoogleConfig = {
@@ -12,6 +12,7 @@ export type WebSearchGoogleConfig = {
     searchEngineId: string;
     resultLimit: number;
     apiURL: string;
+    domainBlacklist: string[];
 };
 
 export type WebSearchConfig = {
@@ -25,12 +26,6 @@ type Props = {
     onChange: (config: WebSearchConfig) => void;
 };
 
-const PanelSubtitle = styled.div`
-    color: rgba(var(--center-channel-color-rgb), 0.56);
-    font-size: 13px;
-    line-height: 18px;
-`;
-
 const WebSearchPanel = ({value, onChange}: Props) => {
     const intl = useIntl();
 
@@ -43,10 +38,10 @@ const WebSearchPanel = ({value, onChange}: Props) => {
     };
 
     return (
-        <div>
-            <PanelSubtitle>
-                <FormattedMessage defaultMessage='Configure built-in web search for agents that do not have native provider search capabilities.'/>
-            </PanelSubtitle>
+        <Panel
+            title={<FormattedMessage defaultMessage='Web Search'/>}
+            subtitle={intl.formatMessage({defaultMessage: 'Configure built-in web search for agents that do not have native web search capabilities. NOTE: If your agent is configured to use native tool web search, that will be used instead of this web search.'})}
+        >
             <ItemList>
                 <BooleanItem
                     label={intl.formatMessage({defaultMessage: 'Enable Web Search'})}
@@ -92,8 +87,21 @@ const WebSearchPanel = ({value, onChange}: Props) => {
                     helptext={intl.formatMessage({defaultMessage: 'Override the default Google Custom Search endpoint if necessary.'})}
                     disabled={!value.enabled || value.provider !== 'google'}
                 />
+                <TextItem
+                    label={intl.formatMessage({defaultMessage: 'Domain Blacklist (optional)'})}
+                    value={(value.google.domainBlacklist || []).join(', ')}
+                    onChange={(e) => {
+                        const domains = e.target.value
+                            .split(',')
+                            .map((d) => d.trim())
+                            .filter((d) => d !== '');
+                        handleGoogleUpdate({domainBlacklist: domains});
+                    }}
+                    helptext={intl.formatMessage({defaultMessage: 'Comma-separated list of domains to exclude from search results (e.g., example.com, spam-site.org). Results from these domains will be filtered out and the LLM will never see them.'})}
+                    disabled={!value.enabled || value.provider !== 'google'}
+                />
             </ItemList>
-        </div>
+        </Panel>
     );
 };
 

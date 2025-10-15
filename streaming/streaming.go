@@ -23,6 +23,7 @@ const PostStreamingControlStart = "start"
 const ToolCallProp = "pending_tool_call"
 const ReasoningSummaryProp = "reasoning_summary"
 const AnnotationsProp = "annotations"
+const WebSearchContextProp = "web_search_context"
 
 type Service interface {
 	StreamToNewPost(ctx context.Context, botID string, requesterUserID string, stream *llm.TextStreamResult, post *model.Post, respondingToPostID string) error

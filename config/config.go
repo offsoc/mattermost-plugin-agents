@@ -35,10 +35,11 @@ type WebSearchConfig struct {
 }
 
 type WebSearchGoogleConfig struct {
-	APIKey         string `json:"apiKey"`
-	SearchEngineID string `json:"searchEngineId"`
-	ResultLimit    int    `json:"resultLimit"`
-	APIURL         string `json:"apiURL"`
+	APIKey          string   `json:"apiKey"`
+	SearchEngineID  string   `json:"searchEngineId"`
+	ResultLimit     int      `json:"resultLimit"`
+	APIURL          string   `json:"apiURL"`
+	DomainBlacklist []string `json:"domainBlacklist"`
 }
 
 func (c *Config) Clone() *Config {

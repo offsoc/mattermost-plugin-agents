@@ -110,6 +110,7 @@ const defaultConfig = {
             searchEngineId: '',
             resultLimit: 5,
             apiURL: '',
+            domainBlacklist: [],
         },
     },
 };
