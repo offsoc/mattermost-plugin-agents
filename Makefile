@@ -304,6 +304,24 @@ mcp-server:
 	@echo Building MCP server...
 	$(GO) build $(GO_BUILD_FLAGS) -o bin/mattermost-mcp-server ./mcpserver/cmd/main.go
 
+## Builds the evalviewer binary.
+.PHONY: evalviewer
+evalviewer:
+	@echo Building evalviewer...
+	cd cmd/evalviewer && $(GO) build $(GO_BUILD_FLAGS) -o ../../bin/evalviewer .
+
+## Runs evaluations interactively with TUI for packages with evals.
+.PHONY: evals
+evals: evalviewer
+	@echo Running evaluations interactively...
+	./bin/evalviewer run -v ./conversations ./threads ./channels ./react
+
+## Runs evaluations in CI mode (non-interactive) for packages with evals.
+.PHONY: evals-ci
+evals-ci: evalviewer
+	@echo Running evaluations in CI mode...
+	./bin/evalviewer check -v ./conversations ./threads ./channels ./react
+
 ## Builds and installs the plugin to a server, updating the webapp automatically when changed.
 .PHONY: watch
 watch: apply server bundle

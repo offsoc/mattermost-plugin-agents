@@ -49,3 +49,25 @@ evalviewer view -f /path/to/evals.jsonl
 # Show only failed evaluations
 evalviewer view -failures-only
 ```
+
+### Check Command (CI Mode)
+Run evaluations and check results without the interactive TUI. Exits with status code 1 if any evaluations fail. This is designed for CI/CD pipelines.
+
+All arguments after 'check' are passed directly to 'go test'.
+
+```bash
+# Run and check evaluations (no TUI)
+evalviewer check ./conversations
+
+# Run and check all evaluations
+evalviewer check ./...
+
+# Run with verbose output
+evalviewer check -v ./...
+```
+
+The check command will:
+1. Execute go test with GOEVALS=1
+2. Display test output in real-time
+3. Print a summary of evaluation results
+4. Exit with status code 1 if any evaluations failed

@@ -92,6 +92,8 @@ make deploy
 - Run `make check-style` to verify code style
 - Run `make test` to run the test suite
 - Run `make e2e` to run the e2e tests
+- Run `make evals` to run prompt evaluations interactively (with TUI)
+- Run `make evals-ci` to run prompt evaluations in CI mode (non-interactive)
 
 
 ## License

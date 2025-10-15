@@ -75,6 +75,29 @@ jobs:
         run: |
           make test
 
+  evals:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v4
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Run evaluations
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          make evals-ci
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-results
+          path: evals.jsonl
+          retention-days: 30
+
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -126,7 +149,7 @@ jobs:
           aws s3 cp dist/mattermost-ai-*.tar.gz s3://${{ secrets.AWS_S3_BUCKET }}/mattermost-plugin-agents/mattermost-plugin-agents-${{ steps.short-sha.outputs.sha }}.tar.gz
 
   deploy:
-    needs: [lint, build, plugin-tests, e2e]
+    needs: [lint, build, plugin-tests, e2e, evals]
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:

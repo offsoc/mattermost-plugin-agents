@@ -69,6 +69,23 @@ All arguments after 'run' are passed directly to 'go test'.`,
 		},
 	}
 
+	var checkCmd = &cobra.Command{
+		Use:   "check [go test flags and args]",
+		Short: "Run eval tests and check results (CI-friendly, no TUI)",
+		Long: `Run go test with GOEVALS=1 environment variable set, then check the results
+and exit with status code 1 if any evaluations failed. This command is designed
+for CI/CD pipelines and does not use the interactive TUI.
+
+All arguments after 'check' are passed directly to 'go test'.`,
+		Example: `  evalviewer check ./conversations           # Run and check evals for conversations
+  evalviewer check ./...                     # Run and check all evals
+  evalviewer check -v -cover ./...           # Run with verbose output and coverage`,
+		DisableFlagParsing: true,
+		Run: func(cmd *cobra.Command, args []string) {
+			checkCommand(args)
+		},
+	}
+
 	// Add flags to view command
 	viewCmd.Flags().StringVarP(&filename, "file", "f", "evals.jsonl", "Path to the evals.jsonl file")
 	viewCmd.Flags().BoolVar(&showOnlyFailures, "failures-only", false, "Show only failed evaluations")
@@ -76,6 +93,7 @@ All arguments after 'run' are passed directly to 'go test'.`,
 	// Add commands to root
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(viewCmd)
+	rootCmd.AddCommand(checkCmd)
 
 	// Execute
 	if err := rootCmd.Execute(); err != nil {
@@ -138,6 +156,115 @@ func viewCommandWithFlags() {
 		fmt.Fprintf(os.Stderr, "Error running TUI: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func checkCommand(args []string) {
+	// Execute go test with GOEVALS=1
+	fmt.Println("Running evaluations...")
+
+	// Prepare go test command
+	cmdArgs := []string{"test"}
+	cmdArgs = append(cmdArgs, args...)
+
+	cmd := exec.Command("go", cmdArgs...)
+	cmd.Env = append(os.Environ(), "GOEVALS=1")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	// Run command and show output
+	testErr := cmd.Run()
+	if testErr != nil {
+		fmt.Printf("\nTests completed with errors: %v\n", testErr)
+	} else {
+		fmt.Println("\nTests completed successfully.")
+	}
+
+	// Find and check results
+	evalFile, err := findEvalsFile()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "\nError finding evals.jsonl: %v\n", err)
+		fmt.Println("No evaluation results found to check.")
+		// If tests failed but no evals file, exit with test error
+		if testErr != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
+	// Load and check results
+	results, err := loadResults(evalFile, false)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading results: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Print summary
+	printSummary(results)
+
+	// Exit with appropriate status code
+	hasFailures := false
+	for _, result := range results {
+		if !result.Pass {
+			hasFailures = true
+			break
+		}
+	}
+
+	if hasFailures || testErr != nil {
+		os.Exit(1)
+	}
+}
+
+func printSummary(results []EvalLogLine) {
+	if len(results) == 0 {
+		fmt.Println("\nNo evaluation results found.")
+		return
+	}
+
+	fmt.Println("\n" + strings.Repeat("=", 80))
+	fmt.Println("EVALUATION RESULTS SUMMARY")
+	fmt.Println(strings.Repeat("=", 80))
+
+	passed := 0
+	failed := 0
+	var failures []EvalLogLine
+
+	for _, result := range results {
+		if result.Pass {
+			passed++
+		} else {
+			failed++
+			failures = append(failures, result)
+		}
+	}
+
+	fmt.Printf("\nTotal Tests: %d\n", len(results))
+	fmt.Printf("Passed:      %d\n", passed)
+	fmt.Printf("Failed:      %d\n", failed)
+
+	if len(failures) > 0 {
+		fmt.Println("\n" + strings.Repeat("-", 80))
+		fmt.Println("FAILED EVALUATIONS:")
+		fmt.Println(strings.Repeat("-", 80))
+
+		for i, failure := range failures {
+			fmt.Printf("\n%d. %s\n", i+1, failure.Name)
+			fmt.Printf("   Rubric: %s\n", truncateString(failure.Rubric, 70))
+			fmt.Printf("   Score:  %.2f\n", failure.Score)
+			if failure.Reasoning != "" {
+				fmt.Printf("   Reason: %s\n", truncateString(failure.Reasoning, 70))
+			}
+		}
+	}
+
+	fmt.Println("\n" + strings.Repeat("=", 80))
+}
+
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-3] + "..."
 }
 
 func findEvalsFile() (string, error) {
