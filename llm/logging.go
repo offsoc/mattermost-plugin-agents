@@ -6,16 +6,21 @@ package llm
 import (
 	"fmt"
 	"testing"
-
-	"github.com/mattermost/mattermost/server/public/pluginapi"
 )
 
+type LogService interface {
+	Error(message string, keyValuePairs ...any)
+	Warn(message string, keyValuePairs ...any)
+	Info(message string, keyValuePairs ...any)
+	Debug(message string, keyValuePairs ...any)
+}
+
 type LanguageModelLogWrapper struct {
-	log     pluginapi.LogService
+	log     LogService
 	wrapped LanguageModel
 }
 
-func NewLanguageModelLogWrapper(log pluginapi.LogService, wrapped LanguageModel) *LanguageModelLogWrapper {
+func NewLanguageModelLogWrapper(log LogService, wrapped LanguageModel) *LanguageModelLogWrapper {
 	return &LanguageModelLogWrapper{
 		log:     log,
 		wrapped: wrapped,

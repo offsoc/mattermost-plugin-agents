@@ -204,7 +204,7 @@ func (b *MMBots) getLLM(serviceConfig llm.ServiceConfig, botConfig llm.BotConfig
 
 	// Logging
 	if b.config.EnableLLMLogging() {
-		result = llm.NewLanguageModelLogWrapper(b.pluginAPI.Log, result)
+		result = llm.NewLanguageModelLogWrapper(&b.pluginAPI.Log, result)
 	}
 
 	return result, nil
