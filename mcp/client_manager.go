@@ -29,20 +29,13 @@ type ClientManager struct {
 
 // NewClientManager creates a new MCP client manager
 // embeddedServer can be nil if embedded server is not available
-
 func NewClientManager(config Config, log pluginapi.LogService, pluginAPI *pluginapi.Client, oauthManager *OAuthManager, embeddedServer EmbeddedMCPServer) *ClientManager {
-	var embeddedClient *EmbeddedServerClient
-	if embeddedServer != nil {
-		embeddedClient = NewEmbeddedServerClient(embeddedServer, log, pluginAPI)
-	}
-
 	manager := &ClientManager{
-		log:            log,
-		pluginAPI:      pluginAPI,
-		oauthManager:   oauthManager,
-		embeddedClient: embeddedClient,
+		log:          log,
+		pluginAPI:    pluginAPI,
+		oauthManager: oauthManager,
 	}
-	manager.ReInit(config)
+	manager.ReInit(config, embeddedServer)
 	return manager
 }
 
@@ -68,12 +61,19 @@ func (m *ClientManager) cleanupInactiveClients() {
 	}
 }
 
-// ReInit re-initializes the client manager with a new configuration
-func (m *ClientManager) ReInit(config Config) {
+// ReInit re-initializes the client manager with a new configuration and embedded server
+func (m *ClientManager) ReInit(config Config, embeddedServer EmbeddedMCPServer) {
 	m.Close()
 
 	if config.IdleTimeoutMinutes <= 0 {
 		config.IdleTimeoutMinutes = 30
+	}
+
+	// Update embedded server client
+	if embeddedServer != nil {
+		m.embeddedClient = NewEmbeddedServerClient(embeddedServer, m.log, m.pluginAPI)
+	} else {
+		m.embeddedClient = nil
 	}
 
 	m.config = config

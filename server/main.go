@@ -48,7 +48,6 @@ type Plugin struct {
 	indexerService       *indexer.Indexer
 	conversationsService *conversations.Conversations
 	mcpClientManager     *mcp.ClientManager
-	embeddedMCPServer    mcp.EmbeddedMCPServer
 }
 
 func (p *Plugin) OnActivate() error {
@@ -146,9 +145,10 @@ func (p *Plugin) OnActivate() error {
 	oauthCallbackURL := fmt.Sprintf("%s/plugins/%s/oauth/callback", *siteURL, manifestID)
 
 	// Create embedded MCP server if enabled
+	var embeddedMCPServer mcp.EmbeddedMCPServer
 	if p.configuration.MCP().EmbeddedServer.Enabled {
 		var err error
-		p.embeddedMCPServer, err = NewEmbeddedMCPServer(pluginAPI, pluginAPI.Log)
+		embeddedMCPServer, err = NewEmbeddedMCPServer(pluginAPI, pluginAPI.Log)
 		if err != nil {
 			pluginAPI.Log.Error("Failed to create embedded MCP server", "error", err)
 			// Continue without embedded server
@@ -157,9 +157,18 @@ func (p *Plugin) OnActivate() error {
 		}
 	}
 
-	mcpClientManager := mcp.NewClientManager(p.configuration.MCP(), pluginAPI.Log, pluginAPI, mcp.NewOAuthManager(mmClient, oauthCallbackURL), p.embeddedMCPServer)
+	mcpClientManager := mcp.NewClientManager(p.configuration.MCP(), pluginAPI.Log, pluginAPI, mcp.NewOAuthManager(mmClient, oauthCallbackURL), embeddedMCPServer)
 	p.configuration.RegisterUpdateListener(func() {
-		mcpClientManager.ReInit(p.configuration.MCP())
+		var embeddedServer mcp.EmbeddedMCPServer
+		if p.configuration.MCP().EmbeddedServer.Enabled {
+			var err error
+			embeddedServer, err = NewEmbeddedMCPServer(pluginAPI, pluginAPI.Log)
+			if err != nil {
+				pluginAPI.Log.Error("Failed to create embedded MCP server on config update", "error", err)
+			}
+		}
+
+		mcpClientManager.ReInit(p.configuration.MCP(), embeddedServer)
 	})
 
 	contextBuilder := llmcontext.NewLLMContextBuilder(
