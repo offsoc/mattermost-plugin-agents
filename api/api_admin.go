@@ -150,14 +150,8 @@ func (a *API) handleGetMCPTools(c *gin.Context) {
 		return
 	}
 
-	// Calculate total capacity (remote servers + embedded server if enabled)
-	totalCapacity := len(mcpConfig.Servers)
-	if mcpConfig.EmbeddedServer.Enabled {
-		totalCapacity++
-	}
-
 	response := MCPToolsResponse{
-		Servers: make([]MCPServerInfo, 0, totalCapacity),
+		Servers: make([]MCPServerInfo, 0, len(mcpConfig.Servers)+1),
 	}
 
 	// Discover tools from embedded server if enabled
@@ -218,8 +212,8 @@ func (a *API) handleGetMCPTools(c *gin.Context) {
 }
 
 // discoverRemoteServerTools connects to a single remote MCP server and discovers its tools
-func (a *API) discoverRemoteServerTools(ctx context.Context, requestingAdminID string, serverConfig mcp.ServerConfig) ([]MCPToolInfo, error) {
-	toolInfos, err := mcp.DiscoverRemoteServerTools(ctx, requestingAdminID, serverConfig, a.pluginAPI.Log, a.mcpClientManager.GetOAuthManager())
+func (a *API) discoverRemoteServerTools(ctx context.Context, userID string, serverConfig mcp.ServerConfig) ([]MCPToolInfo, error) {
+	toolInfos, err := mcp.DiscoverRemoteServerTools(ctx, userID, serverConfig, a.pluginAPI.Log, a.mcpClientManager.GetOAuthManager())
 	if err != nil {
 		return nil, err
 	}
