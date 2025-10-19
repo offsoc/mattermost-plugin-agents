@@ -317,3 +317,62 @@ func (p *Plugin) shouldBlockBotReplyNotification(senderID, rootID string) bool {
 	// Block all bot reply notifications in threads
 	return true
 }
+
+// LLMServiceRequestNoStream makes a non-streaming LLM call with the specified service
+func (p *Plugin) LLMServiceRequestNoStream(c *plugin.Context, service string, request plugin.CompletionRequest) (string, error) {
+	if p.bots == nil {
+		return "", fmt.Errorf("bots service not initialized")
+	}
+
+	// Find a bot that uses the specified service (by ID or name)
+	var targetBot *bots.Bot
+	for _, bot := range p.bots.GetAllBots() {
+		botService := bot.GetService()
+		if botService.ID == service || botService.Name == service {
+			targetBot = bot
+			break
+		}
+	}
+
+	if targetBot == nil {
+		return "", fmt.Errorf("no bot found for service: %s", service)
+	}
+
+	// Make the non-streaming LLM call
+	llmRequest := llm.CompletionRequest{
+		Posts:   request.Posts,
+		Context: &llm.Context{},
+	}
+	response, err := targetBot.LLM().ChatCompletionNoStream(llmRequest)
+	if err != nil {
+		return "", fmt.Errorf("failed to complete LLM request: %w", err)
+	}
+
+	return response, nil
+}
+
+// AgentRequestNoStream makes a non-streaming LLM call with the specified agent (bot)
+func (p *Plugin) AgentRequestNoStream(c *plugin.Context, agent string, request plugin.CompletionRequest) (string, error) {
+	fmt.Println("AgentRequestNoStream called with agent:", agent)
+	if p.bots == nil {
+		return "", fmt.Errorf("bots service not initialized")
+	}
+
+	// Find the bot by username
+	targetBot := p.bots.GetBotByUsername(agent)
+	if targetBot == nil {
+		return "", fmt.Errorf("bot not found: %s", agent)
+	}
+
+	// Make the non-streaming LLM call
+	llmRequest := llm.CompletionRequest{
+		Posts:   request.Posts,
+		Context: &llm.Context{},
+	}
+	response, err := targetBot.LLM().ChatCompletionNoStream(llmRequest)
+	if err != nil {
+		return "", fmt.Errorf("failed to complete LLM request: %w", err)
+	}
+
+	return response, nil
+}
