@@ -98,10 +98,7 @@ func (a *API) convertLLMBridgeRequestToInternal(req LLMBridgeCompletionRequest) 
 func (a *API) handleAgentCompletionNoStream(c *gin.Context) {
 	agent := c.Param("agent")
 	if agent == "" {
-		c.JSON(http.StatusBadRequest, LLMBridgeErrorResponse{
-			Error: "agent parameter is required",
-		})
-		return
+		agent = a.config.GetDefaultBotName()
 	}
 
 	var req LLMBridgeCompletionRequest
