@@ -839,7 +839,7 @@ func (s *OpenAI) convertToResponseParams(params openai.ChatCompletionNewParams, 
 	result.Reasoning = shared.ReasoningParam{
 		// Set effort level for reasoning
 		// Can be "minimal", "low", "medium", or "high"
-		Effort: shared.ReasoningEffortMedium,
+		Effort: shared.ReasoningEffortMinimal,
 		// Request a detailed summary of the reasoning
 		// Can be "auto", "concise", or "detailed"
 		Summary: shared.ReasoningSummaryAuto,
