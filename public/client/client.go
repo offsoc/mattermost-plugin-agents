@@ -49,10 +49,9 @@ func (p *pluginAPIRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 
 // Post represents a single message in the conversation
 type Post struct {
-	Role    string     `json:"role"` // user|assistant|system|tool
-	Message string     `json:"message"`
-	Files   []File     `json:"files,omitempty"`
-	ToolUse []ToolCall `json:"toolUse,omitempty"`
+	Role    string `json:"role"` // user|assistant|system
+	Message string `json:"message"`
+	Files   []File `json:"files,omitempty"`
 }
 
 // File represents a file attachment
@@ -61,13 +60,6 @@ type File struct {
 	Name     string `json:"name"`
 	MimeType string `json:"mime_type"`
 	Data     string `json:"data"` // base64 encoded
-}
-
-// ToolCall represents a tool call or response
-type ToolCall struct {
-	ID    string                 `json:"id"`
-	Name  string                 `json:"name"`
-	Input map[string]interface{} `json:"input"`
 }
 
 // CompletionRequest represents a completion request

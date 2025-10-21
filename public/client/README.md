@@ -96,10 +96,9 @@ A `Post` represents a single message in the conversation:
 
 ```go
 type Post struct {
-    Role    string     // "user", "assistant", "system", or "tool"
-    Message string     // The message content
-    Files   []File     // Optional file attachments
-    ToolUse []ToolCall // Optional tool calls
+    Role    string // "user", "assistant", "system"
+    Message string // The message content
+    Files   []File // Optional file attachments
 }
 ```
 
@@ -141,34 +140,6 @@ request := client.CompletionRequest{
                     Data:     encodedData,
                 },
             },
-        },
-    },
-}
-```
-
-### Tool Calls
-
-Include tool calls in the conversation:
-
-```go
-request := client.CompletionRequest{
-    Posts: []client.Post{
-        {
-            Role:    "assistant",
-            Message: "I need to search for that information",
-            ToolUse: []client.ToolCall{
-                {
-                    ID:   "call_123",
-                    Name: "web_search",
-                    Input: map[string]interface{}{
-                        "query": "latest news",
-                    },
-                },
-            },
-        },
-        {
-            Role:    "tool",
-            Message: "Search results: ...",
         },
     },
 }

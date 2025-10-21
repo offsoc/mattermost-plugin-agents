@@ -5,7 +5,6 @@ package api
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -23,19 +22,11 @@ type LLMBridgeFile struct {
 	Data     string `json:"data"` // base64 encoded
 }
 
-// LLMBridgeToolCall represents a tool call in the API request
-type LLMBridgeToolCall struct {
-	ID    string                 `json:"id"`
-	Name  string                 `json:"name"`
-	Input map[string]interface{} `json:"input"`
-}
-
 // LLMBridgePost represents a single message in the conversation
 type LLMBridgePost struct {
-	Role    string              `json:"role"` // user|assistant|system|tool
-	Message string              `json:"message"`
-	Files   []LLMBridgeFile     `json:"files,omitempty"`
-	ToolUse []LLMBridgeToolCall `json:"toolUse,omitempty"`
+	Role    string          `json:"role"` // user|assistant|system
+	Message string          `json:"message"`
+	Files   []LLMBridgeFile `json:"files,omitempty"`
 }
 
 // LLMBridgeCompletionRequest represents the request body for completion endpoints
@@ -67,9 +58,6 @@ func (a *API) convertLLMBridgeRequestToInternal(req LLMBridgeCompletionRequest) 
 			role = llm.PostRoleBot
 		case "system":
 			role = llm.PostRoleSystem
-		case "tool":
-			// Tool responses are typically treated as user messages in our internal format
-			role = llm.PostRoleUser
 		default:
 			return llm.CompletionRequest{}, fmt.Errorf("invalid role: %s", apiPost.Role)
 		}
@@ -93,29 +81,10 @@ func (a *API) convertLLMBridgeRequestToInternal(req LLMBridgeCompletionRequest) 
 			}
 		}
 
-		// Convert tool calls
-		var toolCalls []llm.ToolCall
-		if len(apiPost.ToolUse) > 0 {
-			toolCalls = make([]llm.ToolCall, len(apiPost.ToolUse))
-			for j, apiToolCall := range apiPost.ToolUse {
-				// Marshal the input map to JSON for Arguments field
-				arguments, err := json.Marshal(apiToolCall.Input)
-				if err != nil {
-					return llm.CompletionRequest{}, fmt.Errorf("failed to marshal tool call arguments: %w", err)
-				}
-				toolCalls[j] = llm.ToolCall{
-					ID:        apiToolCall.ID,
-					Name:      apiToolCall.Name,
-					Arguments: json.RawMessage(arguments),
-				}
-			}
-		}
-
 		posts[i] = llm.Post{
 			Role:    role,
 			Message: apiPost.Message,
 			Files:   files,
-			ToolUse: toolCalls,
 		}
 	}
 
