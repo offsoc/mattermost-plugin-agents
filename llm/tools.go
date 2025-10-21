@@ -163,17 +163,3 @@ func (s *ToolStore) AddAuthError(authError ToolAuthError) {
 func (s *ToolStore) GetAuthErrors() []ToolAuthError {
 	return s.authErrors
 }
-
-// GobEncode implements gob.GobEncoder interface
-// Returns empty data as ToolStore is not meant to be serialized
-func (s *ToolStore) GobEncode() ([]byte, error) {
-	return []byte{}, nil
-}
-
-// GobDecode implements gob.GobDecoder interface
-// Initializes an empty ToolStore as it is not meant to be deserialized
-func (s *ToolStore) GobDecode(data []byte) error {
-	s.tools = make(map[string]Tool)
-	s.authErrors = []ToolAuthError{}
-	return nil
-}

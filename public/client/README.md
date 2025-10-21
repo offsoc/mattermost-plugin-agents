@@ -60,9 +60,7 @@ Both constructors work identically - choose whichever fits your plugin's archite
 
 ## API Methods
 
-### Non-Streaming Completions
-
-#### Agent Completion
+### Agent Completion
 
 Make a request to a specific agent (bot) by username:
 
@@ -78,7 +76,7 @@ if err != nil {
 fmt.Println(response) // "The capital of France is Paris."
 ```
 
-#### Service Completion
+### Service Completion
 
 Make a request to a specific LLM service by ID or name:
 
@@ -87,39 +85,6 @@ response, err := p.llmClient.ServiceCompletion("openai", client.CompletionReques
     Posts: []client.Post{
         {Role: "user", Message: "Write a haiku about coding"},
     },
-})
-```
-
-### Streaming Completions
-
-#### Agent Streaming
-
-Stream responses from a specific agent:
-
-```go
-err := p.llmClient.AgentCompletionStream("gpt4", client.CompletionRequest{
-    Posts: []client.Post{
-        {Role: "user", Message: "Tell me a story"},
-    },
-}, func(chunk string) error {
-    // This callback is called for each chunk
-    fmt.Print(chunk)
-    return nil
-})
-```
-
-#### Service Streaming
-
-Stream responses from a specific service:
-
-```go
-err := p.llmClient.ServiceCompletionStream("anthropic", client.CompletionRequest{
-    Posts: []client.Post{
-        {Role: "user", Message: "Explain quantum computing"},
-    },
-}, func(chunk string) error {
-    fmt.Print(chunk)
-    return nil
 })
 ```
 
@@ -226,21 +191,6 @@ if err != nil {
 }
 ```
 
-For streaming requests, errors can occur during streaming:
-
-```go
-err := p.llmClient.AgentCompletionStream("gpt4", request, func(chunk string) error {
-    if someCondition {
-        return fmt.Errorf("stopping stream due to condition")
-    }
-    fmt.Print(chunk)
-    return nil
-})
-if err != nil {
-    p.API.LogError("Streaming error", "error", err.Error())
-}
-```
-
 ## Complete Example
 
 ```go
@@ -250,6 +200,7 @@ import (
     "fmt"
     "github.com/mattermost/mattermost-plugin-ai/public/client"
     "github.com/mattermost/mattermost/server/public/plugin"
+    "github.com/mattermost/mattermost/server/public/model"
 )
 
 type MyPlugin struct {
@@ -284,33 +235,6 @@ func (p *MyPlugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*
         ResponseType: model.CommandResponseTypeEphemeral,
         Text:         response,
     }, nil
-}
-
-func (p *MyPlugin) MessageHasBeenPosted(c *plugin.Context, post *model.Post) {
-    // Example: Stream AI response to a channel
-    go func() {
-        var fullResponse string
-
-        err := p.llmClient.AgentCompletionStream("gpt4", client.CompletionRequest{
-            Posts: []client.Post{
-                {Role: "user", Message: post.Message},
-            },
-        }, func(chunk string) error {
-            fullResponse += chunk
-            return nil
-        })
-
-        if err != nil {
-            p.API.LogError("Streaming failed", "error", err.Error())
-            return
-        }
-
-        // Post the complete response
-        p.API.CreatePost(&model.Post{
-            ChannelId: post.ChannelId,
-            Message:   fullResponse,
-        })
-    }()
 }
 ```
 
@@ -347,9 +271,7 @@ func (p *MyPlugin) handleUserRequest(userID, message string) error {
 
 The client calls these endpoints on the AI plugin:
 
-- `POST /mattermost-ai/api/v1/agent/{agent}/completion` - Streaming agent completion
 - `POST /mattermost-ai/api/v1/agent/{agent}/completion/nostream` - Non-streaming agent completion
-- `POST /mattermost-ai/api/v1/service/{service}/completion` - Streaming service completion
 - `POST /mattermost-ai/api/v1/service/{service}/completion/nostream` - Non-streaming service completion
 
 All endpoints use inter-plugin communication via the Mattermost plugin API.

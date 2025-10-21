@@ -10,13 +10,11 @@
 package client
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 
 	"github.com/mattermost/mattermost/server/public/plugin"
 	"github.com/pkg/errors"
@@ -86,9 +84,6 @@ type CompletionResponse struct {
 type ErrorResponse struct {
 	Error string `json:"error"`
 }
-
-// StreamCallback is called for each chunk of text received in a streaming response
-type StreamCallback func(chunk string) error
 
 // NewClient creates a new LLM Bridge API client using the Mattermost plugin API
 //
@@ -177,57 +172,6 @@ func (c *Client) ServiceCompletion(service string, request CompletionRequest) (s
 	return c.doCompletionRequest(url, request)
 }
 
-// AgentCompletionStream makes a streaming completion request to a specific agent (bot)
-//
-// Parameters:
-//   - agent: The username of the agent/bot to use
-//   - request: The completion request containing the conversation
-//   - callback: A function that will be called for each chunk of text received
-//
-// The callback function will be called multiple times as chunks arrive. If the callback
-// returns an error, streaming will be stopped and that error will be returned.
-//
-// Example:
-//
-//	err := client.AgentCompletionStream("gpt4", client.CompletionRequest{
-//	    Posts: []client.Post{
-//	        {Role: "user", Message: "Tell me a story"},
-//	    },
-//	}, func(chunk string) error {
-//	    fmt.Print(chunk)
-//	    return nil
-//	})
-func (c *Client) AgentCompletionStream(agent string, request CompletionRequest, callback StreamCallback) error {
-	url := fmt.Sprintf("/%s/api/v1/agent/%s/completion", aiPluginID, agent)
-	return c.doStreamingRequest(url, request, callback)
-}
-
-// ServiceCompletionStream makes a streaming completion request to a specific service
-//
-// Parameters:
-//   - service: The ID or name of the LLM service to use
-//   - request: The completion request containing the conversation
-//   - callback: A function that will be called for each chunk of text received
-//
-// The callback function will be called multiple times as chunks arrive. If the callback
-// returns an error, streaming will be stopped and that error will be returned.
-//
-// Example:
-//
-//	err := client.ServiceCompletionStream("anthropic", client.CompletionRequest{
-//	    Posts: []client.Post{
-//	        {Role: "system", Message: "You are a helpful assistant"},
-//	        {Role: "user", Message: "Explain quantum computing"},
-//	    },
-//	}, func(chunk string) error {
-//	    fmt.Print(chunk)
-//	    return nil
-//	})
-func (c *Client) ServiceCompletionStream(service string, request CompletionRequest, callback StreamCallback) error {
-	url := fmt.Sprintf("/%s/api/v1/service/%s/completion", aiPluginID, service)
-	return c.doStreamingRequest(url, request, callback)
-}
-
 // doCompletionRequest performs a non-streaming completion request
 func (c *Client) doCompletionRequest(url string, request CompletionRequest) (string, error) {
 	// Marshal the request body
@@ -274,83 +218,4 @@ func (c *Client) doCompletionRequest(url string, request CompletionRequest) (str
 	}
 
 	return completionResp.Completion, nil
-}
-
-// doStreamingRequest performs a streaming completion request
-func (c *Client) doStreamingRequest(url string, request CompletionRequest, callback StreamCallback) error {
-	// Marshal the request body
-	body, err := json.Marshal(request)
-	if err != nil {
-		return fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	// Create the HTTP request
-	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	// Set headers
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "text/event-stream")
-
-	// Make the request
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to execute request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Check for error status codes
-	if resp.StatusCode != http.StatusOK {
-		respBody, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return fmt.Errorf("request failed with status %d", resp.StatusCode)
-		}
-		var errResp ErrorResponse
-		if err := json.Unmarshal(respBody, &errResp); err != nil {
-			return fmt.Errorf("request failed with status %d: %s", resp.StatusCode, string(respBody))
-		}
-		return fmt.Errorf("request failed with status %d: %s", resp.StatusCode, errResp.Error)
-	}
-
-	// Read the SSE stream
-	scanner := bufio.NewScanner(resp.Body)
-	for scanner.Scan() {
-		line := scanner.Text()
-
-		// SSE lines start with "data: "
-		if !strings.HasPrefix(line, "data: ") {
-			continue
-		}
-
-		// Extract the data portion
-		data := strings.TrimPrefix(line, "data: ")
-
-		// Check for end of stream
-		if data == "[DONE]" {
-			break
-		}
-
-		// Check for empty data lines
-		if data == "" {
-			continue
-		}
-
-		// Check for error messages
-		if strings.HasPrefix(data, "Error: ") {
-			return fmt.Errorf("streaming error: %s", strings.TrimPrefix(data, "Error: "))
-		}
-
-		// Call the callback with the chunk
-		if err := callback(data); err != nil {
-			return fmt.Errorf("callback error: %w", err)
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("error reading stream: %w", err)
-	}
-
-	return nil
 }

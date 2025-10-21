@@ -92,30 +92,6 @@ func ExampleClient_AgentCompletion() {
 	fmt.Printf("Response: %s\n", response)
 }
 
-// ExampleClient_AgentCompletionStream shows how to make a streaming request
-func ExampleClient_AgentCompletionStream() {
-	type MyPlugin struct {
-		plugin.MattermostPlugin
-	}
-
-	var p MyPlugin
-	llmClient := client.NewClient(&p.MattermostPlugin)
-
-	err := llmClient.AgentCompletionStream("gpt4", client.CompletionRequest{
-		Posts: []client.Post{
-			{Role: "user", Message: "Tell me a story"},
-		},
-	}, func(chunk string) error {
-		// This callback is called for each chunk of text
-		fmt.Print(chunk)
-		return nil
-	})
-	if err != nil {
-		fmt.Printf("Error: %v\n", err)
-		return
-	}
-}
-
 // ExampleClient_ServiceCompletion shows how to use a specific LLM service
 func ExampleClient_ServiceCompletion() {
 	type MyPlugin struct {
