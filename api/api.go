@@ -114,10 +114,6 @@ func (a *API) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Reques
 	router.Use(a.ginlogger)
 	router.Use(a.metricsMiddleware)
 
-	interPluginRoute := router.Group("/inter-plugin/v1")
-	interPluginRoute.Use(a.interPluginAuthorizationRequired)
-	interPluginRoute.POST("/simple_completion", a.handleInterPluginSimpleCompletion)
-
 	// LLM Bridge API v1 routes - inter-plugin only
 	llmBridgeRoute := router.Group("/api/v1")
 	llmBridgeRoute.Use(a.interPluginAuthorizationRequired)
