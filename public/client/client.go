@@ -16,7 +16,6 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/mattermost/mattermost/server/public/plugin"
 	"github.com/pkg/errors"
 )
 
@@ -77,30 +76,7 @@ type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
-// NewClient creates a new LLM Bridge API client using the Mattermost plugin API
-//
-// Parameters:
-//   - p: Your plugin instance (must embed plugin.MattermostPlugin)
-//
-// Example:
-//
-//	type MyPlugin struct {
-//	    plugin.MattermostPlugin
-//	    llmClient *client.Client
-//	}
-//
-//	func (p *MyPlugin) OnActivate() error {
-//	    p.llmClient = client.NewClient(&p.MattermostPlugin)
-//	    return nil
-//	}
-func NewClient(p *plugin.MattermostPlugin) *Client {
-	return NewClientFromAPI(p.API)
-}
-
-// NewClientFromAPI creates a new LLM Bridge API client using a PluginAPI interface
-//
-// This constructor is useful when you have a pluginapi.Client or want more control
-// over the API implementation.
+// NewClient creates a new LLM Bridge API client using a PluginAPI interface
 //
 // Parameters:
 //   - api: Any type that implements PluginAPI (has a PluginHTTP method)
@@ -109,16 +85,14 @@ func NewClient(p *plugin.MattermostPlugin) *Client {
 //
 //	type MyPlugin struct {
 //	    plugin.MattermostPlugin
-//	    pluginAPI *pluginapi.Client
 //	    llmClient *client.Client
 //	}
 //
 //	func (p *MyPlugin) OnActivate() error {
-//	    p.pluginAPI = pluginapi.NewClient(p.API, p.Driver)
-//	    p.llmClient = client.NewClientFromAPI(p.API)
+//	    p.llmClient = client.NewClient(p.API)
 //	    return nil
 //	}
-func NewClientFromAPI(api PluginAPI) *Client {
+func NewClient(api PluginAPI) *Client {
 	client := &Client{}
 	client.httpClient.Transport = &pluginAPIRoundTripper{api}
 	return client
