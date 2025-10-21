@@ -15,17 +15,25 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 
 	"github.com/pkg/errors"
 )
 
 const (
-	aiPluginID = "mattermost-ai"
+	aiPluginID         = "mattermost-ai"
+	mattermostServerID = "mattermost-server"
 )
 
 // PluginAPI is the minimal interface needed from the Mattermost plugin API
 type PluginAPI interface {
 	PluginHTTP(*http.Request) *http.Response
+}
+
+// AppAPI is the minimal interface needed from the Mattermost app layer
+type AppAPI interface {
+	ServeInternalPluginRequest(userID string, w http.ResponseWriter, r *http.Request, sourcePluginID, destinationPluginID string)
 }
 
 // Client is a client for the Mattermost AI Plugin LLM Bridge API
@@ -44,6 +52,41 @@ func (p *pluginAPIRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 		return nil, errors.Errorf("failed to make interplugin request")
 	}
 	return resp, nil
+}
+
+// appAPIRoundTripper wraps the Mattermost app layer API for HTTP requests
+type appAPIRoundTripper struct {
+	api    AppAPI
+	userID string
+}
+
+func removeFirstPath(r *http.Request) {
+	path := r.URL.Path
+
+	// Find the position of the second slash (first slash after the leading one)
+	secondSlash := strings.Index(path[1:], "/")
+
+	if secondSlash == -1 {
+		// No second slash found, set to just "/"
+		r.URL.Path = "/"
+		return
+	}
+
+	// Update the path to everything from the second slash onwards
+	r.URL.Path = path[1+secondSlash:]
+}
+
+func (a *appAPIRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	// Create a response recorder to capture the response
+	recorder := httptest.NewRecorder()
+
+	removeFirstPath(req)
+
+	// Make the inter-plugin request from the server to the AI plugin
+	a.api.ServeInternalPluginRequest(a.userID, recorder, req, mattermostServerID, aiPluginID)
+
+	// Convert the recorder to an http.Response
+	return recorder.Result(), nil
 }
 
 // Post represents a single message in the conversation
@@ -95,6 +138,33 @@ type ErrorResponse struct {
 func NewClient(api PluginAPI) *Client {
 	client := &Client{}
 	client.httpClient.Transport = &pluginAPIRoundTripper{api}
+	return client
+}
+
+// NewClientFromApp creates a new LLM Bridge API client using the app layer API
+//
+// This constructor is for use within the Mattermost server app layer to make
+// inter-plugin requests to the AI plugin.
+//
+// Parameters:
+//   - api: Any type that implements AppAPI (has a ServeInterPluginRequest method)
+//
+// Example:
+//
+//	type MyService struct {
+//	    app       *app.App
+//	    llmClient *client.Client
+//	}
+//
+//	func NewMyService(app *app.App) *MyService {
+//	    return &MyService{
+//	        app:       app,
+//	        llmClient: client.NewClientFromApp(app, userID),
+//	    }
+//	}
+func NewClientFromApp(api AppAPI, userID string) *Client {
+	client := &Client{}
+	client.httpClient.Transport = &appAPIRoundTripper{api, userID}
 	return client
 }
 

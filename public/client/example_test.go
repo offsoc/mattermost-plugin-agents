@@ -21,7 +21,7 @@ func Example() {
 	var p MyPlugin
 
 	// Create the client in OnActivate
-	p.llmClient = client.NewClient(&p.MattermostPlugin)
+	p.llmClient = client.NewClient(p.API)
 
 	// Make a non-streaming request to an agent
 	response, err := p.llmClient.AgentCompletion("gpt4", client.CompletionRequest{
@@ -40,34 +40,15 @@ func Example() {
 	fmt.Printf("Response: %s\n", response)
 }
 
-// ExampleNewClient shows how to create a client in your plugin
-func ExampleNewClient() {
-	type MyPlugin struct {
-		plugin.MattermostPlugin
-		llmClient *client.Client
-	}
+// ExampleNewClientFromApp shows how to create a client from the app layer
+func ExampleNewClientFromApp() {
+	// This example shows how to use the client from the Mattermost app layer
+	// instead of from a plugin. The app layer uses a different API.
 
-	var p MyPlugin
+	// In real code, you would pass your *app.App instance
+	// llmClient := client.NewClientFromApp(appInstance)
 
-	// Create the client - typically done in OnActivate
-	p.llmClient = client.NewClient(&p.MattermostPlugin)
-
-	fmt.Println("Client created successfully")
-}
-
-// ExampleNewClientFromAPI shows how to create a client using the PluginAPI interface
-func ExampleNewClientFromAPI() {
-	type MyPlugin struct {
-		plugin.MattermostPlugin
-		llmClient *client.Client
-	}
-
-	var p MyPlugin
-
-	// Create the client using the API directly - gives more flexibility
-	p.llmClient = client.NewClientFromAPI(p.API)
-
-	fmt.Println("Client created successfully from API")
+	fmt.Println("Client can be created from app layer using NewClientFromApp")
 }
 
 // ExampleClient_AgentCompletion shows how to make a simple non-streaming request
@@ -77,7 +58,7 @@ func ExampleClient_AgentCompletion() {
 	}
 
 	var p MyPlugin
-	llmClient := client.NewClient(&p.MattermostPlugin)
+	llmClient := client.NewClient(p.API)
 
 	response, err := llmClient.AgentCompletion("gpt4", client.CompletionRequest{
 		Posts: []client.Post{
@@ -99,7 +80,7 @@ func ExampleClient_ServiceCompletion() {
 	}
 
 	var p MyPlugin
-	llmClient := client.NewClient(&p.MattermostPlugin)
+	llmClient := client.NewClient(p.API)
 
 	response, err := llmClient.ServiceCompletion("openai", client.CompletionRequest{
 		Posts: []client.Post{
@@ -122,7 +103,7 @@ func ExampleCompletionRequest_withFiles() {
 	}
 
 	var p MyPlugin
-	llmClient := client.NewClient(&p.MattermostPlugin)
+	llmClient := client.NewClient(p.API)
 
 	// Example with a file attachment (base64 encoded)
 	response, err := llmClient.AgentCompletion("gpt4", client.CompletionRequest{
@@ -156,7 +137,7 @@ func ExampleCompletionRequest_multiTurn() {
 	}
 
 	var p MyPlugin
-	llmClient := client.NewClient(&p.MattermostPlugin)
+	llmClient := client.NewClient(p.API)
 
 	// Multi-turn conversation
 	response, err := llmClient.AgentCompletion("gpt4", client.CompletionRequest{
@@ -185,7 +166,7 @@ func Example_fullPlugin() {
 	var p MyPlugin
 
 	// OnActivate - create the client
-	p.llmClient = client.NewClient(&p.MattermostPlugin)
+	p.llmClient = client.NewClient(p.API)
 
 	// Use the client in a command or other handler
 	response, err := p.llmClient.AgentCompletion("gpt4", client.CompletionRequest{
