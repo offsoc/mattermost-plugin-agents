@@ -10,6 +10,7 @@
 package client
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 	"net/http/httptest"
 	"strings"
 
+	"github.com/mattermost/mattermost-plugin-ai/llm"
 	"github.com/pkg/errors"
 )
 
@@ -254,4 +256,168 @@ func (c *Client) doCompletionRequest(url string, request CompletionRequest) (str
 	}
 
 	return completionResp.Completion, nil
+}
+
+// AgentCompletionStream makes a streaming completion request to a specific agent (bot)
+// and returns a TextStreamResult for processing the stream.
+//
+// Parameters:
+//   - agent: The username of the agent/bot to use
+//   - request: The completion request containing the conversation
+//
+// Returns a *llm.TextStreamResult that provides a channel of TextStreamEvent objects.
+// The caller should read from the Stream channel to process events.
+//
+// Example:
+//
+//	result, err := client.AgentCompletionStream("gpt4", client.CompletionRequest{
+//	    Posts: []client.Post{
+//	        {Role: "user", Message: "Tell me a story"},
+//	    },
+//	})
+//	if err != nil {
+//	    return err
+//	}
+//
+//	for event := range result.Stream {
+//	    switch event.Type {
+//	    case llm.EventTypeText:
+//	        fmt.Print(event.Value.(string))
+//	    case llm.EventTypeError:
+//	        return event.Value.(error)
+//	    case llm.EventTypeEnd:
+//	        return nil
+//	    }
+//	}
+func (c *Client) AgentCompletionStream(agent string, request CompletionRequest) (*llm.TextStreamResult, error) {
+	url := fmt.Sprintf("/%s/api/v1/agent/%s/completion", aiPluginID, agent)
+	return c.doStreamingRequest(url, request)
+}
+
+// ServiceCompletionStream makes a streaming completion request to a specific service
+// and returns a TextStreamResult for processing the stream.
+//
+// Parameters:
+//   - service: The ID or name of the LLM service to use
+//   - request: The completion request containing the conversation
+//
+// Returns a *llm.TextStreamResult that provides a channel of TextStreamEvent objects.
+// The caller should read from the Stream channel to process events.
+//
+// Example:
+//
+//	result, err := client.ServiceCompletionStream("anthropic", client.CompletionRequest{
+//	    Posts: []client.Post{
+//	        {Role: "user", Message: "Explain quantum computing"},
+//	    },
+//	})
+//	if err != nil {
+//	    return err
+//	}
+//
+//	// Use the helper method to read all text
+//	text, err := result.ReadAll()
+//	if err != nil {
+//	    return err
+//	}
+//	fmt.Println(text)
+func (c *Client) ServiceCompletionStream(service string, request CompletionRequest) (*llm.TextStreamResult, error) {
+	url := fmt.Sprintf("/%s/api/v1/service/%s/completion", aiPluginID, service)
+	return c.doStreamingRequest(url, request)
+}
+
+// doStreamingRequest performs a streaming completion request and returns a TextStreamResult
+func (c *Client) doStreamingRequest(url string, request CompletionRequest) (*llm.TextStreamResult, error) {
+	// Marshal the request body
+	body, err := json.Marshal(request)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	// Create the HTTP request
+	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set headers
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "text/event-stream")
+
+	// Make the request
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute request: %w", err)
+	}
+
+	// Check for error status codes
+	if resp.StatusCode != http.StatusOK {
+		respBody, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("request failed with status %d", resp.StatusCode)
+		}
+		var errResp ErrorResponse
+		if err := json.Unmarshal(respBody, &errResp); err != nil {
+			return nil, fmt.Errorf("request failed with status %d: %s", resp.StatusCode, string(respBody))
+		}
+		return nil, fmt.Errorf("request failed with status %d: %s", resp.StatusCode, errResp.Error)
+	}
+
+	// Create a channel for the stream
+	stream := make(chan llm.TextStreamEvent)
+
+	// Start a goroutine to read the SSE stream and populate the channel
+	go func() {
+		defer resp.Body.Close()
+		defer close(stream)
+
+		scanner := bufio.NewScanner(resp.Body)
+		for scanner.Scan() {
+			line := scanner.Text()
+
+			// SSE lines start with "data: "
+			if !strings.HasPrefix(line, "data: ") {
+				continue
+			}
+
+			// Extract the data portion
+			data := strings.TrimPrefix(line, "data: ")
+
+			// Check for empty data lines
+			if data == "" {
+				continue
+			}
+
+			// Parse the JSON event
+			var event llm.TextStreamEvent
+			if err := json.Unmarshal([]byte(data), &event); err != nil {
+				// Send an error event
+				stream <- llm.TextStreamEvent{
+					Type:  llm.EventTypeError,
+					Value: fmt.Errorf("error parsing stream event: %w", err),
+				}
+				return
+			}
+
+			// Send the event to the channel
+			stream <- event
+
+			// If this is an end or error event, stop reading
+			if event.Type == llm.EventTypeEnd || event.Type == llm.EventTypeError {
+				return
+			}
+		}
+
+		if err := scanner.Err(); err != nil {
+			stream <- llm.TextStreamEvent{
+				Type:  llm.EventTypeError,
+				Value: fmt.Errorf("error reading stream: %w", err),
+			}
+		}
+	}()
+
+	return &llm.TextStreamResult{
+		Stream: stream,
+	}, nil
 }

@@ -6,6 +6,7 @@ package client_test
 import (
 	"fmt"
 
+	"github.com/mattermost/mattermost-plugin-ai/llm"
 	"github.com/mattermost/mattermost-plugin-ai/public/client"
 	"github.com/mattermost/mattermost/server/public/plugin"
 )
@@ -71,6 +72,41 @@ func ExampleClient_AgentCompletion() {
 	}
 
 	fmt.Printf("Response: %s\n", response)
+}
+
+// ExampleClient_AgentCompletionStream shows how to make a streaming request
+func ExampleClient_AgentCompletionStream() {
+	type MyPlugin struct {
+		plugin.MattermostPlugin
+	}
+
+	var p MyPlugin
+	llmClient := client.NewClient(p.API)
+
+	result, err := llmClient.AgentCompletionStream("gpt4", client.CompletionRequest{
+		Posts: []client.Post{
+			{Role: "user", Message: "Tell me a story"},
+		},
+	})
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+
+	// Process events from the stream
+	for event := range result.Stream {
+		switch event.Type {
+		case llm.EventTypeText:
+			if text, ok := event.Value.(string); ok {
+				fmt.Print(text)
+			}
+		case llm.EventTypeError:
+			fmt.Printf("Error: %v\n", event.Value)
+			return
+		case llm.EventTypeEnd:
+			return
+		}
+	}
 }
 
 // ExampleClient_ServiceCompletion shows how to use a specific LLM service
@@ -187,4 +223,70 @@ func Example_fullPlugin() {
 	}
 
 	fmt.Printf("AI Response: %s\n", response)
+}
+
+// ExampleClient_AgentCompletionStream_readAll shows using ReadAll helper
+func ExampleClient_AgentCompletionStream_readAll() {
+	type MyPlugin struct {
+		plugin.MattermostPlugin
+	}
+
+	var p MyPlugin
+	llmClient := client.NewClient(p.API)
+
+	result, err := llmClient.AgentCompletionStream("gpt4", client.CompletionRequest{
+		Posts: []client.Post{
+			{Role: "user", Message: "What is 2+2?"},
+		},
+	})
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+
+	// Use the ReadAll helper to get the complete text
+	text, err := result.ReadAll()
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+
+	fmt.Printf("Response: %s\n", text)
+}
+
+// ExampleClient_ServiceCompletionStream shows service streaming
+func ExampleClient_ServiceCompletionStream() {
+	type MyPlugin struct {
+		plugin.MattermostPlugin
+	}
+
+	var p MyPlugin
+	llmClient := client.NewClient(p.API)
+
+	result, err := llmClient.ServiceCompletionStream("anthropic", client.CompletionRequest{
+		Posts: []client.Post{
+			{Role: "user", Message: "Explain quantum computing"},
+		},
+	})
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+
+	// Accumulate the full response
+	var fullText string
+	for event := range result.Stream {
+		switch event.Type {
+		case llm.EventTypeText:
+			if text, ok := event.Value.(string); ok {
+				fullText += text
+			}
+		case llm.EventTypeError:
+			fmt.Printf("Error: %v\n", event.Value)
+			return
+		case llm.EventTypeEnd:
+			fmt.Printf("Response: %s\n", fullText)
+			return
+		}
+	}
 }

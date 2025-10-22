@@ -60,7 +60,9 @@ Both constructors work identically - choose whichever fits your plugin's archite
 
 ## API Methods
 
-### Agent Completion
+### Non-Streaming Completions
+
+#### Agent Completion
 
 Make a request to a specific agent (bot) by username:
 
@@ -76,7 +78,7 @@ if err != nil {
 fmt.Println(response) // "The capital of France is Paris."
 ```
 
-### Service Completion
+#### Service Completion
 
 Make a request to a specific LLM service by ID or name:
 
@@ -86,6 +88,76 @@ response, err := p.llmClient.ServiceCompletion("openai", client.CompletionReques
         {Role: "user", Message: "Write a haiku about coding"},
     },
 })
+```
+
+### Streaming Completions
+
+Streaming methods return a `*llm.TextStreamResult` that provides fine-grained control over stream events and matches the internal LLM API:
+
+```go
+import "github.com/mattermost/mattermost-plugin-ai/llm"
+
+// Agent streaming
+result, err := p.llmClient.AgentCompletionStream("gpt4", client.CompletionRequest{
+    Posts: []client.Post{
+        {Role: "user", Message: "Tell me a story"},
+    },
+})
+if err != nil {
+    return err
+}
+
+// Process events from the stream
+for event := range result.Stream {
+    switch event.Type {
+    case llm.EventTypeText:
+        // Text chunk received
+        fmt.Print(event.Value.(string))
+    case llm.EventTypeError:
+        // Error occurred
+        return event.Value.(error)
+    case llm.EventTypeEnd:
+        // Stream completed successfully
+        return nil
+    case llm.EventTypeUsage:
+        // Token usage information
+        usage := event.Value.(llm.TokenUsage)
+        fmt.Printf("Tokens: %d input, %d output\n", usage.InputTokens, usage.OutputTokens)
+    }
+}
+```
+
+The `TextStreamResult` also provides a `ReadAll()` helper method to accumulate all text:
+
+```go
+result, err := p.llmClient.AgentCompletionStream("gpt4", request)
+if err != nil {
+    return err
+}
+
+// ReadAll accumulates all text events and returns the complete response
+text, err := result.ReadAll()
+if err != nil {
+    return err
+}
+fmt.Println(text)
+```
+
+Service streaming works the same way:
+
+```go
+result, err := p.llmClient.ServiceCompletionStream("anthropic", client.CompletionRequest{
+    Posts: []client.Post{
+        {Role: "user", Message: "Explain quantum computing"},
+    },
+})
+if err != nil {
+    return err
+}
+
+for event := range result.Stream {
+    // Handle events...
+}
 ```
 
 ## Request Structure
@@ -162,6 +234,28 @@ if err != nil {
 }
 ```
 
+For streaming requests, errors can occur during streaming:
+
+```go
+result, err := p.llmClient.AgentCompletionStream("gpt4", request)
+if err != nil {
+    p.API.LogError("Failed to start stream", "error", err.Error())
+    return
+}
+
+for event := range result.Stream {
+    switch event.Type {
+    case llm.EventTypeText:
+        fmt.Print(event.Value.(string))
+    case llm.EventTypeError:
+        p.API.LogError("Streaming error", "error", event.Value)
+        return
+    case llm.EventTypeEnd:
+        return
+    }
+}
+```
+
 ## Complete Example
 
 ```go
@@ -171,7 +265,6 @@ import (
     "fmt"
     "github.com/mattermost/mattermost-plugin-ai/public/client"
     "github.com/mattermost/mattermost/server/public/plugin"
-    "github.com/mattermost/mattermost/server/public/model"
 )
 
 type MyPlugin struct {
@@ -206,6 +299,34 @@ func (p *MyPlugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*
         ResponseType: model.CommandResponseTypeEphemeral,
         Text:         response,
     }, nil
+}
+
+func (p *MyPlugin) MessageHasBeenPosted(c *plugin.Context, post *model.Post) {
+    // Example: Stream AI response to a channel
+    go func() {
+        result, err := p.llmClient.AgentCompletionStream("gpt4", client.CompletionRequest{
+            Posts: []client.Post{
+                {Role: "user", Message: post.Message},
+            },
+        })
+        if err != nil {
+            p.API.LogError("Failed to start stream", "error", err.Error())
+            return
+        }
+
+        // Use ReadAll helper to get the complete response
+        fullResponse, err := result.ReadAll()
+        if err != nil {
+            p.API.LogError("Streaming failed", "error", err.Error())
+            return
+        }
+
+        // Post the complete response
+        p.API.CreatePost(&model.Post{
+            ChannelId: post.ChannelId,
+            Message:   fullResponse,
+        })
+    }()
 }
 ```
 
@@ -242,10 +363,29 @@ func (p *MyPlugin) handleUserRequest(userID, message string) error {
 
 The client calls these endpoints on the AI plugin:
 
+- `POST /mattermost-ai/api/v1/agent/{agent}/completion` - Streaming agent completion (SSE with JSON events)
 - `POST /mattermost-ai/api/v1/agent/{agent}/completion/nostream` - Non-streaming agent completion
+- `POST /mattermost-ai/api/v1/service/{service}/completion` - Streaming service completion (SSE with JSON events)
 - `POST /mattermost-ai/api/v1/service/{service}/completion/nostream` - Non-streaming service completion
 
 All endpoints use inter-plugin communication via the Mattermost plugin API.
+
+### Streaming Event Format
+
+Streaming endpoints use Server-Sent Events (SSE) with JSON-encoded event payloads:
+
+```
+data: {"type":0,"value":"Hello"}
+data: {"type":0,"value":" world"}
+data: {"type":1,"value":null}
+```
+
+Event types:
+- `0` - Text chunk
+- `1` - End of stream
+- `2` - Error
+- `3` - Tool calls
+- `7` - Token usage
 
 ## Differences Between Agent and Service
 
