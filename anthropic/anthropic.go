@@ -337,6 +337,23 @@ func (a *Anthropic) streamChatWithTools(state messageState) {
 		Value: usage,
 	}
 
+	// Extract artifacts from the complete message text
+	var completeText strings.Builder
+	for _, block := range message.Content {
+		if block.Type == "text" {
+			if textBlock, ok := block.AsAny().(anthropicSDK.TextBlock); ok {
+				completeText.WriteString(textBlock.Text)
+			}
+		}
+	}
+	artifacts := llm.DetectArtifacts(completeText.String())
+	for _, artifact := range artifacts {
+		state.output <- llm.TextStreamEvent{
+			Type:  llm.EventTypeArtifact,
+			Value: artifact,
+		}
+	}
+
 	// Send end event
 	state.output <- llm.TextStreamEvent{
 		Type:  llm.EventTypeEnd,

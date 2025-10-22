@@ -340,6 +340,8 @@ func (s *OpenAI) streamCompletionsAPIToChannels(params openai.ChatCompletionNewP
 
 	// Buffering in the case of tool use
 	var toolsBuffer map[int]*ToolBufferElement
+	// Buffer to accumulate complete message text for artifact detection
+	var completeMessageText strings.Builder
 
 	for stream.Next() {
 		chunk := stream.Current()
@@ -390,6 +392,7 @@ func (s *OpenAI) streamCompletionsAPIToChannels(params openai.ChatCompletionNewP
 		}
 
 		if delta.Content != "" {
+			completeMessageText.WriteString(delta.Content)
 			output <- llm.TextStreamEvent{
 				Type:  llm.EventTypeText,
 				Value: delta.Content,
@@ -456,6 +459,15 @@ func (s *OpenAI) streamCompletionsAPIToChannels(params openai.ChatCompletionNewP
 				Type:  llm.EventTypeError,
 				Value: err,
 			}
+		}
+	}
+
+	// Detect and emit artifacts from the complete message
+	artifacts := llm.DetectArtifacts(completeMessageText.String())
+	for _, artifact := range artifacts {
+		output <- llm.TextStreamEvent{
+			Type:  llm.EventTypeArtifact,
+			Value: artifact,
 		}
 	}
 
@@ -764,6 +776,15 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 				return
 			}
 
+			// Detect and emit artifacts from the complete message
+			artifacts := llm.DetectArtifacts(fullMessageText.String())
+			for _, artifact := range artifacts {
+				output <- llm.TextStreamEvent{
+					Type:  llm.EventTypeArtifact,
+					Value: artifact,
+				}
+			}
+
 			// Otherwise, emit end event
 			output <- llm.TextStreamEvent{
 				Type:  llm.EventTypeEnd,
@@ -839,7 +860,7 @@ func (s *OpenAI) convertToResponseParams(params openai.ChatCompletionNewParams, 
 	result.Reasoning = shared.ReasoningParam{
 		// Set effort level for reasoning
 		// Can be "minimal", "low", "medium", or "high"
-		Effort: shared.ReasoningEffortMedium,
+		Effort: shared.ReasoningEffortLow,
 		// Request a detailed summary of the reasoning
 		// Can be "auto", "concise", or "detailed"
 		Summary: shared.ReasoningSummaryAuto,

@@ -25,12 +25,31 @@ const (
 	EventTypeAnnotations
 	// EventTypeUsage represents token usage data
 	EventTypeUsage
+	// EventTypeArtifact represents a standalone artifact (code, document, diagram)
+	EventTypeArtifact
 )
 
 // TokenUsage represents token usage statistics for an LLM request
 type TokenUsage struct {
 	InputTokens  int64 `json:"input_tokens"`
 	OutputTokens int64 `json:"output_tokens"`
+}
+
+// ArtifactType represents the type of artifact
+type ArtifactType string
+
+const (
+	ArtifactTypeCode     ArtifactType = "code"
+	ArtifactTypeDocument ArtifactType = "document"
+	ArtifactTypeDiagram  ArtifactType = "diagram"
+)
+
+// Artifact represents a standalone piece of content (code, document, diagram)
+type Artifact struct {
+	Type     ArtifactType `json:"type"`
+	Title    string       `json:"title"`
+	Content  string       `json:"content"`
+	Language string       `json:"language,omitempty"` // Programming language or format (e.g., "javascript", "python", "svg", "mermaid")
 }
 
 // TextStreamEvent represents an event in the text stream

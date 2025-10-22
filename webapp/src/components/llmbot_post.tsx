@@ -24,6 +24,7 @@ import {Annotation} from './citations/types';
 import IconRegenerate from './assets/icon_regenerate';
 import IconCancel from './assets/icon_cancel';
 import ToolApprovalSet from './tool_approval_set';
+import {ArtifactViewer} from './artifact_viewer';
 
 const SearchResultsPropKey = 'search_results';
 
@@ -196,6 +197,11 @@ const ReasoningText = styled.div`
 	word-break: break-word;
 `;
 
+export interface ArtifactMetadata {
+    language: string;
+    title?: string;
+}
+
 export interface PostUpdateWebsocketMessage {
     post_id: string
     next?: string
@@ -203,6 +209,9 @@ export interface PostUpdateWebsocketMessage {
     tool_call?: string
     reasoning?: string
     annotations?: string
+    artifact?: string
+    metadata?: ArtifactMetadata
+    content?: string
 }
 
 export enum ToolCallStatus {
@@ -220,6 +229,13 @@ export interface ToolCall {
     arguments: any;
     result?: string;
     status: ToolCallStatus;
+}
+
+export interface Artifact {
+    type: 'code' | 'document' | 'diagram';
+    title: string;
+    content: string;
+    language?: string;
 }
 
 interface Props {
@@ -273,6 +289,26 @@ export const LLMBotPost = (props: Props) => {
         return [];
     });
 
+    // State for artifacts
+    // Initialize from persisted artifacts if available
+    const persistedArtifacts = props.post.props?.artifacts || '';
+    const [artifacts, setArtifacts] = useState<Artifact[]>(() => {
+        if (persistedArtifacts) {
+            try {
+                return JSON.parse(persistedArtifacts);
+            } catch (error) {
+                return [];
+            }
+        }
+        return [];
+    });
+
+    // State for artifacts currently being generated
+    const [artifactsGenerating, setArtifactsGenerating] = useState<ArtifactMetadata[]>([]);
+
+    // State for streaming artifact content
+    const [artifactStreamingContent, setArtifactStreamingContent] = useState('');
+
     const currentUserId = useSelector<GlobalState, string>((state) => state.entities.users.currentUserId);
     const rootPost = useSelector<GlobalState, any>((state) => state.entities.posts.posts[props.post.root_id]);
 
@@ -309,6 +345,18 @@ export const LLMBotPost = (props: Props) => {
                 setAnnotations([]);
             }
 
+            // Initialize artifacts from persisted data
+            const persistedArtifacts = props.post.props?.artifacts || '';
+            if (persistedArtifacts) {
+                try {
+                    setArtifacts(JSON.parse(persistedArtifacts));
+                } catch (error) {
+                    setArtifacts([]);
+                }
+            } else {
+                setArtifacts([]);
+            }
+
             // Initialize precontent based on whether post is empty
             if (props.post.message === '') {
                 setPrecontent(true);
@@ -318,7 +366,7 @@ export const LLMBotPost = (props: Props) => {
 
             previousPostIdRef.current = props.post.id;
         }
-    }, [props.post.id, props.post.props?.reasoning_summary, props.post.props?.annotations]);
+    }, [props.post.id, props.post.props?.reasoning_summary, props.post.props?.annotations, props.post.props?.artifacts]);
 
     // Update tool calls from props when available
     useEffect(() => {
@@ -395,6 +443,35 @@ export const LLMBotPost = (props: Props) => {
                     return;
                 }
 
+                // Handle artifact generating events
+                if (data.control === 'artifact_generating' && data.metadata) {
+                    // Add to generating list (append to support multiple artifacts)
+                    setArtifactsGenerating((prev) => [...prev, data.metadata as ArtifactMetadata]);
+                    return;
+                }
+
+                // Handle artifact streaming events (partial content)
+                if (data.control === 'artifact_streaming') {
+                    setArtifactStreamingContent(data.content || '');
+                    return;
+                }
+
+                // Handle artifact events from the websocket
+                if (data.control === 'artifact' && data.artifact) {
+                    try {
+                        const parsedArtifacts = JSON.parse(data.artifact);
+                        setArtifacts(parsedArtifacts);
+
+                        // Clear generating and streaming state when artifacts are complete
+                        setArtifactsGenerating([]);
+                        setArtifactStreamingContent('');
+                    } catch (error) {
+                        // Handle error silently
+                        setError('Error parsing artifact data');
+                    }
+                    return;
+                }
+
                 // Handle regular post updates
                 if (data.next && !stoppedRef.current) {
                     setGenerating(true);
@@ -419,6 +496,11 @@ export const LLMBotPost = (props: Props) => {
                     setShowReasoning(false);
                     setIsReasoningCollapsed(true);
                     setIsReasoningLoading(false);
+
+                    // Clear artifacts when starting new generation
+                    setArtifacts([]);
+                    setArtifactsGenerating([]);
+                    setArtifactStreamingContent('');
 
                     if (!message) {
                         setMessage('');
@@ -450,6 +532,11 @@ export const LLMBotPost = (props: Props) => {
 
         // Clear annotations/citations when regenerating
         setAnnotations([]);
+
+        // Clear artifacts when regenerating
+        setArtifacts([]);
+        setArtifactsGenerating([]);
+        setArtifactStreamingContent('');
 
         doRegenerate(props.post.id);
     };
@@ -562,6 +649,13 @@ export const LLMBotPost = (props: Props) => {
                 showCursor={generating}
                 annotations={annotations.length > 0 ? annotations : undefined} // eslint-disable-line no-undefined
             />
+            {(artifacts.length > 0 || artifactsGenerating.length > 0) && (
+                <ArtifactViewer
+                    artifacts={artifacts}
+                    generatingArtifacts={artifactsGenerating}
+                    streamingContent={artifactStreamingContent}
+                />
+            )}
             {props.post.props?.[SearchResultsPropKey] && (
                 <SearchSources
                     sources={JSON.parse(props.post.props[SearchResultsPropKey])}

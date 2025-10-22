@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -23,6 +24,7 @@ const PostStreamingControlStart = "start"
 const ToolCallProp = "pending_tool_call"
 const ReasoningSummaryProp = "reasoning_summary"
 const AnnotationsProp = "annotations"
+const ArtifactsProp = "artifacts"
 
 type Service interface {
 	StreamToNewPost(ctx context.Context, botID string, requesterUserID string, stream *llm.TextStreamResult, post *model.Post, respondingToPostID string) error
@@ -222,6 +224,8 @@ func (p *MMPostStreamService) StreamToPost(ctx context.Context, stream *llm.Text
 	}()
 
 	var reasoningBuffer strings.Builder
+	var artifactGeneratingSent bool
+	var suppressingPotentialArtifact bool
 
 	for {
 		select {
@@ -231,7 +235,44 @@ func (p *MMPostStreamService) StreamToPost(ctx context.Context, stream *llm.Text
 				// Handle text event
 				if textChunk, ok := event.Value.(string); ok {
 					post.Message += textChunk
-					p.sendPostStreamingUpdateEvent(post, post.Message)
+
+					// Handle artifact detection and message cleaning
+					hasArtifact := detectArtifactOpening(post.Message)
+					mightBeArtifact := isPotentialArtifactStart(post.Message)
+
+					switch {
+					case !artifactGeneratingSent && hasArtifact:
+						// Confirmed artifact - send generating event
+						metadata := extractArtifactMetadata(post.Message)
+						p.sendArtifactGeneratingEvent(post, metadata)
+						artifactGeneratingSent = true
+						suppressingPotentialArtifact = false
+
+						// Remove incomplete artifact from displayed message
+						cleanedMessage := removeIncompleteArtifact(post.Message)
+						p.sendPostStreamingUpdateEvent(post, cleanedMessage)
+					case !artifactGeneratingSent && mightBeArtifact:
+						// Might be starting an artifact - suppress output until confirmed
+						suppressingPotentialArtifact = true
+						// Don't send update - wait to see if it's an artifact
+					case !artifactGeneratingSent && suppressingPotentialArtifact:
+						// Was suppressing but no artifact detected - it's a normal code block
+						suppressingPotentialArtifact = false
+						p.sendPostStreamingUpdateEvent(post, post.Message)
+					case artifactGeneratingSent:
+						// We're inside an artifact block, keep removing incomplete content
+						cleanedMessage := removeIncompleteArtifact(post.Message)
+						p.sendPostStreamingUpdateEvent(post, cleanedMessage)
+
+						// Stream the partial artifact content to the artifact viewer
+						artifactContent := extractArtifactContent(post.Message)
+						if artifactContent != "" {
+							p.sendArtifactStreamingEvent(post, artifactContent)
+						}
+					default:
+						// Normal text, stream as-is
+						p.sendPostStreamingUpdateEvent(post, post.Message)
+					}
 				}
 			case llm.EventTypeEnd:
 				// Stream has closed cleanly
@@ -243,6 +284,17 @@ func (p *MMPostStreamService) StreamToPost(ctx context.Context, stream *llm.Text
 
 				// Inline citations have already been cleaned in EventTypeAnnotations handler
 				// (if there were any citations, they were cleaned before annotations were sent)
+
+				// Remove artifact code blocks from the displayed message
+				// The artifacts are stored separately in post props and displayed in the artifact viewer
+				if artifactsProp := post.GetProp(ArtifactsProp); artifactsProp != nil {
+					cleanedMessage := llm.RemoveArtifactMarkers(post.Message)
+					if cleanedMessage != post.Message {
+						post.Message = cleanedMessage
+						p.sendPostStreamingUpdateEvent(post, post.Message)
+						p.mmClient.LogDebug("Removed artifact markers from post message", "post_id", post.Id)
+					}
+				}
 
 				// Update post with all accumulated data
 				// This includes the message and any reasoning that was added to props in EventTypeReasoningEnd
@@ -347,6 +399,37 @@ func (p *MMPostStreamService) StreamToPost(ctx context.Context, stream *llm.Text
 						p.sendPostStreamingAnnotationsEvent(post, string(annotationsJSON))
 					}
 				}
+			case llm.EventTypeArtifact:
+				if artifact, ok := event.Value.(llm.Artifact); ok {
+					// Get existing artifacts array or create new one
+					var artifacts []llm.Artifact
+					if existingProp := post.GetProp(ArtifactsProp); existingProp != nil {
+						if existingJSON, ok := existingProp.(string); ok {
+							_ = json.Unmarshal([]byte(existingJSON), &artifacts)
+						}
+					}
+
+					// Append new artifact
+					artifacts = append(artifacts, artifact)
+
+					// Marshal and store
+					artifactsJSON, err := json.Marshal(artifacts)
+					if err != nil {
+						p.mmClient.LogError("Failed to marshal artifacts", "error", err)
+					} else {
+						post.AddProp(ArtifactsProp, string(artifactsJSON))
+						p.mmClient.LogDebug("Added artifact to post props", "post_id", post.Id, "title", artifact.Title, "type", artifact.Type)
+
+						// Send WebSocket event for artifact
+						p.mmClient.PublishWebSocketEvent("postupdate", map[string]interface{}{
+							"post_id":  post.Id,
+							"control":  "artifact",
+							"artifact": string(artifactsJSON),
+						}, &model.WebsocketBroadcast{
+							ChannelId: post.ChannelId,
+						})
+					}
+				}
 			}
 		case <-ctx.Done():
 			// Persist any accumulated reasoning before canceling
@@ -363,4 +446,118 @@ func (p *MMPostStreamService) StreamToPost(ctx context.Context, stream *llm.Text
 			return
 		}
 	}
+}
+
+// detectArtifactOpening checks if the text contains the start of an artifact block
+func detectArtifactOpening(text string) bool {
+	return strings.Contains(text, "```artifact:")
+}
+
+// isPotentialArtifactStart checks if text might be starting an artifact block
+// This detects earlier than detectArtifactOpening to prevent showing "```artifact" during streaming
+func isPotentialArtifactStart(text string) bool {
+	// Check if the last line starts with ``` or if the whole message starts with ```
+	trimmed := strings.TrimSpace(text)
+	if strings.HasPrefix(trimmed, "```") {
+		return true
+	}
+
+	// Check if the last line (after last newline) starts with ```
+	lastNewline := strings.LastIndex(text, "\n")
+	if lastNewline != -1 && lastNewline < len(text)-1 {
+		lastLine := strings.TrimSpace(text[lastNewline+1:])
+		if strings.HasPrefix(lastLine, "```") {
+			return true
+		}
+	}
+
+	return false
+}
+
+// extractArtifactMetadata extracts language and title from a partial or complete artifact opening
+// Returns map with "language" and optionally "title" keys
+func extractArtifactMetadata(text string) map[string]interface{} {
+	metadata := make(map[string]interface{})
+
+	// Find the artifact opening pattern
+	// Pattern: ```artifact:language title="optional title"
+	pattern := regexp.MustCompile("```artifact:([a-zA-Z0-9]+)(?:\\s+title=\"([^\"]+)\")?")
+	matches := pattern.FindStringSubmatch(text)
+
+	if len(matches) > 1 {
+		metadata["language"] = matches[1]
+		if len(matches) > 2 && matches[2] != "" {
+			metadata["title"] = matches[2]
+		}
+	}
+
+	return metadata
+}
+
+// removeIncompleteArtifact removes everything from the artifact opening tag onwards
+// This is used during streaming when the artifact block is still being generated
+func removeIncompleteArtifact(text string) string {
+	// Find the position of ```artifact:
+	index := strings.Index(text, "```artifact:")
+	if index == -1 {
+		return text
+	}
+	// Return everything before the artifact marker, trimming trailing whitespace
+	result := strings.TrimRight(text[:index], " \n\t")
+	return result
+}
+
+// extractArtifactContent extracts the partial content from an incomplete artifact block
+// Returns the code content between the opening tag and current position
+func extractArtifactContent(text string) string {
+	// Find the artifact opening
+	index := strings.Index(text, "```artifact:")
+	if index == -1 {
+		return ""
+	}
+
+	// Find the end of the first line (title line)
+	afterOpening := text[index:]
+	firstNewline := strings.Index(afterOpening, "\n")
+	if firstNewline == -1 {
+		return ""
+	}
+
+	// Extract content after the title line
+	contentStart := index + firstNewline + 1
+	if contentStart >= len(text) {
+		return ""
+	}
+
+	content := text[contentStart:]
+
+	// Remove closing ``` if present (artifact is complete)
+	closingIndex := strings.LastIndex(content, "\n```")
+	if closingIndex != -1 {
+		content = content[:closingIndex]
+	}
+
+	return content
+}
+
+// sendArtifactGeneratingEvent sends a WebSocket event indicating an artifact is being generated
+func (p *MMPostStreamService) sendArtifactGeneratingEvent(post *model.Post, metadata map[string]interface{}) {
+	p.mmClient.PublishWebSocketEvent("postupdate", map[string]interface{}{
+		"post_id":  post.Id,
+		"control":  "artifact_generating",
+		"metadata": metadata,
+	}, &model.WebsocketBroadcast{
+		ChannelId: post.ChannelId,
+	})
+}
+
+// sendArtifactStreamingEvent sends the current partial artifact content
+func (p *MMPostStreamService) sendArtifactStreamingEvent(post *model.Post, content string) {
+	p.mmClient.PublishWebSocketEvent("postupdate", map[string]interface{}{
+		"post_id": post.Id,
+		"control": "artifact_streaming",
+		"content": content,
+	}, &model.WebsocketBroadcast{
+		ChannelId: post.ChannelId,
+	})
 }
