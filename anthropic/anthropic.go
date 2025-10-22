@@ -104,6 +104,15 @@ func conversationToMessages(posts []llm.Post) (string, []anthropicSDK.MessagePar
 			continue
 		}
 
+		// For assistant messages with tool use, add thinking block first if present
+		// This is required by the Anthropic API when thinking is enabled
+		if post.Role == llm.PostRoleBot && len(post.ToolUse) > 0 && post.Reasoning != "" {
+			// Use the preserved signature from the original thinking block
+			// The signature is an opaque verification field that must be passed back unmodified
+			thinkingBlock := anthropicSDK.NewThinkingBlock(post.ReasoningSignature, post.Reasoning)
+			currentBlocks = append(currentBlocks, thinkingBlock)
+		}
+
 		if post.Message != "" {
 			textBlock := anthropicSDK.NewTextBlock(post.Message)
 			currentBlocks = append(currentBlocks, textBlock)
@@ -188,10 +197,15 @@ func (a *Anthropic) streamChatWithTools(state messageState) {
 		Model:     anthropicSDK.Model(state.config.Model),
 		MaxTokens: int64(state.config.MaxGeneratedTokens),
 		Messages:  state.messages,
-		System: []anthropicSDK.TextBlockParam{{
+		Tools:     convertTools(state.tools),
+	}
+
+	// Only include system message if it's non-empty
+	// Anthropic requires text content blocks to be non-empty
+	if state.system != "" {
+		params.System = []anthropicSDK.TextBlockParam{{
 			Text: state.system,
-		}},
-		Tools: convertTools(state.tools),
+		}}
 	}
 
 	// Add native tools if enabled
@@ -216,17 +230,22 @@ func (a *Anthropic) streamChatWithTools(state messageState) {
 		thinkingBudget = 1024
 	}
 
-	params.Thinking = anthropicSDK.ThinkingConfigParamUnion{
-		OfEnabled: &anthropicSDK.ThinkingConfigEnabledParam{
-			Type:         "enabled",
-			BudgetTokens: thinkingBudget,
-		},
+	// Anthropic requires a minimum thinking budget of 1024 tokens
+	// If the thinking budget is more than the max_tokens, Anthropic will return an error.
+	if thinkingBudget < int64(state.config.MaxGeneratedTokens) {
+		params.Thinking = anthropicSDK.ThinkingConfigParamUnion{
+			OfEnabled: &anthropicSDK.ThinkingConfigEnabledParam{
+				Type:         "enabled",
+				BudgetTokens: thinkingBudget,
+			},
+		}
 	}
 
 	stream := a.client.Messages.NewStreaming(context.Background(), params)
 
 	message := anthropicSDK.Message{}
 	var thinkingBuffer strings.Builder
+	var signatureBuffer strings.Builder
 	var currentBlockIsThinking bool
 
 	for stream.Next() {
@@ -264,18 +283,25 @@ func (a *Anthropic) streamChatWithTools(state messageState) {
 					Type:  llm.EventTypeReasoning,
 					Value: deltaVariant.Thinking,
 				}
+			case anthropicSDK.SignatureDelta:
+				// Accumulate signature (opaque verification field)
+				signatureBuffer.WriteString(deltaVariant.Signature)
 			}
 
 		case anthropicSDK.ContentBlockStopEvent:
 			// Check if this is the end of a thinking block
 			if currentBlockIsThinking && thinkingBuffer.Len() > 0 {
-				// Send the complete thinking/reasoning for this block
+				// Send the complete thinking/reasoning for this block with signature
 				state.output <- llm.TextStreamEvent{
-					Type:  llm.EventTypeReasoningEnd,
-					Value: thinkingBuffer.String(),
+					Type: llm.EventTypeReasoningEnd,
+					Value: llm.ReasoningData{
+						Text:      thinkingBuffer.String(),
+						Signature: signatureBuffer.String(),
+					},
 				}
-				// Reset the buffer for the next potential thinking block
+				// Reset the buffers for the next potential thinking block
 				thinkingBuffer.Reset()
+				signatureBuffer.Reset()
 				currentBlockIsThinking = false
 			}
 		}
@@ -292,8 +318,11 @@ func (a *Anthropic) streamChatWithTools(state messageState) {
 	// If we have any unsent thinking (edge case), send it now before processing tool calls
 	if thinkingBuffer.Len() > 0 {
 		state.output <- llm.TextStreamEvent{
-			Type:  llm.EventTypeReasoningEnd,
-			Value: thinkingBuffer.String(),
+			Type: llm.EventTypeReasoningEnd,
+			Value: llm.ReasoningData{
+				Text:      thinkingBuffer.String(),
+				Signature: signatureBuffer.String(),
+			},
 		}
 	}
 

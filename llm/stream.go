@@ -52,6 +52,12 @@ type Artifact struct {
 	Language string       `json:"language,omitempty"` // Programming language or format (e.g., "javascript", "python", "svg", "mermaid")
 }
 
+// ReasoningData represents the complete reasoning/thinking data including signature
+type ReasoningData struct {
+	Text      string // The reasoning/thinking text content
+	Signature string // Opaque verification signature from the model
+}
+
 // TextStreamEvent represents an event in the text stream
 type TextStreamEvent struct {
 	Type  EventType

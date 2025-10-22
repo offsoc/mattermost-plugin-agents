@@ -5,6 +5,7 @@ package api
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -94,6 +95,132 @@ func (a *API) convertLLMBridgeRequestToInternal(req LLMBridgeCompletionRequest) 
 	}, nil
 }
 
+// getBotByAgent finds a bot by its username (agent name)
+func (a *API) getBotByAgent(agent string) (*bots.Bot, error) {
+	bot := a.bots.GetBotByUsername(agent)
+	if bot == nil {
+		return nil, fmt.Errorf("agent not found: %s", agent)
+	}
+	return bot, nil
+}
+
+// getBotByService finds a bot that uses the specified service (by ID or name)
+func (a *API) getBotByService(service string) (*bots.Bot, error) {
+	for _, bot := range a.bots.GetAllBots() {
+		botService := bot.GetService()
+		if botService.ID == service || botService.Name == service {
+			return bot, nil
+		}
+	}
+	return nil, fmt.Errorf("no bot found for service: %s", service)
+}
+
+// streamLLMResponse handles streaming LLM responses as Server-Sent Events
+func (a *API) streamLLMResponse(c *gin.Context, bot *bots.Bot, llmRequest llm.CompletionRequest) {
+	// Start streaming response
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Status(http.StatusOK)
+
+	// Make the streaming LLM call
+	streamResult, err := bot.LLM().ChatCompletion(llmRequest)
+	if err != nil {
+		// If streaming hasn't started, we can still send a JSON error
+		errorEvent := llm.TextStreamEvent{
+			Type:  llm.EventTypeError,
+			Value: err.Error(),
+		}
+		eventJSON, _ := json.Marshal(errorEvent)
+		fmt.Fprintf(c.Writer, "data: %s\n\n", string(eventJSON))
+		return
+	}
+
+	// Stream the response as JSON-encoded events
+	for event := range streamResult.Stream {
+		// Convert the event to JSON
+		eventJSON, err := json.Marshal(event)
+		if err != nil {
+			errorEvent := llm.TextStreamEvent{
+				Type:  llm.EventTypeError,
+				Value: fmt.Sprintf("Error marshaling event: %v", err),
+			}
+			errorJSON, _ := json.Marshal(errorEvent)
+			fmt.Fprintf(c.Writer, "data: %s\n\n", string(errorJSON))
+			continue
+		}
+
+		fmt.Fprintf(c.Writer, "data: %s\n\n", string(eventJSON))
+
+		if event.Type == llm.EventTypeEnd || event.Type == llm.EventTypeError {
+			break
+		}
+	}
+}
+
+// handleNonStreamingLLMResponse handles non-streaming LLM responses
+func (a *API) handleNonStreamingLLMResponse(c *gin.Context, bot *bots.Bot, llmRequest llm.CompletionRequest) {
+	// Make the non-streaming LLM call
+	response, err := bot.LLM().ChatCompletionNoStream(llmRequest)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, LLMBridgeErrorResponse{
+			Error: fmt.Sprintf("failed to complete LLM request: %v", err),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, LLMBridgeCompletionResponse{
+		Completion: response,
+	})
+}
+
+// handleAgentCompletionStreaming handles streaming completion requests for a specific agent
+func (a *API) handleAgentCompletionStreaming(c *gin.Context) {
+	agent := c.Param("agent")
+	if agent == "" {
+		c.JSON(http.StatusBadRequest, LLMBridgeErrorResponse{
+			Error: "agent parameter is required",
+		})
+		return
+	}
+
+	var req LLMBridgeCompletionRequest
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, LLMBridgeErrorResponse{
+			Error: fmt.Sprintf("invalid request body: %v", err),
+		})
+		return
+	}
+
+	if len(req.Posts) == 0 {
+		c.JSON(http.StatusBadRequest, LLMBridgeErrorResponse{
+			Error: "posts array cannot be empty",
+		})
+		return
+	}
+
+	// Find the bot by username
+	bot, err := a.getBotByAgent(agent)
+	if err != nil {
+		c.JSON(http.StatusNotFound, LLMBridgeErrorResponse{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	// Convert request to internal format
+	llmRequest, err := a.convertLLMBridgeRequestToInternal(req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, LLMBridgeErrorResponse{
+			Error: fmt.Sprintf("invalid request: %v", err),
+		})
+		return
+	}
+
+	// Stream the response
+	a.streamLLMResponse(c, bot, llmRequest)
+}
+
 // handleAgentCompletionNoStream handles non-streaming completion requests for a specific agent
 func (a *API) handleAgentCompletionNoStream(c *gin.Context) {
 	agent := c.Param("agent")
@@ -117,10 +244,10 @@ func (a *API) handleAgentCompletionNoStream(c *gin.Context) {
 	}
 
 	// Find the bot by username
-	bot := a.bots.GetBotByUsername(agent)
-	if bot == nil {
+	bot, err := a.getBotByAgent(agent)
+	if err != nil {
 		c.JSON(http.StatusNotFound, LLMBridgeErrorResponse{
-			Error: fmt.Sprintf("agent not found: %s", agent),
+			Error: err.Error(),
 		})
 		return
 	}
@@ -134,18 +261,55 @@ func (a *API) handleAgentCompletionNoStream(c *gin.Context) {
 		return
 	}
 
-	// Make the non-streaming LLM call
-	response, err := bot.LLM().ChatCompletionNoStream(llmRequest)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, LLMBridgeErrorResponse{
-			Error: fmt.Sprintf("failed to complete LLM request: %v", err),
+	// Handle non-streaming response
+	a.handleNonStreamingLLMResponse(c, bot, llmRequest)
+}
+
+// handleServiceCompletionStreaming handles streaming completion requests for a specific service
+func (a *API) handleServiceCompletionStreaming(c *gin.Context) {
+	service := c.Param("service")
+	if service == "" {
+		c.JSON(http.StatusBadRequest, LLMBridgeErrorResponse{
+			Error: "service parameter is required",
 		})
 		return
 	}
 
-	c.JSON(http.StatusOK, LLMBridgeCompletionResponse{
-		Completion: response,
-	})
+	var req LLMBridgeCompletionRequest
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, LLMBridgeErrorResponse{
+			Error: fmt.Sprintf("invalid request body: %v", err),
+		})
+		return
+	}
+
+	if len(req.Posts) == 0 {
+		c.JSON(http.StatusBadRequest, LLMBridgeErrorResponse{
+			Error: "posts array cannot be empty",
+		})
+		return
+	}
+
+	// Find a bot that uses the specified service (by ID or name)
+	bot, err := a.getBotByService(service)
+	if err != nil {
+		c.JSON(http.StatusNotFound, LLMBridgeErrorResponse{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	// Convert request to internal format
+	llmRequest, err := a.convertLLMBridgeRequestToInternal(req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, LLMBridgeErrorResponse{
+			Error: fmt.Sprintf("invalid request: %v", err),
+		})
+		return
+	}
+
+	// Stream the response
+	a.streamLLMResponse(c, bot, llmRequest)
 }
 
 // handleServiceCompletionNoStream handles non-streaming completion requests for a specific service
@@ -174,18 +338,10 @@ func (a *API) handleServiceCompletionNoStream(c *gin.Context) {
 	}
 
 	// Find a bot that uses the specified service (by ID or name)
-	var targetBot *bots.Bot
-	for _, bot := range a.bots.GetAllBots() {
-		botService := bot.GetService()
-		if botService.ID == service || botService.Name == service {
-			targetBot = bot
-			break
-		}
-	}
-
-	if targetBot == nil {
+	bot, err := a.getBotByService(service)
+	if err != nil {
 		c.JSON(http.StatusNotFound, LLMBridgeErrorResponse{
-			Error: fmt.Sprintf("no bot found for service: %s", service),
+			Error: err.Error(),
 		})
 		return
 	}
@@ -199,16 +355,6 @@ func (a *API) handleServiceCompletionNoStream(c *gin.Context) {
 		return
 	}
 
-	// Make the non-streaming LLM call
-	response, err := targetBot.LLM().ChatCompletionNoStream(llmRequest)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, LLMBridgeErrorResponse{
-			Error: fmt.Sprintf("failed to complete LLM request: %v", err),
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, LLMBridgeCompletionResponse{
-		Completion: response,
-	})
+	// Handle non-streaming response
+	a.handleNonStreamingLLMResponse(c, bot, llmRequest)
 }
