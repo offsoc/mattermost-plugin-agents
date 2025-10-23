@@ -116,6 +116,25 @@ That should work!`,
 				},
 			},
 		},
+		{
+			name: "artifact with code block at line start",
+			input: "```artifact:markdown title=\"Documentation\"\n" +
+				"# Example\n\n" +
+				"Here's a code example:\n\n" +
+				"```javascript\n" +
+				"console.log('hello');\n" +
+				"```\n\n" +
+				"More content after.\n" +
+				"```",
+			expected: []Artifact{
+				{
+					Type:     ArtifactTypeDocument,
+					Title:    "Documentation",
+					Content:  "# Example\n\nHere's a code example:\n\n```javascript\nconsole.log('hello');\n```\n\nMore content after.",
+					Language: "markdown",
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -159,6 +178,7 @@ func TestDetermineArtifactType(t *testing.T) {
 		{"markdown", ArtifactTypeDocument},
 		{"html", ArtifactTypeDocument},
 		{"text", ArtifactTypeDocument},
+		{"txt", ArtifactTypeDocument},
 	}
 
 	for _, tt := range tests {

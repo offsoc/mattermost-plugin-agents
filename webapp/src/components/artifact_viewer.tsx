@@ -54,8 +54,8 @@ const ChevronIcon = styled.div<{isExpanded: boolean}>`
 `;
 
 const ArtifactList = styled.div<{isCollapsed: boolean}>`
-    max-height: ${(props) => (props.isCollapsed ? '0' : '2000px')};
-    overflow: hidden;
+    max-height: ${(props) => (props.isCollapsed ? '0' : '600px')};
+    overflow: ${(props) => (props.isCollapsed ? 'hidden' : 'auto')};
     transition: max-height 0.3s ease-in-out;
     opacity: ${(props) => (props.isCollapsed ? '0' : '1')};
     transition: opacity 0.2s ease-in-out, max-height 0.3s ease-in-out;
@@ -168,14 +168,11 @@ const StreamingCursor = styled.span`
     }
 `;
 
-const ArtifactCode = ({content, language, showCursor}: {content: string; language?: string; showCursor?: boolean}) => {
+const ArtifactCode = ({content, language, type, showCursor}: {content: string; language?: string; type?: string; showCursor?: boolean}) => {
     const siteURL = useSelector<GlobalState, string | undefined>((state) => state.entities.general.config.SiteURL);
 
     // @ts-ignore
     const {formatText, messageHtmlToComponent} = window.PostUtils;
-
-    // Wrap code in markdown code fence for syntax highlighting
-    const markdownCode = '```' + (language || '') + '\n' + content + '\n```';
 
     const markdownOptions = {
         singleline: false,
@@ -191,14 +188,27 @@ const ArtifactCode = ({content, language, showCursor}: {content: string; languag
         inlinelatex: false,
     };
 
-    const formattedCode = messageHtmlToComponent(
-        formatText(markdownCode, markdownOptions),
-        messageHtmlToComponentOptions,
-    );
+    let formattedContent;
+
+    // For document types (markdown, text, html), render directly without code fence
+    // For code types, wrap in code fence for syntax highlighting
+    if (type === 'document') {
+        formattedContent = messageHtmlToComponent(
+            formatText(content, markdownOptions),
+            messageHtmlToComponentOptions,
+        );
+    } else {
+        // Wrap code in markdown code fence for syntax highlighting
+        const markdownCode = '```' + (language || '') + '\n' + content + '\n```';
+        formattedContent = messageHtmlToComponent(
+            formatText(markdownCode, markdownOptions),
+            messageHtmlToComponentOptions,
+        );
+    }
 
     return (
         <ArtifactContentWrapper>
-            {formattedCode}
+            {formattedContent}
             {showCursor && <StreamingCursor/>}
         </ArtifactContentWrapper>
     );
@@ -283,15 +293,20 @@ export const ArtifactViewer = ({artifacts, generatingArtifacts, streamingContent
 
             <ArtifactList isCollapsed={!shouldBeExpanded}>
                 {/* Show streaming artifact code if generating and we have content */}
-                {isStreaming && generatingArtifacts && generatingArtifacts.map((meta, index) => (
-                    <ArtifactCodeContainer key={`streaming-${index}`}>
-                        <ArtifactCode
-                            content={streamingContent || ''}
-                            language={meta.language}
-                            showCursor={true}
-                        />
-                    </ArtifactCodeContainer>
-                ))}
+                {isStreaming && generatingArtifacts && generatingArtifacts.map((meta, index) => {
+                    // Determine type from language during streaming (before backend sends full artifact)
+                    const streamingType = meta.language && ['markdown', 'md', 'text', 'txt', 'html'].includes(meta.language.toLowerCase()) ? 'document' : 'code';
+                    return (
+                        <ArtifactCodeContainer key={`streaming-${index}`}>
+                            <ArtifactCode
+                                content={streamingContent || ''}
+                                language={meta.language}
+                                type={streamingType}
+                                showCursor={true}
+                            />
+                        </ArtifactCodeContainer>
+                    );
+                })}
 
                 {/* Show loading card only if generating but no streaming content yet */}
                 {!isStreaming && generatingArtifacts && generatingArtifacts.map((meta, index) => {
@@ -321,6 +336,7 @@ export const ArtifactViewer = ({artifacts, generatingArtifacts, streamingContent
                         <ArtifactCode
                             content={artifact.content}
                             language={artifact.language}
+                            type={artifact.type}
                             showCursor={false}
                         />
                     </ArtifactCodeContainer>

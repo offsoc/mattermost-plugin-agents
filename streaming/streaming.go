@@ -536,10 +536,26 @@ func extractArtifactContent(text string) string {
 
 	content := text[contentStart:]
 
-	// Remove closing ``` if present (artifact is complete)
-	closingIndex := strings.LastIndex(content, "\n```")
-	if closingIndex != -1 {
-		content = content[:closingIndex]
+	// Check if artifact is complete by looking for closing fence
+	// Must be ``` followed by newline or end of string (not ```language)
+	// Search from the end to find the last occurrence
+	for i := len(content) - 3; i >= 0; i-- {
+		if i >= 1 && content[i-1] == '\n' && content[i] == '`' && content[i+1] == '`' && content[i+2] == '`' {
+			// Found \n``` - check what comes after
+			afterBackticks := i + 3
+			if afterBackticks >= len(content) {
+				// ``` is at the end - this is the closing fence
+				content = content[:i-1]
+				break
+			}
+			nextChar := content[afterBackticks]
+			if nextChar == '\n' || nextChar == '\r' {
+				// ``` followed by newline - this is the closing fence
+				content = content[:i-1]
+				break
+			}
+			// ``` followed by other characters (like ```javascript) - this is a nested code block, keep searching
+		}
 	}
 
 	return content
