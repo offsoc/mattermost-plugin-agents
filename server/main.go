@@ -203,6 +203,7 @@ func (p *Plugin) OnActivate() error {
 		streamingService,
 		i18nBundle,
 		mcpClientManager,
+		llmUpstreamHTTPClient,
 	)
 
 	// Keep only what we need

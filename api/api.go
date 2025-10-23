@@ -49,23 +49,24 @@ type MCPClientManager interface {
 
 // API represents the HTTP API functionality for the plugin
 type API struct {
-	bots                 *bots.MMBots
-	conversationsService *conversations.Conversations
-	meetingsService      *meetings.Service
-	indexerService       *indexer.Indexer
-	searchService        *search.Search
-	pluginAPI            *pluginapi.Client
-	metricsService       metrics.Metrics
-	metricsHandler       http.Handler
-	contextBuilder       *llmcontext.Builder
-	prompts              *llm.Prompts
-	config               Config
-	mmClient             mmapi.Client
-	dbClient             *mmapi.DBClient
-	licenseChecker       *enterprise.LicenseChecker
-	streamingService     streaming.Service
-	i18nBundle           *i18n.Bundle
-	mcpClientManager     MCPClientManager
+	bots                  *bots.MMBots
+	conversationsService  *conversations.Conversations
+	meetingsService       *meetings.Service
+	indexerService        *indexer.Indexer
+	searchService         *search.Search
+	pluginAPI             *pluginapi.Client
+	metricsService        metrics.Metrics
+	metricsHandler        http.Handler
+	contextBuilder        *llmcontext.Builder
+	prompts               *llm.Prompts
+	config                Config
+	mmClient              mmapi.Client
+	dbClient              *mmapi.DBClient
+	licenseChecker        *enterprise.LicenseChecker
+	streamingService      streaming.Service
+	i18nBundle            *i18n.Bundle
+	mcpClientManager      MCPClientManager
+	llmUpstreamHTTPClient *http.Client
 }
 
 // New creates a new API instance
@@ -86,25 +87,27 @@ func New(
 	streamingService streaming.Service,
 	i18nBundle *i18n.Bundle,
 	mcpClientManager MCPClientManager,
+	llmUpstreamHTTPClient *http.Client,
 ) *API {
 	return &API{
-		bots:                 bots,
-		conversationsService: conversationsService,
-		meetingsService:      meetingsService,
-		indexerService:       indexerService,
-		searchService:        searchService,
-		pluginAPI:            pluginAPI,
-		metricsService:       metricsService,
-		metricsHandler:       metrics.NewMetricsHandler(metricsService),
-		contextBuilder:       llmContextBuilder,
-		prompts:              prompts,
-		config:               config,
-		mmClient:             mmClient,
-		dbClient:             dbClient,
-		licenseChecker:       licenseChecker,
-		streamingService:     streamingService,
-		i18nBundle:           i18nBundle,
-		mcpClientManager:     mcpClientManager,
+		bots:                  bots,
+		conversationsService:  conversationsService,
+		meetingsService:       meetingsService,
+		indexerService:        indexerService,
+		searchService:         searchService,
+		pluginAPI:             pluginAPI,
+		metricsService:        metricsService,
+		metricsHandler:        metrics.NewMetricsHandler(metricsService),
+		contextBuilder:        llmContextBuilder,
+		prompts:               prompts,
+		config:                config,
+		mmClient:              mmClient,
+		dbClient:              dbClient,
+		licenseChecker:        licenseChecker,
+		streamingService:      streamingService,
+		i18nBundle:            i18nBundle,
+		mcpClientManager:      mcpClientManager,
+		llmUpstreamHTTPClient: llmUpstreamHTTPClient,
 	}
 }
 
@@ -148,6 +151,7 @@ func (a *API) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Reques
 	adminRouter.GET("/reindex/status", a.handleGetJobStatus)
 	adminRouter.POST("/reindex/cancel", a.handleCancelJob)
 	adminRouter.GET("/mcp/tools", a.handleGetMCPTools)
+	adminRouter.POST("/models/fetch", a.handleFetchModels)
 
 	searchRouter := botRequiredRouter.Group("/search")
 	// Only returns search results
@@ -313,4 +317,45 @@ func (a *API) handleGetAIBots(c *gin.Context) {
 		SearchEnabled:    searchEnabled,
 		AllowUnsafeLinks: a.config.AllowUnsafeLinks(),
 	})
+}
+
+type FetchModelsRequest struct {
+	ServiceType string `json:"serviceType"`
+	APIKey      string `json:"apiKey"`
+	APIURL      string `json:"apiURL"`
+}
+
+func (a *API) handleFetchModels(c *gin.Context) {
+	var req FetchModelsRequest
+	if err := c.BindJSON(&req); err != nil {
+		c.AbortWithError(http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err))
+		return
+	}
+
+	if req.ServiceType == "" {
+		c.AbortWithError(http.StatusBadRequest, fmt.Errorf("serviceType is required"))
+		return
+	}
+
+	if req.APIKey == "" {
+		c.AbortWithError(http.StatusBadRequest, fmt.Errorf("apiKey is required"))
+		return
+	}
+
+	fetcher := llm.NewModelFetcher(req.ServiceType, req.APIKey, req.APIURL, a.llmUpstreamHTTPClient)
+	if fetcher == nil {
+		c.AbortWithError(http.StatusBadRequest, fmt.Errorf("model fetching not supported for service type: %s", req.ServiceType))
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	defer cancel()
+
+	models, err := fetcher.FetchModels(ctx)
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("failed to fetch models: %w", err))
+		return
+	}
+
+	c.JSON(http.StatusOK, models)
 }
