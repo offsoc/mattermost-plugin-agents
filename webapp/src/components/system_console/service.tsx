@@ -7,12 +7,13 @@ import {useIntl} from 'react-intl';
 
 import {TrashCanOutlineIcon, ChevronDownIcon, ChevronUpIcon} from '@mattermost/compass-icons/components';
 
+import {Client4} from '@mattermost/client';
+
 import IconAI from '../assets/icon_ai';
 
 import {ButtonIcon} from '../assets/buttons';
 
 import {BooleanItem, ItemList, SelectionItem, SelectionItemOption, TextItem} from './item';
-import {Client4} from '@mattermost/client';
 
 const client = new Client4();
 
@@ -80,7 +81,7 @@ const ServiceFields = (props: ServiceFieldsProps) => {
             setModelsFetchError('');
 
             try {
-                const url = `${client.getPluginsRoute()}/ai/admin/models/fetch`;
+                const url = '/plugins/mattermost-ai/admin/models/fetch';
                 const response = await fetch(url, client.getOptions({
                     method: 'POST',
                     body: JSON.stringify({
@@ -199,11 +200,7 @@ const ServiceFields = (props: ServiceFieldsProps) => {
                     value={props.service.defaultModel}
                     onChange={(e) => props.onChange({...props.service, defaultModel: e.target.value})}
                     helptext={
-                        supportsModelFetching && loadingModels ?
-                            intl.formatMessage({defaultMessage: 'Loading models...'}) :
-                            supportsModelFetching && modelsFetchError ?
-                                modelsFetchError :
-                                undefined
+                        supportsModelFetching && loadingModels ? intl.formatMessage({defaultMessage: 'Loading models...'}) : supportsModelFetching && modelsFetchError ? modelsFetchError : undefined
                     }
                 />
             )}
