@@ -83,7 +83,7 @@ func determineArtifactType(language string) ArtifactType {
 	}
 
 	// Document types
-	if language == "markdown" || language == "md" || language == "text" || language == "html" {
+	if language == "markdown" || language == "md" || language == "text" || language == "txt" || language == "html" {
 		return ArtifactTypeDocument
 	}
 

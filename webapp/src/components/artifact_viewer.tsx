@@ -6,7 +6,7 @@ import styled from 'styled-components';
 import {useSelector} from 'react-redux';
 
 import {GlobalState} from '@mattermost/types/store';
-import {ChevronRightIcon, DownloadOutlineIcon, ContentCopyIcon} from '@mattermost/compass-icons/components';
+import {ChevronRightIcon, DownloadOutlineIcon, ContentCopyIcon, CodeTagsIcon, FileGenericOutlineIcon, ChartLineIcon} from '@mattermost/compass-icons/components';
 
 import {Artifact, ArtifactMetadata} from './llmbot_post';
 
@@ -240,24 +240,15 @@ export const ArtifactViewer = ({artifacts, generatingArtifacts, streamingContent
     };
 
     const getTypeIcon = (type: string) => {
-        const iconStyle = {
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: '20px',
-            height: '20px',
-            fontSize: '16px',
-        };
-
         switch (type) {
         case 'code':
-            return <span style={iconStyle}>{'</>'}</span>;
+            return <CodeTagsIcon size={18}/>;
         case 'diagram':
-            return <span style={iconStyle}>{'📊'}</span>;
+            return <ChartLineIcon size={18}/>;
         case 'document':
-            return <span style={iconStyle}>{'📄'}</span>;
+            return <FileGenericOutlineIcon size={18}/>;
         default:
-            return <span style={iconStyle}>{'</>'}</span>;
+            return <CodeTagsIcon size={18}/>;
         }
     };
 
@@ -275,7 +266,7 @@ export const ArtifactViewer = ({artifacts, generatingArtifacts, streamingContent
                     <ChevronIcon isExpanded={shouldBeExpanded}>
                         <ChevronRightIcon/>
                     </ChevronIcon>
-                    {firstArtifact ? getTypeIcon(firstArtifact.type) : <span style={{fontSize: '16px'}}>{'</>'}</span>}
+                    {firstArtifact ? getTypeIcon(firstArtifact.type) : <CodeTagsIcon size={18}/>}
                     <span>{badgeTitle}</span>
                 </ArtifactBadgeLeft>
                 {firstArtifact && (

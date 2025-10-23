@@ -121,6 +121,26 @@ type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
+// AIBotInfo represents information about an AI bot
+type AIBotInfo struct {
+	ID                 string                 `json:"id"`
+	DisplayName        string                 `json:"displayName"`
+	Username           string                 `json:"username"`
+	LastIconUpdate     int64                  `json:"lastIconUpdate"`
+	DMChannelID        string                 `json:"dmChannelID"`
+	ChannelAccessLevel llm.ChannelAccessLevel `json:"channelAccessLevel"`
+	ChannelIDs         []string               `json:"channelIDs"`
+	UserAccessLevel    llm.UserAccessLevel    `json:"userAccessLevel"`
+	UserIDs            []string               `json:"userIDs"`
+}
+
+// AIBotsResponse represents the response from the GetAIBots endpoint
+type AIBotsResponse struct {
+	Bots             []AIBotInfo `json:"bots"`
+	SearchEnabled    bool        `json:"searchEnabled"`
+	AllowUnsafeLinks bool        `json:"allowUnsafeLinks"`
+}
+
 // NewClient creates a new LLM Bridge API client using a PluginAPI interface
 //
 // Parameters:
@@ -345,15 +365,15 @@ func (c *Client) doStreamingRequest(url string, request CompletionRequest) (*llm
 	req.Header.Set("Accept", "text/event-stream")
 
 	// Make the request
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.httpClient.Do(req) //nolint:bodyclose // Body is closed in goroutine after streaming
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute request: %w", err)
 	}
 
 	// Check for error status codes
 	if resp.StatusCode != http.StatusOK {
+		defer resp.Body.Close()
 		respBody, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
 		if err != nil {
 			return nil, fmt.Errorf("request failed with status %d", resp.StatusCode)
 		}
@@ -420,4 +440,58 @@ func (c *Client) doStreamingRequest(url string, request CompletionRequest) (*llm
 	return &llm.TextStreamResult{
 		Stream: stream,
 	}, nil
+}
+
+// GetAIBots retrieves information about all available AI bots
+//
+// Returns a response containing the list of bots, search enablement status,
+// and unsafe links configuration.
+//
+// Example:
+//
+//	response, err := client.GetAIBots()
+//	if err != nil {
+//	    return err
+//	}
+//	for _, bot := range response.Bots {
+//	    fmt.Printf("Bot: %s (%s)\n", bot.DisplayName, bot.Username)
+//	}
+func (c *Client) GetAIBots() (*AIBotsResponse, error) {
+	url := fmt.Sprintf("/%s/api/v1/ai_bots", aiPluginID)
+
+	// Create the HTTP request
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Make the request
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read the response body
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	// Check for error status codes
+	if resp.StatusCode != http.StatusOK {
+		var errResp ErrorResponse
+		if err := json.Unmarshal(respBody, &errResp); err != nil {
+			return nil, fmt.Errorf("request failed with status %d: %s", resp.StatusCode, string(respBody))
+		}
+		return nil, fmt.Errorf("request failed with status %d: %s", resp.StatusCode, errResp.Error)
+	}
+
+	// Parse the success response
+	var botsResp AIBotsResponse
+	if err := json.Unmarshal(respBody, &botsResp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	return &botsResp, nil
 }

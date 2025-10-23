@@ -634,7 +634,7 @@ export const LLMBotPost = (props: Props) => {
                     )}
                 </>
             )}
-            {precontent && (
+            {precontent && artifacts.length === 0 && artifactsGenerating.length === 0 && (
                 <MinimalReasoningContainer>
                     <LoadingSpinner/>
                     <span>
