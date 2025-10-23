@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/mattermost/mattermost-plugin-ai/anthropic"
 	"github.com/mattermost/mattermost-plugin-ai/bots"
 	"github.com/mattermost/mattermost-plugin-ai/conversations"
 	"github.com/mattermost/mattermost-plugin-ai/enterprise"
@@ -342,16 +343,17 @@ func (a *API) handleFetchModels(c *gin.Context) {
 		return
 	}
 
-	fetcher := llm.NewModelFetcher(req.ServiceType, req.APIKey, req.APIURL, a.llmUpstreamHTTPClient)
-	if fetcher == nil {
+	var models []llm.ModelInfo
+	var err error
+
+	switch req.ServiceType {
+	case "anthropic":
+		models, err = anthropic.FetchModels(req.APIKey, a.llmUpstreamHTTPClient)
+	default:
 		c.AbortWithError(http.StatusBadRequest, fmt.Errorf("model fetching not supported for service type: %s", req.ServiceType))
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
-	defer cancel()
-
-	models, err := fetcher.FetchModels(ctx)
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("failed to fetch models: %w", err))
 		return
