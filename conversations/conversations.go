@@ -155,11 +155,24 @@ func (c *Conversations) ProcessUserRequest(bot *bots.Bot, postingUser *model.Use
 		c.contextBuilder.WithLLMContextDefaultTools(bot, mmapi.IsDMWith(bot.GetMMBot().UserId, channel)),
 	)
 
+	// Initialize fresh web search tracking for this request cycle
+	// Results from previous searches in the thread can still be referenced for context,
+	// but each user question gets a fresh budget of searches
+	if llmContext.Parameters == nil {
+		llmContext.Parameters = make(map[string]interface{})
+	}
+	llmContext.Parameters[mmtools.WebSearchCountKey] = 0
+	llmContext.Parameters[mmtools.WebSearchExecutedQueriesKey] = []string{}
+
 	// Check for auth errors in the tool store
 	if llmContext.Tools != nil {
 		authErrors := llmContext.Tools.GetAuthErrors()
 		if len(authErrors) > 0 {
-			c.sendOAuthNotifications(bot, postingUser.Id, channel.Id, post.Id, authErrors)
+			rootID := post.RootId
+			if rootID == "" {
+				rootID = post.Id
+			}
+			c.sendOAuthNotifications(bot, postingUser.Id, channel.Id, rootID, authErrors)
 		}
 	}
 

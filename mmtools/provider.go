@@ -103,7 +103,7 @@ func hasNativeWebSearch(bot *bots.Bot) bool {
 		return false
 	}
 
-	for _, tool := range bot.GetConfig().Service.EnabledNativeTools {
+	for _, tool := range bot.GetConfig().EnabledNativeTools {
 		if strings.EqualFold(tool, "web_search") {
 			return true
 		}

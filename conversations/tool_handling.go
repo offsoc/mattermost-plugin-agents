@@ -99,30 +99,12 @@ func (c *Conversations) unmarshalWebSearchContext(webSearchContextJSON string, p
 		}
 	}
 
-	// Reconstruct executed queries
-	if raw, ok := params[mmtools.WebSearchExecutedQueriesKey]; ok {
-		queriesBytes, marshalErr := json.Marshal(raw)
-		if marshalErr == nil {
-			var executedQueries []string
-			if unmarshalErr := json.Unmarshal(queriesBytes, &executedQueries); unmarshalErr == nil {
-				params[mmtools.WebSearchExecutedQueriesKey] = executedQueries
-				c.mmClient.LogDebug("Reconstructed executed queries", "post_id", postID, "num_queries", len(executedQueries))
-			}
-		}
-	}
-
-	// Reconstruct search count
-	if raw, ok := params[mmtools.WebSearchCountKey]; ok {
-		// Handle both float64 (from JSON unmarshaling) and int types
-		switch v := raw.(type) {
-		case float64:
-			params[mmtools.WebSearchCountKey] = int(v)
-			c.mmClient.LogDebug("Reconstructed search count from float64", "post_id", postID, "count", int(v))
-		case int:
-			params[mmtools.WebSearchCountKey] = v
-			c.mmClient.LogDebug("Reconstructed search count", "post_id", postID, "count", v)
-		}
-	}
+	// Reset search tracking for the new user request cycle
+	// The count and executed queries should start fresh for each user question,
+	// but we keep the search results and allowed URLs for context/citations
+	params[mmtools.WebSearchCountKey] = 0
+	params[mmtools.WebSearchExecutedQueriesKey] = []string{}
+	c.mmClient.LogDebug("Reset web search tracking for new request cycle", "post_id", postID)
 
 	return params
 }

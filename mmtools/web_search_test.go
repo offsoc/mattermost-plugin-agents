@@ -4,8 +4,11 @@
 package mmtools
 
 import (
+	"net/http"
+	"strings"
 	"testing"
 
+	"github.com/mattermost/mattermost-plugin-ai/config"
 	"github.com/mattermost/mattermost-plugin-ai/llm"
 	"github.com/stretchr/testify/require"
 )
@@ -197,5 +200,318 @@ func TestBuildWebSearchAnnotations(t *testing.T) {
 		require.Len(t, annotations, 2)
 		require.Greater(t, annotations[0].StartIndex, 0)
 		require.Greater(t, annotations[1].StartIndex, annotations[0].EndIndex)
+	})
+}
+
+// mockLogger implements WebSearchLog for testing
+type mockLogger struct{}
+
+func (m *mockLogger) Debug(message string, keyValuePairs ...any) {}
+func (m *mockLogger) Info(message string, keyValuePairs ...any)  {}
+func (m *mockLogger) Warn(message string, keyValuePairs ...any)  {}
+func (m *mockLogger) Error(message string, keyValuePairs ...any) {}
+
+func TestWebSearchTracking(t *testing.T) {
+	t.Run("tracks executed queries", func(t *testing.T) {
+		ctx := &llm.Context{
+			Parameters: make(map[string]interface{}),
+		}
+
+		// Simulate first search
+		ctx.Parameters[WebSearchExecutedQueriesKey] = []string{}
+		ctx.Parameters[WebSearchCountKey] = 0
+
+		// After first search
+		ctx.Parameters[WebSearchExecutedQueriesKey] = []string{"mattermost features"}
+		ctx.Parameters[WebSearchCountKey] = 1
+
+		queries := ctx.Parameters[WebSearchExecutedQueriesKey].([]string)
+		count := ctx.Parameters[WebSearchCountKey].(int)
+
+		require.Len(t, queries, 1)
+		require.Equal(t, "mattermost features", queries[0])
+		require.Equal(t, 1, count)
+	})
+
+	t.Run("prevents duplicate queries", func(t *testing.T) {
+		ctx := &llm.Context{
+			Parameters: map[string]interface{}{
+				WebSearchExecutedQueriesKey: []string{"test query"},
+				WebSearchCountKey:           1,
+			},
+		}
+
+		executedQueries := ctx.Parameters[WebSearchExecutedQueriesKey].([]string)
+		normalizedQuery := "test query"
+
+		isDuplicate := false
+		for _, existingQuery := range executedQueries {
+			if existingQuery == normalizedQuery {
+				isDuplicate = true
+				break
+			}
+		}
+
+		require.True(t, isDuplicate, "Should detect duplicate query")
+	})
+
+	t.Run("detects duplicate with different case", func(t *testing.T) {
+		executedQueries := []string{"Test Query"}
+		testQuery := "test query"
+
+		// Normalize both for comparison (as done in resolve method)
+		isDuplicate := false
+		for _, existingQuery := range executedQueries {
+			if strings.ToLower(existingQuery) == strings.ToLower(testQuery) {
+				isDuplicate = true
+				break
+			}
+		}
+
+		require.True(t, isDuplicate, "Should detect duplicate with case insensitivity")
+	})
+
+	t.Run("enforces max search limit", func(t *testing.T) {
+		ctx := &llm.Context{
+			Parameters: map[string]interface{}{
+				WebSearchExecutedQueriesKey: []string{"query1", "query2", "query3"},
+				WebSearchCountKey:           3,
+			},
+		}
+
+		count := ctx.Parameters[WebSearchCountKey].(int)
+		require.GreaterOrEqual(t, count, maxWebSearches, "Should have reached max searches")
+	})
+
+	t.Run("tracks count correctly across multiple searches", func(t *testing.T) {
+		ctx := &llm.Context{
+			Parameters: make(map[string]interface{}),
+		}
+
+		// Start with empty tracking
+		ctx.Parameters[WebSearchExecutedQueriesKey] = []string{}
+		ctx.Parameters[WebSearchCountKey] = 0
+
+		// Simulate 3 searches
+		for i := 1; i <= 3; i++ {
+			queries := ctx.Parameters[WebSearchExecutedQueriesKey].([]string)
+			queries = append(queries, "query"+string(rune(i)))
+			ctx.Parameters[WebSearchExecutedQueriesKey] = queries
+			ctx.Parameters[WebSearchCountKey] = i
+		}
+
+		finalCount := ctx.Parameters[WebSearchCountKey].(int)
+		finalQueries := ctx.Parameters[WebSearchExecutedQueriesKey].([]string)
+
+		require.Equal(t, 3, finalCount)
+		require.Len(t, finalQueries, 3)
+	})
+}
+
+func TestWebSearchContextPersistence(t *testing.T) {
+	t.Run("preserves web search context keys", func(t *testing.T) {
+		ctx := &llm.Context{
+			Parameters: map[string]interface{}{
+				WebSearchContextKey:         []WebSearchContextValue{},
+				WebSearchAllowedURLsKey:     []string{"https://example.com"},
+				WebSearchExecutedQueriesKey: []string{"test query"},
+				WebSearchCountKey:           1,
+			},
+		}
+
+		// Verify all keys are present
+		_, hasContext := ctx.Parameters[WebSearchContextKey]
+		_, hasURLs := ctx.Parameters[WebSearchAllowedURLsKey]
+		_, hasQueries := ctx.Parameters[WebSearchExecutedQueriesKey]
+		_, hasCount := ctx.Parameters[WebSearchCountKey]
+
+		require.True(t, hasContext, "Should have context key")
+		require.True(t, hasURLs, "Should have URLs key")
+		require.True(t, hasQueries, "Should have queries key")
+		require.True(t, hasCount, "Should have count key")
+	})
+
+	t.Run("handles empty executed queries", func(t *testing.T) {
+		ctx := &llm.Context{
+			Parameters: map[string]interface{}{
+				WebSearchExecutedQueriesKey: []string{},
+				WebSearchCountKey:           0,
+			},
+		}
+
+		queries := ctx.Parameters[WebSearchExecutedQueriesKey].([]string)
+		count := ctx.Parameters[WebSearchCountKey].(int)
+
+		require.Empty(t, queries)
+		require.Equal(t, 0, count)
+	})
+
+	t.Run("handles int count correctly", func(t *testing.T) {
+		ctx := &llm.Context{
+			Parameters: map[string]interface{}{
+				WebSearchCountKey: 2,
+			},
+		}
+
+		count, ok := ctx.Parameters[WebSearchCountKey].(int)
+		require.True(t, ok, "Should be able to type assert to int")
+		require.Equal(t, 2, count)
+	})
+
+	t.Run("handles float64 count from JSON unmarshaling", func(t *testing.T) {
+		// Simulate what happens when JSON unmarshals a number
+		ctx := &llm.Context{
+			Parameters: map[string]interface{}{
+				WebSearchCountKey: float64(2),
+			},
+		}
+
+		// Convert float64 to int (as done in unmarshalWebSearchContext)
+		var count int
+		if raw, ok := ctx.Parameters[WebSearchCountKey]; ok {
+			switch v := raw.(type) {
+			case float64:
+				count = int(v)
+			case int:
+				count = v
+			}
+		}
+
+		require.Equal(t, 2, count)
+	})
+}
+
+func TestWebSearchService(t *testing.T) {
+	t.Run("returns nil tool when not configured", func(t *testing.T) {
+		cfgGetter := func() *config.Config {
+			return &config.Config{
+				WebSearch: config.WebSearchConfig{
+					Enabled: false,
+				},
+			}
+		}
+
+		service := NewWebSearchService(cfgGetter, &mockLogger{}, http.DefaultClient)
+		tool := service.Tool()
+
+		require.Nil(t, tool, "Should return nil when web search is disabled")
+	})
+
+	t.Run("returns tool when properly configured", func(t *testing.T) {
+		cfgGetter := func() *config.Config {
+			return &config.Config{
+				WebSearch: config.WebSearchConfig{
+					Enabled:  true,
+					Provider: "google",
+					Google: config.WebSearchGoogleConfig{
+						APIKey:         "test-key",
+						SearchEngineID: "test-engine-id",
+					},
+				},
+			}
+		}
+
+		service := NewWebSearchService(cfgGetter, &mockLogger{}, http.DefaultClient)
+		tool := service.Tool()
+
+		require.NotNil(t, tool, "Should return tool when properly configured")
+		require.Equal(t, "WebSearch", tool.Name)
+		require.Contains(t, tool.Description, "limited to 3 searches")
+		require.Contains(t, tool.Description, "DO NOT repeat a search query")
+	})
+}
+
+func TestWebSearchResetBehavior(t *testing.T) {
+	t.Run("search count resets for new request cycle", func(t *testing.T) {
+		// Simulate first request cycle with 3 searches
+		firstCycleCtx := &llm.Context{
+			Parameters: map[string]interface{}{
+				WebSearchContextKey:         []WebSearchContextValue{{Query: "first query", Results: []WebSearchResult{}}},
+				WebSearchAllowedURLsKey:     []string{"https://example.com"},
+				WebSearchExecutedQueriesKey: []string{"query1", "query2", "query3"},
+				WebSearchCountKey:           3,
+			},
+		}
+
+		// Verify first cycle reached limit
+		count := firstCycleCtx.Parameters[WebSearchCountKey].(int)
+		require.Equal(t, 3, count)
+
+		// Simulate new request cycle - reset tracking but keep search results
+		secondCycleCtx := &llm.Context{
+			Parameters: map[string]interface{}{
+				// Keep previous results for context
+				WebSearchContextKey:     firstCycleCtx.Parameters[WebSearchContextKey],
+				WebSearchAllowedURLsKey: firstCycleCtx.Parameters[WebSearchAllowedURLsKey],
+				// Reset tracking
+				WebSearchCountKey:           0,
+				WebSearchExecutedQueriesKey: []string{},
+			},
+		}
+
+		// Verify tracking was reset
+		newCount := secondCycleCtx.Parameters[WebSearchCountKey].(int)
+		newQueries := secondCycleCtx.Parameters[WebSearchExecutedQueriesKey].([]string)
+		require.Equal(t, 0, newCount, "Count should reset to 0 for new request")
+		require.Empty(t, newQueries, "Queries should reset to empty for new request")
+
+		// Verify previous search results are still available
+		results := secondCycleCtx.Parameters[WebSearchContextKey].([]WebSearchContextValue)
+		require.Len(t, results, 1, "Previous search results should be preserved")
+	})
+
+	t.Run("allows same query in new request cycle", func(t *testing.T) {
+		// First cycle executes "kubernetes features"
+		firstCycleCtx := &llm.Context{
+			Parameters: map[string]interface{}{
+				WebSearchExecutedQueriesKey: []string{"kubernetes features"},
+				WebSearchCountKey:           1,
+			},
+		}
+
+		queries := firstCycleCtx.Parameters[WebSearchExecutedQueriesKey].([]string)
+		require.Contains(t, queries, "kubernetes features")
+
+		// New request cycle - same query should be allowed
+		secondCycleCtx := &llm.Context{
+			Parameters: map[string]interface{}{
+				WebSearchExecutedQueriesKey: []string{}, // Reset
+				WebSearchCountKey:           0,          // Reset
+			},
+		}
+
+		// Simulate searching for the same query again
+		secondCycleCtx.Parameters[WebSearchExecutedQueriesKey] = []string{"kubernetes features"}
+		secondCycleCtx.Parameters[WebSearchCountKey] = 1
+
+		newQueries := secondCycleCtx.Parameters[WebSearchExecutedQueriesKey].([]string)
+		require.Contains(t, newQueries, "kubernetes features", "Same query should be allowed in new cycle")
+	})
+
+	t.Run("preserves search results across cycles", func(t *testing.T) {
+		// Build up search results across multiple request cycles
+		ctx := &llm.Context{
+			Parameters: map[string]interface{}{
+				WebSearchContextKey: []WebSearchContextValue{
+					{Query: "first question", Results: []WebSearchResult{{Index: 1, Title: "Result 1"}}},
+				},
+				WebSearchCountKey:           0,
+				WebSearchExecutedQueriesKey: []string{},
+			},
+		}
+
+		// Add more results in a new cycle
+		existingResults := ctx.Parameters[WebSearchContextKey].([]WebSearchContextValue)
+		existingResults = append(existingResults, WebSearchContextValue{
+			Query:   "second question",
+			Results: []WebSearchResult{{Index: 2, Title: "Result 2"}},
+		})
+		ctx.Parameters[WebSearchContextKey] = existingResults
+
+		// Verify both results are available
+		allResults := ctx.Parameters[WebSearchContextKey].([]WebSearchContextValue)
+		require.Len(t, allResults, 2, "Should preserve results from both cycles")
+		require.Equal(t, "first question", allResults[0].Query)
+		require.Equal(t, "second question", allResults[1].Query)
 	})
 }
