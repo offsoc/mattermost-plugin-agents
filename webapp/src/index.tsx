@@ -19,7 +19,8 @@ import IconThreadSummarization from './components/assets/icon_thread_summarizati
 import IconReactForMe from './components/assets/icon_react_for_me';
 import RHS from './components/rhs/rhs';
 import Config from './components/system_console/config';
-import {doReaction, doRunSearch, doThreadAnalysis, getAIDirectChannel} from './client';
+import {setSiteURL, doReaction, doRunSearch, doThreadAnalysis, getAIDirectChannel} from './client';
+
 import {setOpenRHSAction} from './redux_actions';
 import PostEventListener from './websocket';
 import {BotsHandler, setupRedux} from './redux';
@@ -57,10 +58,23 @@ const RHSTitle = () => {
 
 export default class Plugin {
     postEventListener: PostEventListener = new PostEventListener();
+    private store: WebappStore | null = null;
+    private static readonly BOT_REPLY_DEBOUNCE_TIMEOUT_MS = 1000;
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
     public async initialize(registry: any, store: WebappStore) {
         setupRedux(registry, store);
+        this.store = store;
+
+        let siteURL = store.getState().entities.general.config.SiteURL;
+
+        // Site URL should always be set by this point if the workspace is to be properly functional, but fall back to the window.location.origin just in case
+        if (!siteURL) {
+            siteURL = window.location.origin;
+        }
+        setSiteURL(siteURL);
+
+        registry.registerDesktopNotificationHook(this.blockFastBotNotifications.bind(this));
 
         registry.registerTranslations((locale: string) => {
             try {
@@ -190,6 +204,43 @@ export default class Plugin {
                 },
             });
         }
+    }
+
+    private async blockFastBotNotifications(
+        post: any,
+        msgProps: any,
+        channel: any,
+        teamId: string,
+        args: any,
+    ): Promise<{args?: any; error?: string}> {
+        if (!post || !post.user_id) {
+            return {args};
+        }
+
+        // Only handle threaded posts from bots
+        if (!post.root_id || post.props?.from_bot !== 'true') {
+            return {args};
+        }
+
+        if (!this.store) {
+            return {args};
+        }
+
+        const state = this.store.getState();
+        const parentPost = state.entities.posts.posts[post.root_id];
+        if (!parentPost) {
+            return {args};
+        }
+
+        // Block notifications created within DEBOUNCE_TIMEOUT of parent
+        const now = Date.now();
+        const timeSinceParentPost = now - parentPost.create_at;
+        const currentUserId = state.entities.users.currentUserId;
+        if (parentPost.user_id === currentUserId && timeSinceParentPost < Plugin.BOT_REPLY_DEBOUNCE_TIMEOUT_MS) {
+            return {args: {...args, notify: false}};
+        }
+
+        return {args};
     }
 }
 
