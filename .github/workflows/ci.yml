@@ -112,9 +112,34 @@ jobs:
           AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
           AZURE_OPENAI_MODEL: ${{ vars.AZURE_OPENAI_MODEL || 'gpt-4o' }}
         run: |
-          make evals-comment > eval_output.txt 2>&1 || true
-          # Extract just the GitHub comment from the output
-          sed -n '/^=\+$/,/^=\+$/{ /^=\+$/d; p; }' eval_output.txt | tail -n +2 | head -n -1 > comment.md
+          echo "Running evaluations for ${{ matrix.provider.display_name }}..."
+
+          # Run evals - evalviewer writes directly to comment.md
+          make evals-comment 2>&1 || true
+
+          # Debug: Check what files were created
+          echo "=== Files created ==="
+          ls -lah evals.jsonl comment.md 2>/dev/null || echo "Some files missing"
+
+          if [ -f evals.jsonl ]; then
+            echo "✓ evals.jsonl: $(wc -l < evals.jsonl) lines"
+          else
+            echo "✗ evals.jsonl not found - tests may not have run"
+            echo "  This usually means:"
+            echo "  - Tests were skipped (check for 'Skipping evals' in output above)"
+            echo "  - API keys are missing or invalid"
+            echo "  - Test execution failed early"
+          fi
+
+          if [ -f comment.md ]; then
+            if [ -s comment.md ]; then
+              echo "✓ comment.md: $(wc -l < comment.md) lines"
+            else
+              echo "⚠ comment.md is empty"
+            fi
+          else
+            echo "✗ comment.md not found"
+          fi
 
           # Save provider name for aggregation
           echo "${{ matrix.provider.display_name }}" > provider_name.txt

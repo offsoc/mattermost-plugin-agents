@@ -93,7 +93,7 @@ All arguments after 'check' are passed directly to 'go test'.`,
 comment with the results. This command always exits with status code 0 (success) regardless
 of test results, making it suitable for posting results as PR comments in CI.
 
-The output is formatted as Markdown suitable for posting as a GitHub comment.
+The output is written to comment.md in the current directory.
 
 All arguments after 'comment' are passed directly to 'go test'.`,
 		Example: `  evalviewer comment ./conversations         # Run and generate comment for conversations
@@ -271,6 +271,11 @@ func commentCommand(args []string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "\nError finding evals.jsonl: %v\n", err)
 		fmt.Println("No evaluation results found to generate comment.")
+
+		// Write empty comment to file
+		if err := os.WriteFile("comment.md", []byte(""), 0644); err != nil {
+			fmt.Fprintf(os.Stderr, "Error writing comment.md: %v\n", err)
+		}
 		// Exit with success - we want the CI job to pass
 		os.Exit(0)
 	}
@@ -279,17 +284,25 @@ func commentCommand(args []string) {
 	results, err := loadResults(evalFile, false)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading results: %v\n", err)
+
+		// Write empty comment to file
+		if err := os.WriteFile("comment.md", []byte(""), 0644); err != nil {
+			fmt.Fprintf(os.Stderr, "Error writing comment.md: %v\n", err)
+		}
 		// Exit with success - we want the CI job to pass
 		os.Exit(0)
 	}
 
-	// Generate and print GitHub comment
+	// Generate GitHub comment
 	comment := generateGitHubComment(results)
-	fmt.Println("\n" + strings.Repeat("=", 80))
-	fmt.Println("GITHUB COMMENT OUTPUT:")
-	fmt.Println(strings.Repeat("=", 80))
-	fmt.Println(comment)
-	fmt.Println(strings.Repeat("=", 80))
+
+	// Write to file
+	if err := os.WriteFile("comment.md", []byte(comment), 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "Error writing comment.md: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("\n✓ Generated comment (%d lines) → comment.md\n", len(strings.Split(comment, "\n")))
 
 	// Always exit with success
 	os.Exit(0)
