@@ -511,12 +511,6 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 	// Track full message text to clean citations at the end
 	var fullMessageText strings.Builder
 
-	// Track annotations/citations
-	var annotations []llm.Annotation
-
-	// Track full message text to clean citations at the end
-	var fullMessageText strings.Builder
-
 	// Define handleToolCalls as a closure to access local variables
 	handleToolCalls := func() {
 		// Verify OpenAI functions are not recursing too deep.

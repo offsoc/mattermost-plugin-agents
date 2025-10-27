@@ -29,9 +29,14 @@ const (
 	WebSearchContextKey = "mm_web_search_results"
 	// WebSearchAllowedURLsKey is the key used to store whitelisted URLs for source fetching
 	WebSearchAllowedURLsKey = "mm_web_search_allowed_urls"
+	// WebSearchExecutedQueriesKey is the key used to track which queries have been executed
+	WebSearchExecutedQueriesKey = "mm_web_search_executed_queries"
+	// WebSearchCountKey is the key used to track the number of searches executed
+	WebSearchCountKey = "mm_web_search_count"
 
 	defaultGoogleSearchEndpoint = "https://www.googleapis.com/customsearch/v1"
 	minQueryLength              = 3
+	maxWebSearches              = 3
 	WebSearchDescription        = "Perform a live web search using Google's Custom Search API. Use this tool to retrieve current information. Keep your search queries generic and concise according to the user's ask. Do not pass this tool URLs. In your final answer, cite sources using the exact format !!CITE1!!, !!CITE2!!, etc. These markers will be automatically converted to clickable citation links. Do NOT include URLs directly in your response text. Do not repeat the same search query multiple times."
 	// WebSearchSourceFetchDescription describes the page retrieval tool.
 	WebSearchSourceFetchDescription = "Fetch the full HTML content at a given URL and convert it to plain text for analysis. Use this tool to fetch more content from a web search result. You can ONLY fetch URLs that were returned in search results. Responses from this tool should be scrutinized for relevance, as some fetches may return generic pages as they don't allow AI Agents to access them. YOU MUST NOT USE THIS TOOL FOR MORE THAN 3 TIMES PER USER REQUEST."
@@ -95,7 +100,7 @@ func NewWebSearchService(cfgGetter func() *config.Config, logger WebSearchLog, h
 
 	service.tool = &llm.Tool{
 		Name:        "WebSearch",
-		Description: "Perform a live web search using Google's Custom Search API. Use this tool to retrieve current information. Keep your search queries generic and concise according to the user's ask. Do not pass this tool URLs. In your final answer, cite sources using the exact format !!CITE1!!, !!CITE2!!, etc. These markers will be automatically converted to clickable citation links. Do NOT include URLs directly in your response text. Instead of creating a new search, refer to previous 'Live web search results' - only create a new search if the previous results are not relevant.",
+		Description: "Perform a live web search using Google's Custom Search API. Use this tool to retrieve current information. Keep your search queries generic and concise according to the user's ask. Do not pass this tool URLs. You are limited to 3 searches per conversation - use them wisely. DO NOT repeat a search query you have already executed. In your final answer, cite sources using the exact format !!CITE1!!, !!CITE2!!, etc. These markers will be automatically converted to clickable citation links. Do NOT include URLs directly in your response text. Instead of creating a new search, refer to previous 'Live web search results' - only create a new search if the previous results are not relevant.",
 		Schema:      llm.NewJSONSchemaFromStruct[WebSearchToolArgs](),
 		Resolver:    service.resolve,
 	}
@@ -203,13 +208,65 @@ func (s *webSearchService) resolve(llmContext *llm.Context, argsGetter llm.ToolA
 		}
 	}
 
+	// Check search count limit
+	searchCount := 0
+	if llmContext != nil && llmContext.Parameters != nil {
+		if raw, ok := llmContext.Parameters[WebSearchCountKey]; ok {
+			if count, ok := raw.(int); ok {
+				searchCount = count
+			}
+		}
+	}
+
+	if searchCount >= maxWebSearches {
+		s.logWarn("web search limit reached", "count", searchCount, "max", maxWebSearches, "query", query)
+		return fmt.Sprintf("You have reached the maximum of %d web searches for this conversation. Please answer the user's question to the best of your ability using the information you've already gathered from previous searches. If you don't have enough information, acknowledge this limitation to the user and explain what information you were able to find.", maxWebSearches), nil
+	}
+
+	// Check for duplicate queries (normalize by lowercasing and trimming)
+	normalizedQuery := strings.ToLower(strings.TrimSpace(query))
+	var executedQueries []string
+	if llmContext != nil && llmContext.Parameters != nil {
+		if raw, ok := llmContext.Parameters[WebSearchExecutedQueriesKey]; ok {
+			if queries, ok := raw.([]string); ok {
+				executedQueries = queries
+			}
+		}
+	}
+
+	for _, existingQuery := range executedQueries {
+		if strings.ToLower(strings.TrimSpace(existingQuery)) == normalizedQuery {
+			s.logWarn("duplicate web search query detected", "query", query)
+			return fmt.Sprintf("You have already searched for \"%s\". Please refer to the previous search results or try a different search query if you need additional information.", query), nil
+		}
+	}
+
 	results, err := s.googleSearch(llmContext, query, webCfg.Google, webCfg.Google.ResultLimit)
 	if err != nil {
 		return "unable to perform web search", err
 	}
 
+	// Track executed query and increment search count even if no results found
+	// This prevents the LLM from retrying the same unsuccessful query
+	if llmContext.Parameters == nil {
+		llmContext.Parameters = map[string]interface{}{}
+	}
+	executedQueries = append(executedQueries, query)
+	llmContext.Parameters[WebSearchExecutedQueriesKey] = executedQueries
+	searchCount++
+	llmContext.Parameters[WebSearchCountKey] = searchCount
+
 	if len(results) == 0 {
-		return fmt.Sprintf("No web results found for \"%s\"", query), nil
+		remainingSearches := maxWebSearches - searchCount
+		var noResultsMsg strings.Builder
+		noResultsMsg.WriteString(fmt.Sprintf("No web results found for \"%s\".\n", query))
+		noResultsMsg.WriteString(fmt.Sprintf("(Search %d of %d - %d searches remaining)\n", searchCount, maxWebSearches, remainingSearches))
+		if remainingSearches > 0 {
+			noResultsMsg.WriteString("Try a different search query with different keywords.")
+		} else {
+			noResultsMsg.WriteString("This was your final search. Please answer the user's question with the information you've gathered from previous searches.")
+		}
+		return noResultsMsg.String(), nil
 	}
 
 	// Persist results into the LLM context for later processing (annotations, UI rendering)
@@ -248,17 +305,24 @@ func (s *webSearchService) resolve(llmContext *llm.Context, argsGetter llm.ToolA
 	llmContext.Parameters[WebSearchAllowedURLsKey] = allowedURLs
 	s.logDebug("Updated allowed URLs whitelist", "num_allowed", len(allowedURLs))
 
+	// Track executed query and increment search count
+	executedQueries = append(executedQueries, query)
+	llmContext.Parameters[WebSearchExecutedQueriesKey] = executedQueries
+	searchCount++
+	llmContext.Parameters[WebSearchCountKey] = searchCount
+	s.logDebug("Updated search tracking", "query", query, "count", searchCount, "max", maxWebSearches)
+
 	if len(previousParameters) > 0 {
 		// Restore any other parameters to their previous values
 		for k, v := range previousParameters {
-			if k == WebSearchContextKey || k == WebSearchAllowedURLsKey {
+			if k == WebSearchContextKey || k == WebSearchAllowedURLsKey || k == WebSearchExecutedQueriesKey || k == WebSearchCountKey {
 				continue
 			}
 			llmContext.Parameters[k] = v
 		}
 
 		for k := range llmContext.Parameters {
-			if k == WebSearchContextKey || k == WebSearchAllowedURLsKey {
+			if k == WebSearchContextKey || k == WebSearchAllowedURLsKey || k == WebSearchExecutedQueriesKey || k == WebSearchCountKey {
 				continue
 			}
 			if _, ok := previousParameters[k]; !ok {
@@ -269,6 +333,8 @@ func (s *webSearchService) resolve(llmContext *llm.Context, argsGetter llm.ToolA
 
 	var builder strings.Builder
 	builder.WriteString(fmt.Sprintf("Live web search results for \"%s\":\n", query))
+	remainingSearches := maxWebSearches - searchCount
+	builder.WriteString(fmt.Sprintf("(Search %d of %d - %d searches remaining)\n", searchCount, maxWebSearches, remainingSearches))
 	builder.WriteString("IMPORTANT: When citing these sources, use the exact format !!CITE1!!, !!CITE2!!, etc. Do NOT write URLs in your response.\n\n")
 	for _, result := range results {
 		builder.WriteString(fmt.Sprintf("[%d] %s\n", result.Index, result.Title))
@@ -277,6 +343,10 @@ func (s *webSearchService) resolve(llmContext *llm.Context, argsGetter llm.ToolA
 			builder.WriteString(fmt.Sprintf("Snippet: %s\n", result.Snippet))
 		}
 		builder.WriteString("\n")
+	}
+
+	if remainingSearches == 0 {
+		builder.WriteString("\nWARNING: This was your final search. You must now answer the user's question with the information gathered. If you don't have sufficient information, acknowledge this to the user.\n")
 	}
 
 	return builder.String(), nil
