@@ -75,9 +75,35 @@ jobs:
         run: |
           make test
 
-  evals-openai:
+  evals:
     runs-on: ubuntu-latest
-    continue-on-error: true
+    if: github.event_name == 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        provider:
+          - name: openai
+            display_name: OpenAI
+            env:
+              LLM_PROVIDER: openai
+              OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+              OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-4o' }}
+          - name: anthropic
+            display_name: Anthropic
+            env:
+              LLM_PROVIDER: anthropic
+              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+              ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514' }}
+              OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          - name: azure
+            display_name: Azure OpenAI
+            env:
+              LLM_PROVIDER: azure
+              AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+              AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+              AZURE_OPENAI_MODEL: ${{ vars.AZURE_OPENAI_MODEL || 'gpt-4o' }}
+              OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    name: evals-${{ matrix.provider.name }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -86,75 +112,48 @@ jobs:
         with:
           go-version-file: 'go.mod'
 
-      - name: Run OpenAI evaluations
-        env:
-          LLM_PROVIDER: openai
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-4o' }}
+      - name: Run ${{ matrix.provider.display_name }} evaluations
+        id: run-evals
+        env: ${{ matrix.provider.env }}
         run: |
-          make evals-ci
+          make evals-comment > eval_output.txt 2>&1 || true
+          # Extract just the GitHub comment from the output
+          sed -n '/^=\+$/,/^=\+$/{ /^=\+$/d; p; }' eval_output.txt | tail -n +2 | head -n -1 > comment.md
 
-      - uses: actions/upload-artifact@v4
+          # Save provider name for aggregation
+          echo "${{ matrix.provider.display_name }}" > provider_name.txt
+
+      - name: Upload evaluation results
         if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: eval-results-openai
-          path: evals.jsonl
+          name: eval-results-${{ matrix.provider.name }}
+          path: |
+            evals.jsonl
+            comment.md
+            provider_name.txt
           retention-days: 30
 
-  evals-anthropic:
+  evals-comment:
     runs-on: ubuntu-latest
-    continue-on-error: true
+    needs: evals
+    if: always() && github.event_name == 'pull_request'
+    permissions:
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-go@v4
-        with:
-          go-version-file: 'go.mod'
 
-      - name: Run Anthropic evaluations
-        env:
-          LLM_PROVIDER: anthropic
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514' }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          make evals-ci
-
-      - uses: actions/upload-artifact@v4
-        if: always()
+      - name: Download all evaluation results
+        uses: actions/download-artifact@v4
         with:
-          name: eval-results-anthropic
-          path: evals.jsonl
-          retention-days: 30
+          path: eval-results
 
-  evals-azure:
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
+      - name: Aggregate results and post comment
+        uses: actions/github-script@v7
         with:
-          fetch-depth: 0
-      - uses: actions/setup-go@v4
-        with:
-          go-version-file: 'go.mod'
-
-      - name: Run Azure OpenAI evaluations
-        env:
-          LLM_PROVIDER: azure
-          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
-          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
-          AZURE_OPENAI_MODEL: ${{ vars.AZURE_OPENAI_MODEL || 'gpt-4o' }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          make evals-ci
-
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: eval-results-azure
-          path: evals.jsonl
-          retention-days: 30
+          script: |
+            const script = require('./.github/scripts/aggregate-eval-results.js');
+            await script.aggregateAndPostResults(github, context);
 
   lint:
     runs-on: ubuntu-latest

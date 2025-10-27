@@ -332,6 +332,13 @@ evals-ci: evalviewer
 	@echo Running evaluations in CI mode...
 	./bin/evalviewer check -v ./conversations ./threads ./channels ./react
 
+## Runs evaluations and generates GitHub comment (always succeeds).
+## Uses the same environment variables as the evals target.
+.PHONY: evals-comment
+evals-comment: evalviewer
+	@echo Running evaluations and generating GitHub comment...
+	./bin/evalviewer comment -v ./conversations ./threads ./channels ./react
+
 ## Builds and installs the plugin to a server, updating the webapp automatically when changed.
 .PHONY: watch
 watch: apply server bundle

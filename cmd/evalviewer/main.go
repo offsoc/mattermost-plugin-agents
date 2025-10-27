@@ -86,6 +86,25 @@ All arguments after 'check' are passed directly to 'go test'.`,
 		},
 	}
 
+	var commentCmd = &cobra.Command{
+		Use:   "comment [go test flags and args]",
+		Short: "Run eval tests and generate GitHub comment (CI-friendly)",
+		Long: `Run go test with GOEVALS=1 environment variable set, then generate a GitHub-formatted
+comment with the results. This command always exits with status code 0 (success) regardless
+of test results, making it suitable for posting results as PR comments in CI.
+
+The output is formatted as Markdown suitable for posting as a GitHub comment.
+
+All arguments after 'comment' are passed directly to 'go test'.`,
+		Example: `  evalviewer comment ./conversations         # Run and generate comment for conversations
+  evalviewer comment ./...                   # Run and generate comment for all evals
+  evalviewer comment -v ./...                # Run with verbose output`,
+		DisableFlagParsing: true,
+		Run: func(cmd *cobra.Command, args []string) {
+			commentCommand(args)
+		},
+	}
+
 	// Add flags to view command
 	viewCmd.Flags().StringVarP(&filename, "file", "f", "evals.jsonl", "Path to the evals.jsonl file")
 	viewCmd.Flags().BoolVar(&showOnlyFailures, "failures-only", false, "Show only failed evaluations")
@@ -94,6 +113,7 @@ All arguments after 'check' are passed directly to 'go test'.`,
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(viewCmd)
 	rootCmd.AddCommand(checkCmd)
+	rootCmd.AddCommand(commentCmd)
 
 	// Execute
 	if err := rootCmd.Execute(); err != nil {
@@ -223,6 +243,162 @@ func checkCommand(args []string) {
 	if hasFailures || testErr != nil {
 		os.Exit(1)
 	}
+}
+
+func commentCommand(args []string) {
+	// Clean up old results
+	if err := cleanupOldResults(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to clean old results: %v\n", err)
+	}
+
+	// Execute go test with GOEVALS=1
+	fmt.Println("Running evaluations...")
+
+	// Prepare go test command
+	cmdArgs := []string{"test"}
+	cmdArgs = append(cmdArgs, args...)
+
+	cmd := exec.Command("go", cmdArgs...)
+	cmd.Env = append(os.Environ(), "GOEVALS=1")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	// Run command and show output
+	_ = cmd.Run() // Ignore test errors - we want to generate comment regardless
+
+	// Find and check results
+	evalFile, err := findEvalsFile()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "\nError finding evals.jsonl: %v\n", err)
+		fmt.Println("No evaluation results found to generate comment.")
+		// Exit with success - we want the CI job to pass
+		os.Exit(0)
+	}
+
+	// Load and check results
+	results, err := loadResults(evalFile, false)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading results: %v\n", err)
+		// Exit with success - we want the CI job to pass
+		os.Exit(0)
+	}
+
+	// Generate and print GitHub comment
+	comment := generateGitHubComment(results)
+	fmt.Println("\n" + strings.Repeat("=", 80))
+	fmt.Println("GITHUB COMMENT OUTPUT:")
+	fmt.Println(strings.Repeat("=", 80))
+	fmt.Println(comment)
+	fmt.Println(strings.Repeat("=", 80))
+
+	// Always exit with success
+	os.Exit(0)
+}
+
+func generateGitHubComment(results []EvalLogLine) string {
+	if len(results) == 0 {
+		return "## Evaluation Results\n\n⚠️ No evaluation results found."
+	}
+
+	var sb strings.Builder
+
+	// Header
+	sb.WriteString("## 🤖 LLM Evaluation Results\n\n")
+
+	// Group results by provider
+	providerStats := make(map[string]struct {
+		passed   int
+		failed   int
+		failures []EvalLogLine
+	})
+
+	totalPassed := 0
+	totalFailed := 0
+
+	for _, result := range results {
+		// Extract provider from test name (format: "ParentTest/[provider] test name")
+		provider := "unknown"
+		// Look for [provider] pattern anywhere in the name
+		startIdx := strings.Index(result.Name, "[")
+		if startIdx >= 0 {
+			endIdx := strings.Index(result.Name[startIdx:], "]")
+			if endIdx > 0 {
+				provider = result.Name[startIdx+1 : startIdx+endIdx]
+			}
+		}
+
+		stats := providerStats[provider]
+		if result.Pass {
+			stats.passed++
+			totalPassed++
+		} else {
+			stats.failed++
+			totalFailed++
+			stats.failures = append(stats.failures, result)
+		}
+		providerStats[provider] = stats
+	}
+
+	// Overall summary
+	total := totalPassed + totalFailed
+	passRate := float64(totalPassed) / float64(total) * 100
+
+	statusEmoji := "✅"
+	if totalFailed > 0 {
+		statusEmoji = "⚠️"
+	}
+
+	sb.WriteString(fmt.Sprintf("%s **Overall: %d/%d tests passed (%.1f%%)**\n\n", statusEmoji, totalPassed, total, passRate))
+
+	// Per-provider summary table
+	sb.WriteString("### Results by Provider\n\n")
+	sb.WriteString("| Provider | Total | Passed | Failed | Pass Rate |\n")
+	sb.WriteString("|----------|-------|--------|--------|----------|\n")
+
+	for provider, stats := range providerStats {
+		total := stats.passed + stats.failed
+		passRate := float64(stats.passed) / float64(total) * 100
+		emoji := "✅"
+		if stats.failed > 0 {
+			emoji = "⚠️"
+		}
+		sb.WriteString(fmt.Sprintf("| %s %s | %d | %d | %d | %.1f%% |\n",
+			emoji, strings.ToUpper(provider), total, stats.passed, stats.failed, passRate))
+	}
+
+	// Failures section
+	if totalFailed > 0 {
+		sb.WriteString("\n### ❌ Failed Evaluations\n\n")
+		sb.WriteString("<details>\n")
+		sb.WriteString(fmt.Sprintf("<summary>Show %d failures</summary>\n\n", totalFailed))
+
+		failureNum := 1
+		for provider, stats := range providerStats {
+			if len(stats.failures) > 0 {
+				sb.WriteString(fmt.Sprintf("\n#### %s\n\n", strings.ToUpper(provider)))
+				for _, failure := range stats.failures {
+					sb.WriteString(fmt.Sprintf("**%d. %s**\n\n", failureNum, failure.Name))
+					sb.WriteString(fmt.Sprintf("- **Score:** %.2f\n", failure.Score))
+					if failure.Rubric != "" {
+						sb.WriteString(fmt.Sprintf("- **Rubric:** %s\n", truncateString(failure.Rubric, 150)))
+					}
+					if failure.Reasoning != "" {
+						sb.WriteString(fmt.Sprintf("- **Reason:** %s\n", truncateString(failure.Reasoning, 300)))
+					}
+					sb.WriteString("\n")
+					failureNum++
+				}
+			}
+		}
+
+		sb.WriteString("</details>\n")
+	}
+
+	// Footer
+	sb.WriteString("\n---\n")
+	sb.WriteString("*This comment was automatically generated by the eval CI pipeline.*\n")
+
+	return sb.String()
 }
 
 func printSummary(results []EvalLogLine) {

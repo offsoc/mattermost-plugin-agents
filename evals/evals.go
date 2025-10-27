@@ -81,6 +81,18 @@ func getProviderConfig(providerName string) (ProviderConfig, error) {
 			return config, errors.New("AZURE_OPENAI_ENDPOINT environment variable is not set")
 		}
 
+	case "openaicompatible":
+		config.APIKey = os.Getenv("OPENAI_COMPATIBLE_API_KEY")
+		config.APIURL = os.Getenv("OPENAI_COMPATIBLE_API_URL")
+		config.Model = os.Getenv("OPENAI_COMPATIBLE_MODEL")
+		if config.Model == "" {
+			return config, errors.New("OPENAI_COMPATIBLE_MODEL environment variable is not set")
+		}
+		if config.APIURL == "" {
+			return config, errors.New("OPENAI_COMPATIBLE_API_URL environment variable is not set")
+		}
+		// API key is optional for local LLMs
+
 	default:
 		return config, fmt.Errorf("unknown provider: %s", providerName)
 	}
@@ -123,6 +135,18 @@ func createProvider(providerName string, config ProviderConfig) (llm.LanguageMod
 		}, httpClient)
 		if provider == nil {
 			return nil, errors.New("failed to create Azure OpenAI provider")
+		}
+		return provider, nil
+
+	case "openaicompatible":
+		provider := openai.NewCompatible(openai.Config{
+			APIKey:           config.APIKey,
+			APIURL:           config.APIURL,
+			DefaultModel:     config.Model,
+			StreamingTimeout: config.Timeout,
+		}, httpClient)
+		if provider == nil {
+			return nil, errors.New("failed to create OpenAI Compatible provider")
 		}
 		return provider, nil
 
