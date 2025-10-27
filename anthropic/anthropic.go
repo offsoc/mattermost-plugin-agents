@@ -234,7 +234,6 @@ func (a *Anthropic) streamChatWithTools(state messageState) {
 	// Anthropic requires a minimum thinking budget of 1024 tokens
 	// If the thinking budget is more than the max_tokens, Anthropic will return an error.
 	if state.config.EnableThinking && thinkingBudget < int64(state.config.MaxGeneratedTokens) {
-
 		params.Thinking = anthropicSDK.ThinkingConfigParamUnion{
 			OfEnabled: &anthropicSDK.ThinkingConfigEnabledParam{
 				Type:         "enabled",
