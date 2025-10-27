@@ -120,7 +120,7 @@ func createProvider(providerName string, config ProviderConfig) (llm.LanguageMod
 		provider := anthropic.New(llm.ServiceConfig{
 			APIKey:       config.APIKey,
 			DefaultModel: config.Model,
-		}, httpClient)
+		}, []string{}, httpClient)
 		if provider == nil {
 			return nil, errors.New("failed to create Anthropic provider")
 		}
