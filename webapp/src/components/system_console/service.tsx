@@ -175,12 +175,12 @@ const ServiceFields = (props: ServiceFieldsProps) => {
                     )}
                 </>
             )}
-            {supportsModelFetching && availableModels.length > 0 ? (
+            {supportsModelFetching && availableModels.length > 0 && (
                 <SelectionItem
-                    label={intl.formatMessage({defaultMessage: 'Default model'})}
+                    label={intl.formatMessage({defaultMessage: 'Select model'})}
                     value={props.service.defaultModel}
                     onChange={(e) => props.onChange({...props.service, defaultModel: e.target.value})}
-                    helptext={loadingModels ? intl.formatMessage({defaultMessage: 'Loading models...'}) : undefined}
+                    helptext={intl.formatMessage({defaultMessage: 'Quick selection from available models'})}
                 >
                     <SelectionItemOption value=''>
                         {intl.formatMessage({defaultMessage: 'Select a model...'})}
@@ -194,16 +194,21 @@ const ServiceFields = (props: ServiceFieldsProps) => {
                         </SelectionItemOption>
                     ))}
                 </SelectionItem>
-            ) : (
-                <TextItem
-                    label={intl.formatMessage({defaultMessage: 'Default model'})}
-                    value={props.service.defaultModel}
-                    onChange={(e) => props.onChange({...props.service, defaultModel: e.target.value})}
-                    helptext={
-                        supportsModelFetching && loadingModels ? intl.formatMessage({defaultMessage: 'Loading models...'}) : supportsModelFetching && modelsFetchError ? modelsFetchError : undefined
-                    }
-                />
             )}
+            <TextItem
+                label={intl.formatMessage({defaultMessage: 'Default model'})}
+                value={props.service.defaultModel}
+                onChange={(e) => props.onChange({...props.service, defaultModel: e.target.value})}
+                helptext={
+                    supportsModelFetching && loadingModels ?
+                        intl.formatMessage({defaultMessage: 'Loading models...'}) :
+                        supportsModelFetching && modelsFetchError ?
+                            modelsFetchError :
+                            supportsModelFetching && availableModels.length > 0 ?
+                                intl.formatMessage({defaultMessage: 'You can select from the list above or enter a custom model name'}) :
+                                undefined
+                }
+            />
             <TextItem
                 label={intl.formatMessage({defaultMessage: 'Input token limit'})}
                 type='number'
