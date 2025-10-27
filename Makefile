@@ -308,7 +308,7 @@ mcp-server:
 .PHONY: evalviewer
 evalviewer:
 	@echo Building evalviewer...
-	cd cmd/evalviewer && $(GO) build $(GO_BUILD_FLAGS) -o ../../bin/evalviewer .
+	$(GO) build $(GO_BUILD_FLAGS) -C cmd/evalviewer -o ../../bin/evalviewer .
 
 ## Runs evaluations interactively with TUI for packages with evals.
 ## Environment variables:

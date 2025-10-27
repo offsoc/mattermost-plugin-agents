@@ -32,84 +32,31 @@ type Eval struct {
 	runNumber int
 }
 
-// ProviderConfig holds provider-specific configuration
-type ProviderConfig struct {
-	APIKey  string
-	Model   string
-	APIURL  string // For compatible providers like Azure
-	Timeout time.Duration
-}
-
-// getProviderConfig reads environment variables for a specific provider
-func getProviderConfig(providerName string) (ProviderConfig, error) {
-	config := ProviderConfig{
-		Timeout: 20 * time.Second,
-	}
-
-	switch strings.ToLower(providerName) {
-	case "openai":
-		config.APIKey = os.Getenv("OPENAI_API_KEY")
-		config.Model = os.Getenv("OPENAI_MODEL")
-		if config.Model == "" {
-			config.Model = "gpt-4o"
-		}
-		if config.APIKey == "" {
-			return config, errors.New("OPENAI_API_KEY environment variable is not set")
-		}
-
-	case "anthropic":
-		config.APIKey = os.Getenv("ANTHROPIC_API_KEY")
-		config.Model = os.Getenv("ANTHROPIC_MODEL")
-		if config.Model == "" {
-			config.Model = "claude-sonnet-4-20250514"
-		}
-		if config.APIKey == "" {
-			return config, errors.New("ANTHROPIC_API_KEY environment variable is not set")
-		}
-
-	case "azure":
-		config.APIKey = os.Getenv("AZURE_OPENAI_API_KEY")
-		config.APIURL = os.Getenv("AZURE_OPENAI_ENDPOINT")
-		config.Model = os.Getenv("AZURE_OPENAI_MODEL")
-		if config.Model == "" {
-			config.Model = "gpt-4o"
-		}
-		if config.APIKey == "" {
-			return config, errors.New("AZURE_OPENAI_API_KEY environment variable is not set")
-		}
-		if config.APIURL == "" {
-			return config, errors.New("AZURE_OPENAI_ENDPOINT environment variable is not set")
-		}
-
-	case "openaicompatible":
-		config.APIKey = os.Getenv("OPENAI_COMPATIBLE_API_KEY")
-		config.APIURL = os.Getenv("OPENAI_COMPATIBLE_API_URL")
-		config.Model = os.Getenv("OPENAI_COMPATIBLE_MODEL")
-		if config.Model == "" {
-			return config, errors.New("OPENAI_COMPATIBLE_MODEL environment variable is not set")
-		}
-		if config.APIURL == "" {
-			return config, errors.New("OPENAI_COMPATIBLE_API_URL environment variable is not set")
-		}
-		// API key is optional for local LLMs
-
-	default:
-		return config, fmt.Errorf("unknown provider: %s", providerName)
-	}
-
-	return config, nil
-}
-
-// createProvider creates an LLM provider based on the provider name and config
-func createProvider(providerName string, config ProviderConfig) (llm.LanguageModel, error) {
+// createProvider creates an LLM provider based on the provider name
+// Reads configuration from environment variables with optional model override
+func createProvider(providerName string, modelOverride string) (llm.LanguageModel, error) {
 	httpClient := &http.Client{}
+	timeout := 20 * time.Second
 
 	switch strings.ToLower(providerName) {
 	case "openai":
+		apiKey := os.Getenv("OPENAI_API_KEY")
+		if apiKey == "" {
+			return nil, errors.New("OPENAI_API_KEY environment variable is not set")
+		}
+
+		model := modelOverride
+		if model == "" {
+			model = os.Getenv("OPENAI_MODEL")
+			if model == "" {
+				model = "gpt-4o"
+			}
+		}
+
 		provider := openai.New(openai.Config{
-			APIKey:           config.APIKey,
-			DefaultModel:     config.Model,
-			StreamingTimeout: config.Timeout,
+			APIKey:           apiKey,
+			DefaultModel:     model,
+			StreamingTimeout: timeout,
 		}, httpClient)
 		if provider == nil {
 			return nil, errors.New("failed to create OpenAI provider")
@@ -117,9 +64,22 @@ func createProvider(providerName string, config ProviderConfig) (llm.LanguageMod
 		return provider, nil
 
 	case "anthropic":
+		apiKey := os.Getenv("ANTHROPIC_API_KEY")
+		if apiKey == "" {
+			return nil, errors.New("ANTHROPIC_API_KEY environment variable is not set")
+		}
+
+		model := modelOverride
+		if model == "" {
+			model = os.Getenv("ANTHROPIC_MODEL")
+			if model == "" {
+				model = "claude-sonnet-4-20250514"
+			}
+		}
+
 		provider := anthropic.New(llm.ServiceConfig{
-			APIKey:       config.APIKey,
-			DefaultModel: config.Model,
+			APIKey:       apiKey,
+			DefaultModel: model,
 		}, []string{}, httpClient)
 		if provider == nil {
 			return nil, errors.New("failed to create Anthropic provider")
@@ -127,11 +87,29 @@ func createProvider(providerName string, config ProviderConfig) (llm.LanguageMod
 		return provider, nil
 
 	case "azure":
+		apiKey := os.Getenv("AZURE_OPENAI_API_KEY")
+		if apiKey == "" {
+			return nil, errors.New("AZURE_OPENAI_API_KEY environment variable is not set")
+		}
+
+		apiURL := os.Getenv("AZURE_OPENAI_ENDPOINT")
+		if apiURL == "" {
+			return nil, errors.New("AZURE_OPENAI_ENDPOINT environment variable is not set")
+		}
+
+		model := modelOverride
+		if model == "" {
+			model = os.Getenv("AZURE_OPENAI_MODEL")
+			if model == "" {
+				model = "gpt-4o"
+			}
+		}
+
 		provider := openai.NewAzure(openai.Config{
-			APIKey:           config.APIKey,
-			APIURL:           config.APIURL,
-			DefaultModel:     config.Model,
-			StreamingTimeout: config.Timeout,
+			APIKey:           apiKey,
+			APIURL:           apiURL,
+			DefaultModel:     model,
+			StreamingTimeout: timeout,
 		}, httpClient)
 		if provider == nil {
 			return nil, errors.New("failed to create Azure OpenAI provider")
@@ -139,11 +117,27 @@ func createProvider(providerName string, config ProviderConfig) (llm.LanguageMod
 		return provider, nil
 
 	case "openaicompatible":
+		apiURL := os.Getenv("OPENAI_COMPATIBLE_API_URL")
+		if apiURL == "" {
+			return nil, errors.New("OPENAI_COMPATIBLE_API_URL environment variable is not set")
+		}
+
+		model := modelOverride
+		if model == "" {
+			model = os.Getenv("OPENAI_COMPATIBLE_MODEL")
+			if model == "" {
+				return nil, errors.New("OPENAI_COMPATIBLE_MODEL environment variable is not set")
+			}
+		}
+
+		// API key is optional for local LLMs
+		apiKey := os.Getenv("OPENAI_COMPATIBLE_API_KEY")
+
 		provider := openai.NewCompatible(openai.Config{
-			APIKey:           config.APIKey,
-			APIURL:           config.APIURL,
-			DefaultModel:     config.Model,
-			StreamingTimeout: config.Timeout,
+			APIKey:           apiKey,
+			APIURL:           apiURL,
+			DefaultModel:     model,
+			StreamingTimeout: timeout,
 		}, httpClient)
 		if provider == nil {
 			return nil, errors.New("failed to create OpenAI Compatible provider")
@@ -168,14 +162,8 @@ func NewEvalWithProvider(providerName string) (*Eval, error) {
 		return nil, err
 	}
 
-	// Get provider configuration
-	config, err := getProviderConfig(providerName)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create provider
-	provider, err := createProvider(providerName, config)
+	// Create provider (uses environment variables)
+	provider, err := createProvider(providerName, "")
 	if err != nil {
 		return nil, err
 	}
@@ -202,23 +190,14 @@ func createGraderLLM() (llm.LanguageModel, error) {
 		graderProvider = "openai"
 	}
 
-	// Get provider configuration (uses existing API key env vars)
-	graderConfig, err := getProviderConfig(graderProvider)
-	if err != nil {
-		return nil, err
-	}
-
-	// Override model if GRADER_LLM_MODEL is set, otherwise default to gpt-5
+	// Get grader model override, default to gpt-5 for OpenAI
 	graderModel := os.Getenv("GRADER_LLM_MODEL")
-	if graderModel != "" {
-		graderConfig.Model = graderModel
-	} else if graderProvider == "openai" {
-		// Default to gpt-5 for OpenAI grader
-		graderConfig.Model = "gpt-5"
+	if graderModel == "" && graderProvider == "openai" {
+		graderModel = "gpt-5"
 	}
 
-	// Create grader provider
-	return createProvider(graderProvider, graderConfig)
+	// Create grader provider with model override
+	return createProvider(graderProvider, graderModel)
 }
 
 func NumEvalsOrSkip(t *testing.T) int {
