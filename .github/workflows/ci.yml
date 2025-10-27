@@ -84,25 +84,10 @@ jobs:
         provider:
           - name: openai
             display_name: OpenAI
-            env:
-              LLM_PROVIDER: openai
-              OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-              OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-4o' }}
           - name: anthropic
             display_name: Anthropic
-            env:
-              LLM_PROVIDER: anthropic
-              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-              ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514' }}
-              OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           - name: azure
             display_name: Azure OpenAI
-            env:
-              LLM_PROVIDER: azure
-              AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
-              AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
-              AZURE_OPENAI_MODEL: ${{ vars.AZURE_OPENAI_MODEL || 'gpt-4o' }}
-              OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     name: evals-${{ matrix.provider.name }}
     steps:
       - uses: actions/checkout@v4
@@ -114,7 +99,18 @@ jobs:
 
       - name: Run ${{ matrix.provider.display_name }} evaluations
         id: run-evals
-        env: ${{ matrix.provider.env }}
+        env:
+          LLM_PROVIDER: ${{ matrix.provider.name }}
+          # OpenAI
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-4o' }}
+          # Anthropic
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514' }}
+          # Azure
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_MODEL: ${{ vars.AZURE_OPENAI_MODEL || 'gpt-4o' }}
         run: |
           make evals-comment > eval_output.txt 2>&1 || true
           # Extract just the GitHub comment from the output
