@@ -24,6 +24,7 @@ const ToolCallProp = "pending_tool_call"
 const ReasoningSummaryProp = "reasoning_summary"
 const AnnotationsProp = "annotations"
 const WebSearchContextProp = "web_search_context"
+const ReasoningSignatureProp = "reasoning_signature"
 
 type Service interface {
 	StreamToNewPost(ctx context.Context, botID string, requesterUserID string, stream *llm.TextStreamResult, post *model.Post, respondingToPostID string) error
@@ -294,15 +295,19 @@ func (p *MMPostStreamService) StreamToPost(ctx context.Context, stream *llm.Text
 				}
 			case llm.EventTypeReasoningEnd:
 				// Reasoning summary completed - stream final and persist
-				if reasoningText, ok := event.Value.(string); ok {
-					// Send final reasoning event
-					p.sendPostStreamingReasoningEvent(post, reasoningText, "reasoning_summary_done")
+				if reasoningData, ok := event.Value.(llm.ReasoningData); ok {
+					// Send final reasoning event (only text goes to frontend)
+					p.sendPostStreamingReasoningEvent(post, reasoningData.Text, "reasoning_summary_done")
 
-					// Persist reasoning summary to post props
+					// Persist reasoning summary and signature to post props
 					// This will be saved when the post is updated at the end of the stream
-					if reasoningText != "" {
-						post.AddProp(ReasoningSummaryProp, reasoningText)
-						p.mmClient.LogDebug("Added reasoning summary to post props", "post_id", post.Id, "reasoning_length", len(reasoningText))
+					if reasoningData.Text != "" {
+						post.AddProp(ReasoningSummaryProp, reasoningData.Text)
+						p.mmClient.LogDebug("Added reasoning summary to post props", "post_id", post.Id, "reasoning_length", len(reasoningData.Text))
+					}
+					if reasoningData.Signature != "" {
+						post.AddProp(ReasoningSignatureProp, reasoningData.Signature)
+						p.mmClient.LogDebug("Added reasoning signature to post props", "post_id", post.Id)
 					}
 					reasoningBuffer.Reset()
 				}

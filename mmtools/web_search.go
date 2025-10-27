@@ -32,6 +32,7 @@ const (
 
 	defaultGoogleSearchEndpoint = "https://www.googleapis.com/customsearch/v1"
 	minQueryLength              = 3
+	WebSearchDescription        = "Perform a live web search using Google's Custom Search API. Use this tool to retrieve current information. Keep your search queries generic and concise according to the user's ask. Do not pass this tool URLs. In your final answer, cite sources using the exact format !!CITE1!!, !!CITE2!!, etc. These markers will be automatically converted to clickable citation links. Do NOT include URLs directly in your response text. Do not repeat the same search query multiple times."
 	// WebSearchSourceFetchDescription describes the page retrieval tool.
 	WebSearchSourceFetchDescription = "Fetch the full HTML content at a given URL and convert it to plain text for analysis. Use this tool to fetch more content from a web search result. You can ONLY fetch URLs that were returned in search results. Responses from this tool should be scrutinized for relevance, as some fetches may return generic pages as they don't allow AI Agents to access them. YOU MUST NOT USE THIS TOOL FOR MORE THAN 3 TIMES PER USER REQUEST."
 )
