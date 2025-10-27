@@ -241,7 +241,7 @@ const MCPServers = ({mcpConfig, onChange}: Props) => {
         enabled: mcpConfig?.enabled || false,
         servers: Array.isArray(mcpConfig?.servers) ? mcpConfig.servers : [],
         embeddedServer: mcpConfig?.embeddedServer || {
-            enabled: false,
+            enabled: !mcpConfig?.enabled,
         },
         idleTimeoutMinutes: mcpConfig?.idleTimeoutMinutes || 30,
     };
