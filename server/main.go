@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"time"
@@ -44,6 +45,7 @@ type Plugin struct {
 
 	pluginAPI            *pluginapi.Client
 	apiService           *api.API
+	bots                 *bots.MMBots
 	indexerService       *indexer.Indexer
 	conversationsService *conversations.Conversations
 	mcpClientManager     *mcp.ClientManager
@@ -76,7 +78,12 @@ func (p *Plugin) OnActivate() error {
 		p.configuration.Update(&newCfg)
 	}
 
-	bots := bots.New(p.API, pluginAPI, licenseChecker, &p.configuration, llmUpstreamHTTPClient)
+	tokenLogger, err := llm.CreateTokenLogger()
+	if err != nil {
+		return fmt.Errorf("failed to create token usage logger: %w", err)
+	}
+
+	bots := bots.New(p.API, pluginAPI, licenseChecker, &p.configuration, llmUpstreamHTTPClient, tokenLogger)
 	p.configuration.RegisterUpdateListener(func() {
 		if ensureErr := bots.EnsureBots(p.configuration.GetBots()); ensureErr != nil {
 			pluginAPI.Log.Error("failed to ensure bots on configuration update", "error", ensureErr)
@@ -130,7 +137,15 @@ func (p *Plugin) OnActivate() error {
 		untrustedHTTPClient,
 	)
 
-	mcpClientManager := mcp.NewClientManager(p.configuration.MCP(), pluginAPI.Log)
+	// Build redirect URI
+	siteURL := pluginAPI.Configuration.GetConfig().ServiceSettings.SiteURL
+	if siteURL == nil || *siteURL == "" {
+		return fmt.Errorf("site URL not configured")
+	}
+	manifestID := manifest.Id
+	oauthCallbackURL := fmt.Sprintf("%s/plugins/%s/oauth/callback", *siteURL, manifestID)
+
+	mcpClientManager := mcp.NewClientManager(p.configuration.MCP(), pluginAPI.Log, pluginAPI, mcp.NewOAuthManager(mmClient, oauthCallbackURL))
 	p.configuration.RegisterUpdateListener(func() {
 		mcpClientManager.ReInit(p.configuration.MCP())
 	})
@@ -186,11 +201,13 @@ func (p *Plugin) OnActivate() error {
 		licenseChecker,
 		streamingService,
 		i18nBundle,
+		mcpClientManager,
 	)
 
 	// Keep only what we need
 	p.pluginAPI = pluginAPI
 	p.apiService = apiService
+	p.bots = bots
 	p.indexerService = indexerService
 	p.conversationsService = conversationsService
 	p.mcpClientManager = mcpClientManager
@@ -242,10 +259,60 @@ func (p *Plugin) MessageHasBeenUpdated(c *plugin.Context, newPost, oldPost *mode
 	}
 }
 
+func (p *Plugin) MessageHasBeenDeleted(c *plugin.Context, post *model.Post) {
+	if p.indexerService != nil {
+		if err := p.indexerService.DeletePost(context.Background(), post.Id); err != nil {
+			p.pluginAPI.Log.Error("Failed to delete post from vector database", "error", err)
+		}
+	}
+}
+
 func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Request) {
 	p.apiService.ServeHTTP(c, w, r)
 }
 
 func (p *Plugin) ServeMetrics(c *plugin.Context, w http.ResponseWriter, r *http.Request) {
 	p.apiService.ServeMetrics(c, w, r)
+}
+
+// EmailNotificationWillBeSent blocks email notifications for bot replies in threads.
+func (p *Plugin) EmailNotificationWillBeSent(emailNotification *model.EmailNotification) (*model.EmailNotificationContent, string) {
+	if p.shouldBlockBotReplyNotification(emailNotification.SenderId, emailNotification.RootId) {
+		return nil, "notification blocked: bot reply in thread"
+	}
+	return &emailNotification.EmailNotificationContent, ""
+}
+
+// NotificationWillBePushed blocks push notifications for bot replies in threads.
+// IMPORTANT: This hook must execute quickly as it can become blocking and delay post creation.
+func (p *Plugin) NotificationWillBePushed(pushNotification *model.PushNotification, userID string) (*model.PushNotification, string) {
+	if pushNotification.PostId == "" {
+		return pushNotification, ""
+	}
+
+	if p.shouldBlockBotReplyNotification(pushNotification.SenderId, pushNotification.RootId) {
+		return nil, "notification blocked: bot reply in thread"
+	}
+	return pushNotification, ""
+}
+
+func (p *Plugin) shouldBlockBotReplyNotification(senderID, rootID string) bool {
+	// Only check threaded replies
+	if rootID == "" {
+		return false
+	}
+
+	// Check if bots service is initialized
+	if p.bots == nil {
+		return false
+	}
+
+	// Check if sender is a bot by looking up in the bots cache
+	bot := p.bots.GetBotByID(senderID)
+	if bot == nil {
+		return false
+	}
+
+	// Block all bot reply notifications in threads
+	return true
 }

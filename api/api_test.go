@@ -4,6 +4,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 	"github.com/mattermost/mattermost-plugin-ai/embeddings/mocks"
 	"github.com/mattermost/mattermost-plugin-ai/enterprise"
 	"github.com/mattermost/mattermost-plugin-ai/llm"
+	"github.com/mattermost/mattermost-plugin-ai/mcp"
 	"github.com/mattermost/mattermost-plugin-ai/metrics"
 	"github.com/mattermost/mattermost-plugin-ai/search"
 	"github.com/mattermost/mattermost/server/public/model"
@@ -40,6 +42,21 @@ func (tc *testConfigImpl) GetDefaultBotName() string {
 	return "ai"
 }
 
+func (tc *testConfigImpl) MCP() mcp.Config {
+	return mcp.Config{}
+}
+
+// mockMCPClientManager is a minimal implementation of MCPClientManager for testing
+type mockMCPClientManager struct{}
+
+func (m *mockMCPClientManager) GetOAuthManager() *mcp.OAuthManager {
+	return nil
+}
+
+func (m *mockMCPClientManager) ProcessOAuthCallback(ctx context.Context, loggedInUserID, state, code string) (*mcp.OAuthSession, error) {
+	return nil, nil
+}
+
 func (e *TestEnvironment) Cleanup(t *testing.T) {
 	if e.mockAPI != nil {
 		e.mockAPI.AssertExpectations(t)
@@ -49,7 +66,7 @@ func (e *TestEnvironment) Cleanup(t *testing.T) {
 // createTestBots creates a test MMBots instance for testing
 func createTestBots(mockAPI *plugintest.API, client *pluginapi.Client) *bots.MMBots {
 	licenseChecker := enterprise.NewLicenseChecker(client)
-	testBots := bots.New(mockAPI, client, licenseChecker, nil, &http.Client{})
+	testBots := bots.New(mockAPI, client, licenseChecker, nil, &http.Client{}, nil)
 	return testBots
 }
 
@@ -81,7 +98,7 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 	// Create minimal conversations service for testing
 	conversationsService := &conversations.Conversations{}
 
-	api := New(testBots, conversationsService, nil, nil, nil, client, noopMetrics, nil, &testConfigImpl{}, nil, nil, nil, nil, nil, nil)
+	api := New(testBots, conversationsService, nil, nil, nil, client, noopMetrics, nil, &testConfigImpl{}, nil, nil, nil, nil, nil, nil, &mockMCPClientManager{})
 
 	return &TestEnvironment{
 		api:     api,

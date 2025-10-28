@@ -357,6 +357,18 @@ endif
 
 	@echo "==> FIPS plugin built at: dist-fips/$(BUNDLE_NAME_FIPS)"
 
+## Builds the server for Linux amd64 only (CI optimized).
+.PHONY: server-ci
+server-ci: generate
+ifneq ($(HAS_SERVER),)
+ifneq ($(MM_DEBUG),)
+	$(info DEBUG mode is on; to disable, unset MM_DEBUG)
+endif
+	mkdir -p server/dist;
+	@echo Building plugin only for linux-amd64 for CI
+	cd server && env CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build $(GO_BUILD_FLAGS) $(GO_BUILD_GCFLAGS) -trimpath -o dist/plugin-linux-amd64;
+endif
+
 ## Builds and bundles the plugin.
 .PHONY: dist
 dist: apply server webapp bundle
@@ -377,10 +389,20 @@ dist-all:
 	echo "    Normal: dist/$$PLUGIN_ID-$$PLUGIN_VERSION.tar.gz"; \
 	echo "    FIPS:   dist-fips/$$PLUGIN_ID-$$PLUGIN_VERSION-fips.tar.gz"
 
+## Builds and bundles the plugin for CI (Linux amd64 only).
+.PHONY: dist-ci
+dist-ci: apply server-ci webapp bundle
+
 ## Builds and installs the plugin to a server.
 .PHONY: deploy
 deploy: dist
 	./build/bin/pluginctl deploy $(PLUGIN_ID) dist/$(BUNDLE_NAME)
+
+## Builds the MCP server binary.
+.PHONY: mcp-server
+mcp-server:
+	@echo Building MCP server...
+	$(GO) build $(GO_BUILD_FLAGS) -o bin/mattermost-mcp-server ./mcpserver/cmd/main.go
 
 ## Builds and installs the plugin to a server, updating the webapp automatically when changed.
 .PHONY: watch

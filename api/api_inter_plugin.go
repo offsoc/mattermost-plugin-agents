@@ -52,17 +52,15 @@ func (a *API) handleInterPluginSimpleCompletion(c *gin.Context) {
 	}
 
 	// Create a proper context for the LLM
+	// Note: Tools are disabled for inter-plugin requests because ChatCompletionNoStream()
+	// uses ReadAll() which explicitly fails when tool calls are present
 	context := a.contextBuilder.BuildLLMContextUserRequest(
 		bot,
 		user,
 		nil, // No channel for inter-plugin requests
 		a.contextBuilder.WithLLMContextParameters(req.Parameters),
+		a.contextBuilder.WithLLMContextNoTools(), // Disable tools for inter-plugin non-streaming calls
 	)
-
-	// Add tools if not disabled
-	if !bot.GetConfig().DisableTools {
-		context.Tools = a.contextBuilder.GetToolsStoreForUser(bot, true, userID)
-	}
 
 	// Format system prompt using template
 	formattedSystemPrompt, err := a.prompts.FormatString(req.SystemPrompt, context)

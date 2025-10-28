@@ -24,6 +24,7 @@ type Config = {
     defaultBotName: string,
     transcriptBackend: string,
     enableLLMTrace: boolean,
+    enableTokenUsageLogging: boolean,
     enableCallSummary: boolean,
     allowedUpstreamHostnames: string,
     embeddingSearchConfig: EmbeddingSearchConfig,
@@ -75,6 +76,7 @@ const defaultConfig = {
     llmBackend: '',
     transcriptBackend: '',
     enableLLMTrace: false,
+    enableTokenUsageLogging: false,
     embeddingSearchConfig: {
         type: 'disabled',
         vectorStore: {
@@ -229,6 +231,12 @@ const Config = (props: Props) => {
                         onChange={(to) => props.onChange(props.id, {...value, enableLLMTrace: to})}
                         helpText={intl.formatMessage({defaultMessage: 'Enable tracing of LLM requests. Outputs full conversation data to the logs.'})}
                     />
+                    <BooleanItem
+                        label={intl.formatMessage({defaultMessage: 'Enable Token Usage Logging'})}
+                        value={value.enableTokenUsageLogging}
+                        onChange={(to) => props.onChange(props.id, {...value, enableTokenUsageLogging: to})}
+                        helpText={intl.formatMessage({defaultMessage: 'Enable logging of token usage for all LLM interactions.'})}
+                    />
                 </ItemList>
             </Panel>
             <EmbeddingSearchPanel
@@ -238,30 +246,28 @@ const Config = (props: Props) => {
                     props.setSaveNeeded();
                 }}
             />
-            {mcpConfig.enabled &&
-                <Panel
-                    title={
-                        <Horizontal>
-                            <FormattedMessage defaultMessage='Model Context Protocol (MCP)'/>
-                            <Pill><FormattedMessage defaultMessage='EXPERIMENTAL'/></Pill>
-                        </Horizontal>
-                    }
-                    subtitle={intl.formatMessage({defaultMessage: 'Configure MCP servers to enable AI tools.'})}
-                >
-                    <MCPServers
-                        mcpConfig={mcpConfig}
-                        onChange={(config) => {
-                            // Ensure we're creating a valid structure for the server configuration
-                            const updatedConfig = {
-                                ...config,
-                                servers: config.servers || {},
-                            };
-                            props.onChange(props.id, {...value, mcp: updatedConfig});
-                            props.setSaveNeeded();
-                        }}
-                    />
-                </Panel>
-            }
+            <Panel
+                title={
+                    <Horizontal>
+                        <FormattedMessage defaultMessage='Model Context Protocol (MCP)'/>
+                        <Pill><FormattedMessage defaultMessage='EXPERIMENTAL'/></Pill>
+                    </Horizontal>
+                }
+                subtitle={intl.formatMessage({defaultMessage: 'Configure MCP servers to enable AI tools.'})}
+            >
+                <MCPServers
+                    mcpConfig={mcpConfig}
+                    onChange={(config) => {
+                        // Ensure we're creating a valid structure for the server configuration
+                        const updatedConfig = {
+                            ...config,
+                            servers: config.servers || {},
+                        };
+                        props.onChange(props.id, {...value, mcp: updatedConfig});
+                        props.setSaveNeeded();
+                    }}
+                />
+            </Panel>
         </ConfigContainer>
     );
 };
