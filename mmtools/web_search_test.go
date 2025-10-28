@@ -262,7 +262,7 @@ func TestWebSearchTracking(t *testing.T) {
 		// Normalize both for comparison (as done in resolve method)
 		isDuplicate := false
 		for _, existingQuery := range executedQueries {
-			if strings.ToLower(existingQuery) == strings.ToLower(testQuery) {
+			if strings.EqualFold(existingQuery, testQuery) {
 				isDuplicate = true
 				break
 			}
