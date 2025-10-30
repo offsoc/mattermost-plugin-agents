@@ -15,6 +15,7 @@ import (
 	"github.com/mattermost/mattermost-plugin-ai/bots"
 	"github.com/mattermost/mattermost-plugin-ai/conversations"
 	"github.com/mattermost/mattermost-plugin-ai/llm"
+	"github.com/mattermost/mattermost-plugin-ai/mcp"
 	"github.com/mattermost/mattermost-plugin-ai/mmapi"
 	"github.com/mattermost/mattermost-plugin-ai/react"
 	"github.com/mattermost/mattermost-plugin-ai/streaming"
@@ -283,7 +284,8 @@ func (a *API) handleToolCall(c *gin.Context) {
 	}
 
 	var data struct {
-		AcceptedToolIDs []string `json:"accepted_tool_ids" binding:"required"`
+		AcceptedToolIDs []string `json:"accepted_tool_ids"`
+		AutoApproveTool string   `json:"auto_approve_tool,omitempty"`
 	}
 
 	if err := c.ShouldBindJSON(&data); err != nil {
@@ -291,7 +293,7 @@ func (a *API) handleToolCall(c *gin.Context) {
 		return
 	}
 
-	err := a.conversationsService.HandleToolCall(userID, post, channel, data.AcceptedToolIDs)
+	err := a.conversationsService.HandleToolCall(userID, post, channel, data.AcceptedToolIDs, data.AutoApproveTool)
 	if err != nil {
 		if err.Error() == "post missing pending tool calls" || err.Error() == "post pending tool calls not valid JSON" {
 			c.AbortWithError(http.StatusBadRequest, err)
@@ -299,6 +301,69 @@ func (a *API) handleToolCall(c *gin.Context) {
 			c.AbortWithError(http.StatusInternalServerError, err)
 		}
 		return
+	}
+
+	c.Status(http.StatusOK)
+}
+
+func (a *API) handleGetToolPermissions(c *gin.Context) {
+	userID := c.GetHeader("Mattermost-User-Id")
+	post := c.MustGet(ContextPostKey).(*model.Post)
+
+	if err := a.enforceEmptyBody(c); err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+		return
+	}
+
+	// Get root post ID for conversation-scoped permissions
+	rootPostID := post.RootId
+	if rootPostID == "" {
+		rootPostID = post.Id
+	}
+
+	// Load auto-approved tools from KV store
+	tools, err := mcp.GetAutoApprovedTools(a.mmClient, userID, rootPostID)
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("failed to get tool permissions: %w", err))
+		return
+	}
+
+	c.JSON(http.StatusOK, map[string]interface{}{
+		"auto_approved_tools": tools,
+	})
+}
+
+func (a *API) handleUpdateToolPermission(c *gin.Context) {
+	userID := c.GetHeader("Mattermost-User-Id")
+	post := c.MustGet(ContextPostKey).(*model.Post)
+
+	var data struct {
+		ToolName   string `json:"tool_name" binding:"required"`
+		Permission string `json:"permission" binding:"required,oneof=auto-approve ask"`
+	}
+
+	if err := c.ShouldBindJSON(&data); err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+		return
+	}
+
+	// Get root post ID for conversation-scoped permissions
+	rootPostID := post.RootId
+	if rootPostID == "" {
+		rootPostID = post.Id
+	}
+
+	// Update permission in KV store
+	if data.Permission == "auto-approve" {
+		if err := mcp.AddAutoApproval(a.mmClient, userID, rootPostID, data.ToolName); err != nil {
+			c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("failed to add auto-approval: %w", err))
+			return
+		}
+	} else {
+		if err := mcp.RemoveAutoApproval(a.mmClient, userID, rootPostID, data.ToolName); err != nil {
+			c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("failed to remove auto-approval: %w", err))
+			return
+		}
 	}
 
 	c.Status(http.StatusOK)

@@ -220,6 +220,7 @@ export interface ToolCall {
     arguments: any;
     result?: string;
     status: ToolCallStatus;
+    auto_approved?: boolean;
 }
 
 interface Props {

@@ -131,13 +131,69 @@ export async function doRegenerate(postid: string) {
     });
 }
 
-export async function doToolCall(postid: string, toolIDs: string[]) {
-    const url = `${postRoute(postid)}/tool_call`;
+export async function getToolPermissions(postid: string): Promise<string[]> {
+    const url = `${postRoute(postid)}/tool_permissions`;
+    const response = await fetch(url, Client4.getOptions({
+        method: 'GET',
+    }));
+
+    if (response.ok) {
+        const data = await response.json();
+        return data.auto_approved_tools || [];
+    }
+
+    throw new ClientError(Client4.url, {
+        message: '',
+        status_code: response.status,
+        url,
+    });
+}
+
+export async function updateToolPermission(
+    postid: string,
+    toolName: string,
+    permission: 'auto-approve' | 'ask',
+) {
+    const url = `${postRoute(postid)}/tool_permissions`;
     const response = await fetch(url, Client4.getOptions({
         method: 'POST',
         body: JSON.stringify({
-            accepted_tool_ids: toolIDs,
+            tool_name: toolName,
+            permission,
         }),
+    }));
+
+    if (response.ok) {
+        return;
+    }
+
+    throw new ClientError(Client4.url, {
+        message: '',
+        status_code: response.status,
+        url,
+    });
+}
+
+export async function doToolCall(
+    postid: string,
+    toolIDs: string[],
+    autoApproveTool?: string,
+) {
+    const url = `${postRoute(postid)}/tool_call`;
+    const body: {
+        accepted_tool_ids: string[];
+        auto_approve_tool?: string;
+    } = {
+        accepted_tool_ids: toolIDs,
+    };
+
+    if (autoApproveTool) {
+        body.auto_approve_tool = autoApproveTool;
+    }
+
+    const response = await fetch(url, Client4.getOptions({
+        method: 'POST',
+        body: JSON.stringify(body),
     }));
 
     if (response.ok) {

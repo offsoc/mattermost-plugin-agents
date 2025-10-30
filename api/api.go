@@ -137,6 +137,8 @@ func (a *API) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Reques
 	postRouter.POST("/stop", a.handleStop)
 	postRouter.POST("/regenerate", a.handleRegenerate)
 	postRouter.POST("/tool_call", a.handleToolCall)
+	postRouter.GET("/tool_permissions", a.handleGetToolPermissions)
+	postRouter.POST("/tool_permissions", a.handleUpdateToolPermission)
 	postRouter.POST("/postback_summary", a.handlePostbackSummary)
 
 	channelRouter := botRequiredRouter.Group("/channel/:channelid")

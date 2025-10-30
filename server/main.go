@@ -109,7 +109,7 @@ func (p *Plugin) OnActivate() error {
 		return promptManagerErr
 	}
 
-	streamingService := streaming.NewMMPostStreamService(mmClient, i18nBundle)
+	streamingService := streaming.NewMMPostStreamService(mmClient, i18nBundle, pluginAPI)
 
 	embeddingsSearch, err := search.InitEmbeddingsSearch(
 		dbClient.DB,
@@ -207,6 +207,9 @@ func (p *Plugin) OnActivate() error {
 	// Set the meetings service on conversations to break circular dependency
 	// TODO: Refactor to avoid circular dependency
 	conversationsService.SetMeetingsService(meetingsService)
+
+	// Set up auto-approved tool call handler
+	streamingService.SetToolCallHandler(conversationsService.HandleAutoApprovedToolCall)
 
 	apiService := api.New(
 		bots,

@@ -46,12 +46,13 @@ const (
 
 // ToolCall represents a tool call. An empty result indicates that the tool has not yet been resolved.
 type ToolCall struct {
-	ID          string          `json:"id"`
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	Arguments   json.RawMessage `json:"arguments"`
-	Result      string          `json:"result"`
-	Status      ToolCallStatus  `json:"status"`
+	ID           string          `json:"id"`
+	Name         string          `json:"name"`
+	Description  string          `json:"description"`
+	Arguments    json.RawMessage `json:"arguments"`
+	Result       string          `json:"result"`
+	Status       ToolCallStatus  `json:"status"`
+	AutoApproved bool            `json:"auto_approved,omitempty"`
 }
 
 type ToolArgumentGetter func(args any) error

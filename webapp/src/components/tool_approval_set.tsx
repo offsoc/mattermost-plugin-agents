@@ -1,11 +1,11 @@
 // Copyright (c) 2023-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import styled from 'styled-components';
 import {FormattedMessage} from 'react-intl';
 
-import {doToolCall} from '@/client';
+import {doToolCall, getToolPermissions, updateToolPermission} from '@/client';
 
 import {ToolCall, ToolCallStatus} from './llmbot_post';
 import ToolCard from './tool_card';
@@ -15,7 +15,7 @@ const ToolCallsContainer = styled.div`
     display: flex;
     flex-direction: column;
     gap: 8px;
-    margin: 16px 0;
+    margin-bottom: 12px;
 `;
 
 const StatusBar = styled.div`
@@ -44,13 +44,42 @@ const ToolApprovalSet: React.FC<ToolApprovalSetProps> = (props) => {
     // Track which tools are currently being processed
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
+    const [autoApprovedTools, setAutoApprovedTools] = useState<string[]>([]);
+
+    // Initialize collapsed state - auto-approved tools start collapsed
     const [collapsedTools, setCollapsedTools] = useState<string[]>([]);
     const [toolDecisions, setToolDecisions] = useState<ToolDecision>({});
 
-    const handleToolDecision = async (toolID: string, approved: boolean) => {
+    // Load permissions from KV store on mount or when postID changes
+    useEffect(() => {
+        const loadPermissions = async () => {
+            try {
+                const permissions = await getToolPermissions(props.postID);
+                setAutoApprovedTools(permissions);
+            } catch (err) {
+                // Log error but continue with empty permissions - don't block UI
+                setAutoApprovedTools([]);
+            }
+        };
+
+        loadPermissions();
+    }, [props.postID]);
+
+    // Auto-collapse tools that are auto-approved when tool calls arrive or permissions change
+    useEffect(() => {
+        const autoApprovedToolIds = props.toolCalls.
+            filter((tool) => autoApprovedTools.includes(tool.name)).
+            map((tool) => tool.id);
+        setCollapsedTools(autoApprovedToolIds);
+    }, [props.toolCalls, autoApprovedTools]);
+
+    const handleToolDecision = async (toolID: string, approved: boolean, autoApproveTool?: string) => {
         if (isSubmitting) {
             return;
         }
+
+        // Collapse the tool immediately
+        setCollapsedTools((prev) => [...prev, toolID]);
 
         const updatedDecisions = {
             ...toolDecisions,
@@ -77,10 +106,39 @@ const ToolApprovalSet: React.FC<ToolApprovalSetProps> = (props) => {
 
         setIsSubmitting(true);
         try {
-            await doToolCall(props.postID, approvedToolIDs);
+            await doToolCall(props.postID, approvedToolIDs, autoApproveTool);
         } catch (err) {
             setError('Failed to submit tool decisions');
             setIsSubmitting(false);
+        }
+    };
+
+    const handleAcceptAll = async (toolID: string, toolName: string) => {
+        // Add to local auto-approved state
+        setAutoApprovedTools((prev) => [...prev, toolName]);
+
+        // Approve this tool and set auto-approval
+        await handleToolDecision(toolID, true, toolName);
+    };
+
+    const handlePermissionChange = async (toolName: string, permission: 'ask' | 'auto-approve') => {
+        // Update local state optimistically
+        if (permission === 'auto-approve') {
+            setAutoApprovedTools((prev) => [...prev, toolName]);
+        } else {
+            setAutoApprovedTools((prev) => prev.filter((t) => t !== toolName));
+        }
+
+        // Send update to backend using dedicated permission endpoint
+        try {
+            await updateToolPermission(props.postID, toolName, permission);
+        } catch (err) {
+            // Revert optimistic update on error
+            if (permission === 'auto-approve') {
+                setAutoApprovedTools((prev) => prev.filter((t) => t !== toolName));
+            } else {
+                setAutoApprovedTools((prev) => [...prev, toolName]);
+            }
         }
     };
 
@@ -118,7 +176,9 @@ const ToolApprovalSet: React.FC<ToolApprovalSetProps> = (props) => {
                     onToggleCollapse={() => toggleCollapse(tool.id)}
                     onApprove={() => handleToolDecision(tool.id, true)}
                     onReject={() => handleToolDecision(tool.id, false)}
-                    decision={toolDecisions[tool.id]}
+                    onAcceptAll={() => handleAcceptAll(tool.id, tool.name)}
+                    onPermissionChange={(permission) => handlePermissionChange(tool.name, permission)}
+                    autoApproved={autoApprovedTools.includes(tool.name)}
                 />
             ))}
 
@@ -129,6 +189,8 @@ const ToolApprovalSet: React.FC<ToolApprovalSetProps> = (props) => {
                     isCollapsed={collapsedTools.includes(tool.id)}
                     isProcessing={false}
                     onToggleCollapse={() => toggleCollapse(tool.id)}
+                    onPermissionChange={(permission) => handlePermissionChange(tool.name, permission)}
+                    autoApproved={autoApprovedTools.includes(tool.name)}
                 />
             ))}
 
