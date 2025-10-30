@@ -213,7 +213,7 @@ func (a *API) handleGetMCPTools(c *gin.Context) {
 
 // discoverRemoteServerTools connects to a single remote MCP server and discovers its tools
 func (a *API) discoverRemoteServerTools(ctx context.Context, userID string, serverConfig mcp.ServerConfig) ([]MCPToolInfo, error) {
-	toolInfos, err := mcp.DiscoverRemoteServerTools(ctx, userID, serverConfig, a.pluginAPI.Log, a.mcpClientManager.GetOAuthManager())
+	toolInfos, err := mcp.DiscoverRemoteServerTools(ctx, userID, serverConfig, a.pluginAPI.Log, a.mcpClientManager.GetOAuthManager(), a.mcpClientManager.GetToolsCache())
 	if err != nil {
 		return nil, err
 	}
@@ -249,4 +249,36 @@ func (a *API) discoverEmbeddedServerTools(ctx context.Context, requestingAdminID
 	}
 
 	return tools, nil
+}
+
+// ClearMCPToolsCacheResponse represents the response for clearing the cache
+type ClearMCPToolsCacheResponse struct {
+	ClearedServers int    `json:"cleared_servers"`
+	Message        string `json:"message"`
+}
+
+// handleClearMCPToolsCache clears the tools cache for all MCP servers
+func (a *API) handleClearMCPToolsCache(c *gin.Context) {
+	if err := a.enforceEmptyBody(c); err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+		return
+	}
+
+	toolsCache := a.mcpClientManager.GetToolsCache()
+	if toolsCache == nil {
+		c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("tools cache not available"))
+		return
+	}
+
+	// Clear all cache entries
+	clearedCount, err := toolsCache.ClearAll()
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("failed to clear cache: %w", err))
+		return
+	}
+
+	c.JSON(http.StatusOK, ClearMCPToolsCacheResponse{
+		ClearedServers: clearedCount,
+		Message:        fmt.Sprintf("Successfully cleared cache for %d servers", clearedCount),
+	})
 }

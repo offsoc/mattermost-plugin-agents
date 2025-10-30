@@ -50,9 +50,10 @@ func DiscoverRemoteServerTools(
 	serverConfig ServerConfig,
 	log pluginapi.LogService,
 	oauthManger *OAuthManager,
+	toolsCache *ToolsCache,
 ) ([]ToolInfo, error) {
 	// Create and connect to the remote server
-	client, err := NewClient(ctx, userID, serverConfig, log, oauthManger)
+	client, err := NewClient(ctx, userID, serverConfig, log, oauthManger, toolsCache)
 	if err != nil {
 		return nil, err
 	}

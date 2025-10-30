@@ -11,7 +11,7 @@ import {GlobalState} from '@mattermost/types/store';
 
 import manifest from '@/manifest';
 
-import {ToolCall, ToolCallStatus} from './llmbot_post';
+import {ToolCall, ToolCallStatus} from './llmbot_post/llmbot_post';
 
 import LoadingSpinner from './assets/loading_spinner';
 import IconCheckCircle from './assets/icon_check_circle';
