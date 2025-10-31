@@ -265,6 +265,7 @@ interface ToolCardProps {
     onAcceptAll?: () => void;
     onPermissionChange?: (permission: 'ask' | 'auto-approve') => void;
     autoApproved?: boolean;
+    permissionsLoading?: boolean;
 }
 
 const ToolCard: React.FC<ToolCardProps> = ({
@@ -277,6 +278,7 @@ const ToolCard: React.FC<ToolCardProps> = ({
     onAcceptAll,
     onPermissionChange,
     autoApproved,
+    permissionsLoading,
 }) => {
     const isPending = tool.status === ToolCallStatus.Pending;
     const isAccepted = tool.status === ToolCallStatus.Accepted;
@@ -284,13 +286,16 @@ const ToolCard: React.FC<ToolCardProps> = ({
     const isError = tool.status === ToolCallStatus.Error;
     const isRejected = tool.status === ToolCallStatus.Rejected;
 
+    // When permissions are loading for a pending tool, force collapsed state
+    const effectivelyCollapsed = isCollapsed || (isPending && (permissionsLoading ?? false));
+
     // Convert underscores to spaces and capitalize first letter of each word
     // (e.g., "create_post" -> "Create Post")
-    const displayName = tool.name
-        .replace(/_/g, ' ')
-        .split(' ')
-        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(' ');
+    const displayName = tool.name.
+        replace(/_/g, ' ').
+        split(' ').
+        map((word) => word.charAt(0).toUpperCase() + word.slice(1)).
+        join(' ');
 
     const siteURL = useSelector<GlobalState, string | undefined>((state) => state.entities.general.config.SiteURL);
     const team = useSelector((state: GlobalState) => state.entities.teams.currentTeamId);
@@ -353,14 +358,15 @@ const ToolCard: React.FC<ToolCardProps> = ({
     return (
         <ToolCallCard>
             <ToolCallHeader
-                isCollapsed={isCollapsed}
+                isCollapsed={effectivelyCollapsed}
                 onClick={onToggleCollapse}
             >
                 <StyledChevronIcon>
-                    {isCollapsed ? <ChevronRightIcon size={16}/> : <ChevronDownIcon size={16}/>}
+                    {effectivelyCollapsed ? <ChevronRightIcon size={16}/> : <ChevronDownIcon size={16}/>}
                 </StyledChevronIcon>
                 <StatusIcon>
-                    {isPending && !isProcessing && <SmallSpinner/>}
+                    {isPending && !isProcessing && !permissionsLoading && <SmallSpinner/>}
+                    {isPending && permissionsLoading && <SmallSpinner/>}
                     {(isAccepted || (isPending && isProcessing)) && <SmallSpinner/>}
                     {isSuccess && <SmallSuccessIcon size={16}/>}
                     {isError && <SmallErrorIcon size={16}/>}
@@ -417,7 +423,7 @@ const ToolCard: React.FC<ToolCardProps> = ({
                 )}
             </ToolCallHeader>
 
-            {!isCollapsed && (
+            {!effectivelyCollapsed && (
                 <>
                     <ToolCallArguments>{renderedArguments}</ToolCallArguments>
 
@@ -447,7 +453,7 @@ const ToolCard: React.FC<ToolCardProps> = ({
                 </>
             )}
 
-            {isPending && (
+            {isPending && !permissionsLoading && (
                 isProcessing || autoApproved ? (
                     <StatusContainer>
                         <ProcessingSpinnerContainer>

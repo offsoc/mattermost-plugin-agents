@@ -1,7 +1,7 @@
 // Copyright (c) 2023-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
-import React, {useState, useEffect, useRef} from 'react';
+import React, {useState, useEffect} from 'react';
 import styled from 'styled-components';
 import {FormattedMessage} from 'react-intl';
 import {WebSocketMessage} from '@mattermost/client';
@@ -50,60 +50,30 @@ const ToolApprovalSet: React.FC<ToolApprovalSetProps> = (props) => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
     const [autoApprovedTools, setAutoApprovedTools] = useState<string[]>([]);
+    const [permissionsLoading, setPermissionsLoading] = useState(true);
 
-    // Initialize collapsed state - all tools start collapsed by default
-    // We'll expand only the non-auto-approved ones to avoid flash
-    const [collapsedTools, setCollapsedTools] = useState<string[]>([]);
+    // Track user manual overrides of the default collapse state
+    const [userExpandedTools, setUserExpandedTools] = useState<string[]>([]); // User clicked to expand a normally-collapsed tool
+    const [userCollapsedTools, setUserCollapsedTools] = useState<string[]>([]); // User clicked to collapse a normally-expanded tool
     const [toolDecisions, setToolDecisions] = useState<ToolDecision>({});
-
-    // Track if we've loaded permissions and set initial collapse
-    const permissionsLoaded = useRef(false);
-    const initialCollapseSet = useRef(false);
 
     // Load permissions from KV store on mount or when postID changes
     useEffect(() => {
         const loadPermissions = async () => {
+            setPermissionsLoading(true);
             try {
                 const permissions = await getToolPermissions(props.postID);
                 setAutoApprovedTools(permissions);
-                permissionsLoaded.current = true;
             } catch (err) {
                 // Log error but continue with empty permissions - don't block UI
                 setAutoApprovedTools([]);
-                permissionsLoaded.current = true;
+            } finally {
+                setPermissionsLoading(false);
             }
         };
 
-        permissionsLoaded.current = false;
-        initialCollapseSet.current = false;
         loadPermissions();
     }, [props.postID]);
-
-    // When tool calls arrive, set initial collapse state based on permissions
-    // Only runs once to avoid re-collapsing when permissions change via WebSocket
-    useEffect(() => {
-        if (props.toolCalls.length === 0) {
-            return;
-        }
-
-        // Wait for permissions to load before setting initial collapse
-        if (!permissionsLoaded.current) {
-            return;
-        }
-
-        // Only set initial collapse once
-        if (initialCollapseSet.current) {
-            return;
-        }
-
-        // Get IDs of tools that are auto-approved (should be collapsed)
-        const autoApprovedToolIds = props.toolCalls.
-            filter((tool) => autoApprovedTools.includes(tool.name)).
-            map((tool) => tool.id);
-
-        setCollapsedTools(autoApprovedToolIds);
-        initialCollapseSet.current = true;
-    }, [props.toolCalls, autoApprovedTools]); // Depend on both
 
     // Register WebSocket listener for tool permission updates
     useEffect(() => {
@@ -142,9 +112,6 @@ const ToolApprovalSet: React.FC<ToolApprovalSetProps> = (props) => {
         if (isSubmitting) {
             return;
         }
-
-        // Collapse the tool immediately
-        setCollapsedTools((prev) => [...prev, toolID]);
 
         const updatedDecisions = {
             ...toolDecisions,
@@ -190,9 +157,6 @@ const ToolApprovalSet: React.FC<ToolApprovalSetProps> = (props) => {
         const matchingToolIDs = props.toolCalls.
             filter((tool) => tool.name === toolName && tool.status === ToolCallStatus.Pending).
             map((tool) => tool.id);
-
-        // Collapse all matching tools
-        setCollapsedTools((prev) => [...prev, ...matchingToolIDs]);
 
         // Mark all matching tools as approved
         const updatedDecisions = {
@@ -250,10 +214,27 @@ const ToolApprovalSet: React.FC<ToolApprovalSetProps> = (props) => {
         }
     };
 
-    const toggleCollapse = (toolID: string) => {
-        setCollapsedTools((prev) =>
-            (prev.includes(toolID) ? prev.filter((id) => id !== toolID) : [...prev, toolID]),
-        );
+    const toggleCollapse = (toolID: string, toolName: string, isPending: boolean) => {
+        // Determine what the default state should be
+        const shouldBeExpandedByDefault = isPending && !autoApprovedTools.includes(toolName);
+
+        if (shouldBeExpandedByDefault) {
+            // Default is expanded, so user is clicking to collapse
+            setUserCollapsedTools((prev) =>
+                (prev.includes(toolID) ? prev.filter((id) => id !== toolID) : [...prev, toolID]),
+            );
+
+            // Remove from expanded list if it was there
+            setUserExpandedTools((prev) => prev.filter((id) => id !== toolID));
+        } else {
+            // Default is collapsed, so user is clicking to expand
+            setUserExpandedTools((prev) =>
+                (prev.includes(toolID) ? prev.filter((id) => id !== toolID) : [...prev, toolID]),
+            );
+
+            // Remove from collapsed list if it was there
+            setUserCollapsedTools((prev) => prev.filter((id) => id !== toolID));
+        }
     };
 
     if (props.toolCalls.length === 0) {
@@ -273,20 +254,42 @@ const ToolApprovalSet: React.FC<ToolApprovalSetProps> = (props) => {
     // Calculate how many tools are left to decide on
     const undecidedCount = Object.values(toolDecisions).filter((decision) => decision === null).length;
 
+    // Helper to compute if a tool should be collapsed
+    const isToolCollapsed = (tool: ToolCall) => {
+        // Default state: collapsed for everything EXCEPT pending non-auto-approved tools
+        const defaultExpanded = tool.status === ToolCallStatus.Pending && !autoApprovedTools.includes(tool.name);
+
+        // Check for user overrides
+        const userWantsExpanded = userExpandedTools.includes(tool.id);
+        const userWantsCollapsed = userCollapsedTools.includes(tool.id);
+
+        // User overrides take precedence
+        if (userWantsExpanded) {
+            return false; // Not collapsed (expanded)
+        }
+        if (userWantsCollapsed) {
+            return true; // Collapsed
+        }
+
+        // Otherwise use default
+        return !defaultExpanded;
+    };
+
     return (
         <ToolCallsContainer>
             {pendingToolCalls.map((tool) => (
                 <ToolCard
                     key={tool.id}
                     tool={tool}
-                    isCollapsed={collapsedTools.includes(tool.id)}
+                    isCollapsed={isToolCollapsed(tool)}
                     isProcessing={isSubmitting}
-                    onToggleCollapse={() => toggleCollapse(tool.id)}
+                    onToggleCollapse={() => toggleCollapse(tool.id, tool.name, true)}
                     onApprove={() => handleToolDecision(tool.id, true)}
                     onReject={() => handleToolDecision(tool.id, false)}
                     onAcceptAll={() => handleAcceptAll(tool.id, tool.name)}
                     onPermissionChange={(permission) => handlePermissionChange(tool.name, permission)}
                     autoApproved={autoApprovedTools.includes(tool.name)}
+                    permissionsLoading={permissionsLoading}
                 />
             ))}
 
@@ -294,9 +297,9 @@ const ToolApprovalSet: React.FC<ToolApprovalSetProps> = (props) => {
                 <ToolCard
                     key={tool.id}
                     tool={tool}
-                    isCollapsed={collapsedTools.includes(tool.id)}
+                    isCollapsed={isToolCollapsed(tool)}
                     isProcessing={false}
-                    onToggleCollapse={() => toggleCollapse(tool.id)}
+                    onToggleCollapse={() => toggleCollapse(tool.id, tool.name, false)}
                     onPermissionChange={(permission) => handlePermissionChange(tool.name, permission)}
                     autoApproved={autoApprovedTools.includes(tool.name)}
                 />
