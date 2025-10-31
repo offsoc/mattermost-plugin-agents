@@ -86,8 +86,16 @@ func (c *Conversations) HandleToolCall(userID string, post *model.Post, channel 
 				return json.Unmarshal(tools[i].Arguments, args)
 			}, llmContext)
 			if resolveErr != nil {
-				// Maybe in the future we can return this to the user and have a retry. For now just tell the LLM it failed.
-				tools[i].Result = "Tool call failed"
+				// Check if this is a tool execution error (should show to user)
+				// vs a protocol/network error (should be obfuscated)
+				var toolExecErr *mcp.ToolExecutionError
+				if errors.As(resolveErr, &toolExecErr) {
+					// Tool execution error - show the actual error message
+					tools[i].Result = toolExecErr.Error()
+				} else {
+					// Protocol/network error
+					tools[i].Result = "Tool call failed"
+				}
 				tools[i].Status = llm.ToolCallStatusError
 				continue
 			}

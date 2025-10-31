@@ -1,11 +1,13 @@
 // Copyright (c) 2023-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useRef} from 'react';
 import styled from 'styled-components';
 import {FormattedMessage} from 'react-intl';
+import {WebSocketMessage} from '@mattermost/client';
 
 import {doToolCall, getToolPermissions, updateToolPermission} from '@/client';
+import {ToolPermissionWebsocketMessage} from '@/websocket';
 
 import {ToolCall, ToolCallStatus} from './llmbot_post/llmbot_post';
 import ToolCard from './tool_card';
@@ -32,7 +34,10 @@ const StatusBar = styled.div`
 // Tool call interfaces
 interface ToolApprovalSetProps {
     postID: string;
+    rootPostID: string;
     toolCalls: ToolCall[];
+    websocketRegister?: (rootPostID: string, listenerID: string, handler: (msg: WebSocketMessage<any>) => void) => void;
+    websocketUnregister?: (rootPostID: string, listenerID: string) => void;
 }
 
 // Define a type for tool decisions
@@ -46,9 +51,14 @@ const ToolApprovalSet: React.FC<ToolApprovalSetProps> = (props) => {
     const [error, setError] = useState('');
     const [autoApprovedTools, setAutoApprovedTools] = useState<string[]>([]);
 
-    // Initialize collapsed state - auto-approved tools start collapsed
+    // Initialize collapsed state - all tools start collapsed by default
+    // We'll expand only the non-auto-approved ones to avoid flash
     const [collapsedTools, setCollapsedTools] = useState<string[]>([]);
     const [toolDecisions, setToolDecisions] = useState<ToolDecision>({});
+
+    // Track if we've loaded permissions and set initial collapse
+    const permissionsLoaded = useRef(false);
+    const initialCollapseSet = useRef(false);
 
     // Load permissions from KV store on mount or when postID changes
     useEffect(() => {
@@ -56,22 +66,77 @@ const ToolApprovalSet: React.FC<ToolApprovalSetProps> = (props) => {
             try {
                 const permissions = await getToolPermissions(props.postID);
                 setAutoApprovedTools(permissions);
+                permissionsLoaded.current = true;
             } catch (err) {
                 // Log error but continue with empty permissions - don't block UI
                 setAutoApprovedTools([]);
+                permissionsLoaded.current = true;
             }
         };
 
+        permissionsLoaded.current = false;
+        initialCollapseSet.current = false;
         loadPermissions();
     }, [props.postID]);
 
-    // Auto-collapse tools that are auto-approved when tool calls arrive or permissions change
+    // When tool calls arrive, set initial collapse state based on permissions
+    // Only runs once to avoid re-collapsing when permissions change via WebSocket
     useEffect(() => {
+        if (props.toolCalls.length === 0) {
+            return;
+        }
+
+        // Wait for permissions to load before setting initial collapse
+        if (!permissionsLoaded.current) {
+            return;
+        }
+
+        // Only set initial collapse once
+        if (initialCollapseSet.current) {
+            return;
+        }
+
+        // Get IDs of tools that are auto-approved (should be collapsed)
         const autoApprovedToolIds = props.toolCalls.
             filter((tool) => autoApprovedTools.includes(tool.name)).
             map((tool) => tool.id);
+
         setCollapsedTools(autoApprovedToolIds);
-    }, [props.toolCalls, autoApprovedTools]);
+        initialCollapseSet.current = true;
+    }, [props.toolCalls, autoApprovedTools]); // Depend on both
+
+    // Register WebSocket listener for tool permission updates
+    useEffect(() => {
+        if (props.websocketRegister && props.websocketUnregister) {
+            const listenerID = `tool-approval-set-${props.postID}`;
+
+            const handleToolPermissionUpdate = (msg: WebSocketMessage<ToolPermissionWebsocketMessage>) => {
+                const {tool_name, permission} = msg.data;
+
+                // Update local state based on the permission change
+                if (permission === 'auto-approve') {
+                    setAutoApprovedTools((prev) => {
+                        if (!prev.includes(tool_name)) {
+                            return [...prev, tool_name];
+                        }
+                        return prev;
+                    });
+                } else {
+                    setAutoApprovedTools((prev) => prev.filter((t) => t !== tool_name));
+                }
+            };
+
+            props.websocketRegister(props.rootPostID, listenerID, handleToolPermissionUpdate);
+
+            return () => {
+                if (props.websocketUnregister) {
+                    props.websocketUnregister(props.rootPostID, listenerID);
+                }
+            };
+        }
+
+        return () => {/* no cleanup */};
+    }, [props.rootPostID, props.postID, props.websocketRegister, props.websocketUnregister]);
 
     const handleToolDecision = async (toolID: string, approved: boolean, autoApproveTool?: string) => {
         if (isSubmitting) {
@@ -114,11 +179,54 @@ const ToolApprovalSet: React.FC<ToolApprovalSetProps> = (props) => {
     };
 
     const handleAcceptAll = async (toolID: string, toolName: string) => {
+        if (isSubmitting) {
+            return;
+        }
+
         // Add to local auto-approved state
         setAutoApprovedTools((prev) => [...prev, toolName]);
 
-        // Approve this tool and set auto-approval
-        await handleToolDecision(toolID, true, toolName);
+        // Find ALL pending tools with the same name and approve them all
+        const matchingToolIDs = props.toolCalls.
+            filter((tool) => tool.name === toolName && tool.status === ToolCallStatus.Pending).
+            map((tool) => tool.id);
+
+        // Collapse all matching tools
+        setCollapsedTools((prev) => [...prev, ...matchingToolIDs]);
+
+        // Mark all matching tools as approved
+        const updatedDecisions = {
+            ...toolDecisions,
+        };
+        matchingToolIDs.forEach((id) => {
+            updatedDecisions[id] = true;
+        });
+        setToolDecisions(updatedDecisions);
+
+        // Check if there are still undecided tools
+        const hasUndecided = props.toolCalls.some((tool) => {
+            return !Object.hasOwn(updatedDecisions, tool.id) || updatedDecisions[tool.id] === null;
+        });
+
+        if (hasUndecided) {
+            // If there are still undecided tools, do not submit yet
+            return;
+        }
+
+        // Submit when all tools are decided
+        const approvedToolIDs = Object.entries(updatedDecisions).
+            filter(([, isApproved]) => {
+                return isApproved;
+            }).
+            map(([id]) => id);
+
+        setIsSubmitting(true);
+        try {
+            await doToolCall(props.postID, approvedToolIDs, toolName);
+        } catch (err) {
+            setError('Failed to submit tool decisions');
+            setIsSubmitting(false);
+        }
     };
 
     const handlePermissionChange = async (toolName: string, permission: 'ask' | 'auto-approve') => {

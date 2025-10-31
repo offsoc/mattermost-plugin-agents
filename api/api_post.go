@@ -366,6 +366,16 @@ func (a *API) handleUpdateToolPermission(c *gin.Context) {
 		}
 	}
 
+	// Broadcast permission change via WebSocket to update all tool cards in this conversation
+	a.mmClient.PublishWebSocketEvent("tool_permission_updated", map[string]interface{}{
+		"user_id":      userID,
+		"root_post_id": rootPostID,
+		"tool_name":    data.ToolName,
+		"permission":   data.Permission,
+	}, &model.WebsocketBroadcast{
+		UserId: userID,
+	})
+
 	c.Status(http.StatusOK)
 }
 

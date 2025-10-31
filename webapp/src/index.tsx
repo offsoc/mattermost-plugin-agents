@@ -127,6 +127,7 @@ export default class Plugin {
         // Handle all post-related websocket events with one handler
         registry.registerWebSocketEventHandler('custom_mattermost-ai_postupdate', this.postEventListener.handlePostUpdateWebsockets);
         registry.registerWebSocketEventHandler('custom_mattermost-ai_tool_call_status_updated', this.postEventListener.handlePostUpdateWebsockets);
+        registry.registerWebSocketEventHandler('custom_mattermost-ai_tool_permission_updated', this.postEventListener.handleToolPermissionWebsockets);
 
         const LLMBotPostWithWebsockets = (props: any) => {
             return (
@@ -134,6 +135,8 @@ export default class Plugin {
                     {...props}
                     websocketRegister={this.postEventListener.registerPostUpdateListener}
                     websocketUnregister={this.postEventListener.unregisterPostUpdateListener}
+                    toolPermissionWebsocketRegister={this.postEventListener.registerToolPermissionListener}
+                    toolPermissionWebsocketUnregister={this.postEventListener.unregisterToolPermissionListener}
                 />
             );
         };

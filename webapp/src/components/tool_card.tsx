@@ -4,7 +4,7 @@
 import React, {useMemo} from 'react';
 import styled from 'styled-components';
 import {FormattedMessage} from 'react-intl';
-import {ChevronDownIcon, ChevronRightIcon, DotsHorizontalIcon, CheckIcon} from '@mattermost/compass-icons/components';
+import {ChevronDownIcon, ChevronRightIcon, DotsHorizontalIcon, CheckIcon, AlertCircleOutlineIcon, CloseCircleOutlineIcon} from '@mattermost/compass-icons/components';
 import {useSelector} from 'react-redux';
 
 import {GlobalState} from '@mattermost/types/store';
@@ -106,8 +106,36 @@ const SmallSuccessIcon = styled(CheckIcon)`
     height: 16px;
 `;
 
+const SmallErrorIcon = styled(AlertCircleOutlineIcon)`
+    color: var(--error-text);
+    min-width: 16px;
+    width: 16px;
+    height: 16px;
+`;
+
+const SmallRejectedIcon = styled(CloseCircleOutlineIcon)`
+    color: var(--dnd-indicator);
+    min-width: 16px;
+    width: 16px;
+    height: 16px;
+`;
+
 const ResponseSuccessIcon = styled(IconCheckCircle)`
     color: var(--online-indicator);
+    min-width: 16px;
+    width: 16px;
+    height: 16px;
+`;
+
+const ResponseErrorIcon = styled(AlertCircleOutlineIcon)`
+    color: var(--error-text);
+    min-width: 16px;
+    width: 16px;
+    height: 16px;
+`;
+
+const ResponseRejectedIcon = styled(CloseCircleOutlineIcon)`
+    color: var(--dnd-indicator);
     min-width: 16px;
     width: 16px;
     height: 16px;
@@ -148,9 +176,9 @@ const AcceptAllButton = styled.button`
     background: var(--button-bg);
     color: var(--button-color);
     border: none;
-    padding: 4px 10px;
+    padding: 8px 16px;
     border-radius: 4px;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     line-height: 16px;
     cursor: pointer;
@@ -168,9 +196,9 @@ const AcceptButton = styled.button`
     background: rgba(var(--button-bg-rgb), 0.08);
     color: var(--button-bg);
     border: none;
-    padding: 4px 10px;
+    padding: 8px 16px;
     border-radius: 4px;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     line-height: 16px;
     cursor: pointer;
@@ -188,9 +216,9 @@ const RejectButton = styled.button`
     background: rgba(var(--button-bg-rgb), 0.08);
     color: var(--button-bg);
     border: none;
-    padding: 4px 10px;
+    padding: 8px 16px;
     border-radius: 4px;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     line-height: 16px;
     cursor: pointer;
@@ -256,8 +284,13 @@ const ToolCard: React.FC<ToolCardProps> = ({
     const isError = tool.status === ToolCallStatus.Error;
     const isRejected = tool.status === ToolCallStatus.Rejected;
 
-    // Convert underscores to spaces for better readability (e.g., "git_fork" -> "git fork")
-    const displayName = tool.name.replace(/_/g, ' ');
+    // Convert underscores to spaces and capitalize first letter of each word
+    // (e.g., "create_post" -> "Create Post")
+    const displayName = tool.name
+        .replace(/_/g, ' ')
+        .split(' ')
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
 
     const siteURL = useSelector<GlobalState, string | undefined>((state) => state.entities.general.config.SiteURL);
     const team = useSelector((state: GlobalState) => state.entities.teams.currentTeamId);
@@ -330,7 +363,8 @@ const ToolCard: React.FC<ToolCardProps> = ({
                     {isPending && !isProcessing && <SmallSpinner/>}
                     {(isAccepted || (isPending && isProcessing)) && <SmallSpinner/>}
                     {isSuccess && <SmallSuccessIcon size={16}/>}
-                    {isError && <span style={{color: 'var(--error-text)', fontSize: '16px'}}>{'⚠️'}</span>}
+                    {isError && <SmallErrorIcon size={16}/>}
+                    {isRejected && <SmallRejectedIcon size={16}/>}
                 </StatusIcon>
                 <ToolName>{displayName}</ToolName>
 
@@ -391,7 +425,7 @@ const ToolCard: React.FC<ToolCardProps> = ({
                         <>
                             <ResponseLabel>
                                 {isSuccess && <ResponseSuccessIcon/>}
-                                {isError && <span style={{color: 'var(--error-text)', fontSize: '16px'}}>{'⚠️'}</span>}
+                                {isError && <ResponseErrorIcon/>}
                                 <FormattedMessage
                                     id='ai.tool_call.response'
                                     defaultMessage='Response'
@@ -403,7 +437,7 @@ const ToolCard: React.FC<ToolCardProps> = ({
 
                     {isRejected && (
                         <StatusContainer>
-                            <span>{'🚫'}</span>
+                            <ResponseRejectedIcon/>
                             <FormattedMessage
                                 id='ai.tool_call.status.rejected'
                                 defaultMessage='Rejected'
@@ -414,7 +448,7 @@ const ToolCard: React.FC<ToolCardProps> = ({
             )}
 
             {isPending && (
-                isProcessing ? (
+                isProcessing || autoApproved ? (
                     <StatusContainer>
                         <ProcessingSpinnerContainer>
                             <ProcessingSpinner/>
