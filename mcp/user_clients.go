@@ -40,7 +40,7 @@ func NewUserClients(userID string, log pluginapi.LogService, oauthManager *OAuth
 }
 
 // ConnectToRemoteServers initializes connections to remote MCP servers
-func (c *UserClients) ConnectToRemoteServers(servers []ServerConfig) *Errors {
+func (c *UserClients) ConnectToRemoteServers(ctx context.Context, servers []ServerConfig) *Errors {
 	if len(servers) == 0 {
 		c.log.Debug("No remote MCP servers provided for user", "userID", c.userID)
 		return nil
@@ -55,7 +55,7 @@ func (c *UserClients) ConnectToRemoteServers(servers []ServerConfig) *Errors {
 			continue
 		}
 
-		if err := c.connectToServer(context.TODO(), serverConfig.Name, serverConfig); err != nil {
+		if err := c.connectToServer(ctx, serverConfig.Name, serverConfig); err != nil {
 			// Initialize errors struct if needed
 			if mcpErrors == nil {
 				mcpErrors = &Errors{}
@@ -81,7 +81,7 @@ func (c *UserClients) ConnectToRemoteServers(servers []ServerConfig) *Errors {
 }
 
 // ConnectToEmbeddedServerIfAvailable connects to the embedded server if session ID is provided
-func (c *UserClients) ConnectToEmbeddedServerIfAvailable(sessionID string, embeddedClient *EmbeddedServerClient, embeddedConfig EmbeddedServerConfig) error {
+func (c *UserClients) ConnectToEmbeddedServerIfAvailable(ctx context.Context, sessionID string, embeddedClient *EmbeddedServerClient, embeddedConfig EmbeddedServerConfig) error {
 	if !embeddedConfig.Enabled || embeddedClient == nil {
 		return nil
 	}
@@ -93,7 +93,7 @@ func (c *UserClients) ConnectToEmbeddedServerIfAvailable(sessionID string, embed
 
 	// Connect if session ID is provided
 	if sessionID != "" {
-		ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctxWithTimeout, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		if err := c.connectToEmbeddedServerWithClient(ctxWithTimeout, c.userID, sessionID, embeddedClient); err != nil {
 			c.log.Error("Failed to connect to embedded MCP server", "userID", c.userID, "error", err)
@@ -183,6 +183,10 @@ func (c *UserClients) createToolResolver(client *Client, toolName string) func(l
 			return "", fmt.Errorf("failed to get arguments for tool %s: %w", toolName, err)
 		}
 
-		return client.CallTool(context.Background(), toolName, args)
+		// Create context with timeout for tool execution
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+
+		return client.CallTool(ctx, toolName, args)
 	}
 }

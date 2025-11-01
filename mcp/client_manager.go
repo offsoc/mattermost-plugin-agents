@@ -114,7 +114,7 @@ func (m *ClientManager) Close() {
 }
 
 // createAndStoreUserClient creates a new UserClients instance and stores it in the manager
-func (m *ClientManager) createAndStoreUserClient(userID string) (*UserClients, *Errors) {
+func (m *ClientManager) createAndStoreUserClient(ctx context.Context, userID string) (*UserClients, *Errors) {
 	m.clientsMu.Lock()
 	defer m.clientsMu.Unlock()
 
@@ -128,7 +128,7 @@ func (m *ClientManager) createAndStoreUserClient(userID string) (*UserClients, *
 	userClients := NewUserClients(userID, m.log, m.oauthManager, m.toolsCache)
 
 	// Let user client connect to remote servers only
-	mcpErrors := userClients.ConnectToRemoteServers(m.config.Servers)
+	mcpErrors := userClients.ConnectToRemoteServers(ctx, m.config.Servers)
 
 	// Store the client even if some servers failed to connect
 	// This allows partial success - user gets tools from working servers
@@ -138,7 +138,7 @@ func (m *ClientManager) createAndStoreUserClient(userID string) (*UserClients, *
 }
 
 // getClientForUser gets or creates an MCP client for a specific user
-func (m *ClientManager) getClientForUser(userID string) (*UserClients, *Errors) {
+func (m *ClientManager) getClientForUser(ctx context.Context, userID string) (*UserClients, *Errors) {
 	m.clientsMu.RLock()
 	client, exists := m.clients[userID]
 	m.clientsMu.RUnlock()
@@ -147,17 +147,17 @@ func (m *ClientManager) getClientForUser(userID string) (*UserClients, *Errors) 
 		return client, nil
 	}
 
-	return m.createAndStoreUserClient(userID)
+	return m.createAndStoreUserClient(ctx, userID)
 }
 
 // GetToolsForUser returns the tools available for a specific user, connecting to embedded server if session ID provided
-func (m *ClientManager) GetToolsForUser(userID, sessionID string) ([]llm.Tool, *Errors) {
+func (m *ClientManager) GetToolsForUser(ctx context.Context, userID, sessionID string) ([]llm.Tool, *Errors) {
 	// Get or create client for this user (connects to remote servers only)
-	userClient, mcpErrors := m.getClientForUser(userID)
+	userClient, mcpErrors := m.getClientForUser(ctx, userID)
 
 	// Try to connect to embedded server if session ID provided
 	if sessionID != "" {
-		if embeddedErr := userClient.ConnectToEmbeddedServerIfAvailable(sessionID, m.embeddedClient, m.config.EmbeddedServer); embeddedErr != nil {
+		if embeddedErr := userClient.ConnectToEmbeddedServerIfAvailable(ctx, sessionID, m.embeddedClient, m.config.EmbeddedServer); embeddedErr != nil {
 			m.log.Debug("Failed to connect to embedded server for user", "userID", userID, "error", embeddedErr)
 		}
 	}

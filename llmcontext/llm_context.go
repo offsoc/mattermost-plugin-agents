@@ -4,6 +4,7 @@
 package llmcontext
 
 import (
+	"context"
 	"time"
 
 	"github.com/mattermost/mattermost-plugin-ai/bots"
@@ -20,7 +21,7 @@ type ToolProvider interface {
 
 // MCPToolProvider provides MCP tools for a user
 type MCPToolProvider interface {
-	GetToolsForUser(userID, sessionID string) ([]llm.Tool, *mcp.Errors)
+	GetToolsForUser(ctx context.Context, userID, sessionID string) ([]llm.Tool, *mcp.Errors)
 }
 
 // ConfigProvider provides configuration access
@@ -149,7 +150,10 @@ func (b *Builder) getToolsStoreForUser(c *llm.Context, bot *bots.Bot, isDM bool,
 		sessionID := c.SessionID
 
 		// Get tools from all connected servers (connects to embedded server if session ID provided)
-		mcpTools, mcpErrors := b.mcpToolProvider.GetToolsForUser(userID, sessionID)
+		// Create context with timeout for tool discovery
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		mcpTools, mcpErrors := b.mcpToolProvider.GetToolsForUser(ctx, userID, sessionID)
 
 		// Add tools from successfully connected servers even if some had errors
 		if len(mcpTools) > 0 {
