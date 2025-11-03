@@ -93,6 +93,7 @@ func (c *Conversations) HandleToolCall(userID string, post *model.Post, channel 
 					// Tool execution error - show the actual error message
 					tools[i].Result = toolExecErr.Error()
 				} else {
+					c.mmClient.LogError("Tool execution error", "error", resolveErr, "tool", tools[i].Name, "post_id", post.Id)
 					// Protocol/network error
 					tools[i].Result = "Tool call failed"
 				}
