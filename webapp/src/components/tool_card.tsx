@@ -1,10 +1,10 @@
 // Copyright (c) 2023-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
-import React, {useMemo} from 'react';
+import React, {useMemo, useState} from 'react';
 import styled from 'styled-components';
 import {FormattedMessage} from 'react-intl';
-import {ChevronDownIcon, ChevronRightIcon, DotsHorizontalIcon, CheckIcon, AlertCircleOutlineIcon, CloseCircleOutlineIcon} from '@mattermost/compass-icons/components';
+import {ChevronDownIcon, ChevronRightIcon, DotsHorizontalIcon, CheckIcon, AlertCircleOutlineIcon, CloseCircleOutlineIcon, InformationOutlineIcon} from '@mattermost/compass-icons/components';
 import {useSelector} from 'react-redux';
 
 import {GlobalState} from '@mattermost/types/store';
@@ -161,8 +161,79 @@ const MenuGroupTitle = styled.div`
 const CheckIconContainer = styled.span`
     display: inline-flex;
     align-items: center;
-    margin-right: 8px;
+    margin-left: auto;
     color: var(--button-bg);
+    flex-shrink: 0;
+`;
+
+const MenuItemLabel = styled.span`
+    display: flex;
+    align-items: center;
+    gap: 8px;
+`;
+
+const InfoIconWrapper = styled.span`
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+`;
+
+const InfoIcon = styled(InformationOutlineIcon)`
+    color: rgba(var(--center-channel-color-rgb), 0.64);
+    flex-shrink: 0;
+    cursor: pointer;
+`;
+
+const TooltipContainer = styled.div`
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+
+    ${InfoIconWrapper}:hover & {
+        opacity: 1;
+        visibility: visible;
+    }
+`;
+
+const TooltipContent = styled.div`
+    background: #1b1d22;
+    border-radius: 4px;
+    box-shadow: 0px 6px 14px 0px rgba(0, 0, 0, 0.12);
+    padding: 6px 12px;
+    font-family: 'Open Sans', sans-serif;
+    font-weight: 400;
+    font-size: 12px;
+    line-height: 16px;
+    color: white;
+    min-width: 240px;
+    max-width: 240px;
+    word-wrap: break-word;
+`;
+
+const TooltipArrow = styled.div`
+    position: absolute;
+    bottom: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 4px solid #1b1d22;
+`;
+
+const PermissionMenuItem = styled(DropdownMenuItem)`
+    display: flex !important;
+    width: 100%;
+    justify-content: space-between;
+    align-items: center;
+    gap: 32px;
 `;
 
 const ButtonContainer = styled.div`
@@ -280,6 +351,8 @@ const ToolCard: React.FC<ToolCardProps> = ({
     autoApproved,
     permissionsLoading,
 }) => {
+    const [showTooltip, setShowTooltip] = useState(false);
+
     const isPending = tool.status === ToolCallStatus.Pending;
     const isAccepted = tool.status === ToolCallStatus.Accepted;
     const isSuccess = tool.status === ToolCallStatus.Success;
@@ -390,34 +463,48 @@ const ToolCard: React.FC<ToolCardProps> = ({
                                     defaultMessage='On tool request'
                                 />
                             </MenuGroupTitle>
-                            <DropdownMenuItem
+                            <PermissionMenuItem
                                 onClick={() => onPermissionChange('auto-approve')}
                             >
+                                <MenuItemLabel>
+                                    <FormattedMessage
+                                        id='ai.tool_call.permission.auto_approve'
+                                        defaultMessage='Allow everytime'
+                                    />
+                                    <InfoIconWrapper
+                                        onMouseEnter={() => setShowTooltip(true)}
+                                        onMouseLeave={() => setShowTooltip(false)}
+                                    >
+                                        <InfoIcon size={16}/>
+                                        {showTooltip && (
+                                            <TooltipContainer>
+                                                <TooltipContent>
+                                                    {'All allowed commands will be run automatically. Use at your own risk.'}
+                                                </TooltipContent>
+                                                <TooltipArrow/>
+                                            </TooltipContainer>
+                                        )}
+                                    </InfoIconWrapper>
+                                </MenuItemLabel>
                                 {autoApproved && (
                                     <CheckIconContainer>
                                         <CheckIcon size={16}/>
                                     </CheckIconContainer>
                                 )}
-                                {!autoApproved && <CheckIconContainer/>}
-                                <FormattedMessage
-                                    id='ai.tool_call.permission.auto_approve'
-                                    defaultMessage='Allow everytime'
-                                />
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
+                            </PermissionMenuItem>
+                            <PermissionMenuItem
                                 onClick={() => onPermissionChange('ask')}
                             >
+                                <FormattedMessage
+                                    id='ai.tool_call.permission.ask'
+                                    defaultMessage='Ask me everytime'
+                                />
                                 {!autoApproved && (
                                     <CheckIconContainer>
                                         <CheckIcon size={16}/>
                                     </CheckIconContainer>
                                 )}
-                                {autoApproved && <CheckIconContainer/>}
-                                <FormattedMessage
-                                    id='ai.tool_call.permission.ask'
-                                    defaultMessage='Ask me everytime'
-                                />
-                            </DropdownMenuItem>
+                            </PermissionMenuItem>
                         </DotMenu>
                     </DotMenuContainer>
                 )}
