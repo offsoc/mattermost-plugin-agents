@@ -362,6 +362,34 @@ func TestIsValidService(t *testing.T) {
 			want: false,
 		},
 		{
+			name: "Valid Bedrock service with region",
+			service: ServiceConfig{
+				ID:     "service-7",
+				Type:   ServiceTypeBedrock,
+				Region: "us-east-1", // AWS region
+			},
+			want: true,
+		},
+		{
+			name: "Bedrock service missing region",
+			service: ServiceConfig{
+				ID:     "service-7",
+				Type:   ServiceTypeBedrock,
+				Region: "", // bad - region required
+			},
+			want: false,
+		},
+		{
+			name: "Bedrock service does not require API key",
+			service: ServiceConfig{
+				ID:     "service-7",
+				Type:   ServiceTypeBedrock,
+				APIKey: "", // not required - can use IAM role
+				Region: "us-west-2",
+			},
+			want: true,
+		},
+		{
 			name: "Service with empty ID",
 			service: ServiceConfig{
 				ID:     "", // bad

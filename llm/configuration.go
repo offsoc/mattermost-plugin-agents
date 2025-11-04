@@ -11,6 +11,7 @@ type ServiceConfig struct {
 	OrgID        string `json:"orgId"`
 	DefaultModel string `json:"defaultModel"`
 	APIURL       string `json:"apiURL"`
+	Region       string `json:"region"` // For AWS Bedrock region
 
 	// Renaming the JSON field to inputTokenLimit would require a migration, leaving as is for now.
 	InputTokenLimit         int  `json:"tokenLimit"`
@@ -106,6 +107,10 @@ func IsValidService(service ServiceConfig) bool {
 		return service.APIKey != ""
 	case ServiceTypeCohere:
 		return service.APIKey != ""
+	case ServiceTypeBedrock:
+		// Bedrock requires AWS region
+		// API key is optional as AWS credentials can come from environment/IAM role
+		return service.Region != ""
 	default:
 		return false
 	}

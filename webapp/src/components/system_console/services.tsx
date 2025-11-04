@@ -25,6 +25,7 @@ const defaultNewService: LLMService = {
     sendUserId: false,
     outputTokenLimit: 0,
     useResponsesAPI: false,
+    region: '',
 };
 
 export const firstNewService = {

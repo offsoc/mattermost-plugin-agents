@@ -9,6 +9,7 @@ The Mattermost Agents plugin currently supports these LLM providers:
 - Local models via OpenAI-compatible APIs (Ollama, vLLM, etc.)
 - OpenAI
 - Anthropic
+- AWS Bedrock
 - Cohere
 - Azure OpenAI
 
@@ -69,6 +70,157 @@ Obtain an [Anthropic API key](https://console.anthropic.com/settings/keys), then
 |---------|----------|-------------|
 | **API Key** | Yes | Your Anthropic API key |
 | **Default Model** | Yes | The model to use by default (see [Anthropic's model documentation](https://docs.anthropic.com/claude/docs/models-overview)) |
+
+## AWS Bedrock
+
+### Overview
+
+AWS Bedrock provides access to multiple foundation models through a unified API, including models from Anthropic (Claude), Amazon (Titan), and other providers. Bedrock is ideal for organizations already using AWS infrastructure or those requiring sovereign AI deployments.
+
+### Prerequisites
+
+Before configuring Bedrock:
+
+1. Ensure you have an active AWS account with access to Amazon Bedrock
+2. Enable model access in the AWS Bedrock console for the models you want to use
+3. Have appropriate IAM permissions for `bedrock:Converse` and `bedrock:ConverseStream`
+4. Know which AWS region you'll be using (model availability varies by region)
+
+### Authentication
+
+AWS Bedrock supports multiple authentication methods:
+
+#### Option 1: IAM Roles (Recommended for AWS deployments)
+
+If your Mattermost server runs on AWS infrastructure (EC2, ECS, EKS), you can use IAM roles:
+
+1. Create an IAM role with Bedrock permissions
+2. Attach the role to your Mattermost infrastructure
+3. In Mattermost, select **AWS Bedrock** in the **Service** dropdown
+4. Enter your AWS region (e.g., `us-east-1`) in the **AWS Region** field
+5. Leave the **API Key** field blank - AWS SDK will use the IAM role automatically
+
+#### Option 2: Bedrock Console API Keys (Short-term)
+
+For quick testing and development (valid for 12 hours):
+
+1. Go to Amazon Bedrock console in your desired region
+2. Click on your profile → **Generate API Key**
+3. Copy the generated API key (format: `bedrock-api-key-...`)
+4. In Mattermost, select **AWS Bedrock** in the **Service** dropdown
+5. Enter your AWS region (e.g., `us-west-2`) in the **AWS Region** field
+6. Paste the Bedrock API key directly in the **API Key** field
+
+**Note**: Short-term API keys expire after 12 hours or when your console session ends. For production use, consider IAM user credentials or IAM roles.
+
+#### Option 3: AWS IAM User Access Keys
+
+For long-term production use:
+
+1. Create an IAM user with programmatic access and Bedrock permissions (see IAM Policy Example below)
+2. Generate AWS access keys for the IAM user
+3. In Mattermost, select **AWS Bedrock** in the **Service** dropdown
+4. Enter your AWS region (e.g., `us-west-2`) in the **AWS Region** field
+5. Enter your IAM user credentials in the **API Key** field (format: `access_key_id:secret_access_key`)
+
+#### Option 4: Environment Variables
+
+You can also configure AWS credentials through environment variables on your Mattermost server:
+
+```bash
+export AWS_ACCESS_KEY_ID=your_access_key
+export AWS_SECRET_ACCESS_KEY=your_secret_key
+export AWS_REGION=us-east-1
+```
+
+Then in Mattermost, enter the region in the **AWS Region** field and leave **API Key** blank.
+
+### Configuration Options
+
+| Setting | Required | Description |
+|---------|----------|-------------|
+| **AWS Region** | Yes | AWS region where Bedrock is available (e.g., `us-east-1`, `us-west-2`, `eu-central-1`) |
+| **API Key** | No | Bedrock console API key (`bedrock-api-key-...`) OR IAM credentials (`access_key:secret_key`). Can also use environment variables or IAM roles. |
+| **Default Model** | Yes | The Bedrock model ID to use by default (see Available Models below) |
+
+### Available Models
+
+Bedrock provides access to multiple model families. Common model IDs include:
+
+#### Claude (Anthropic)
+- `anthropic.claude-3-5-sonnet-20241022-v2:0` - Claude 3.5 Sonnet v2 (Latest)
+- `anthropic.claude-3-5-sonnet-20240620-v1:0` - Claude 3.5 Sonnet
+- `anthropic.claude-3-opus-20240229-v1:0` - Claude 3 Opus
+- `anthropic.claude-3-sonnet-20240229-v1:0` - Claude 3 Sonnet
+- `anthropic.claude-3-haiku-20240307-v1:0` - Claude 3 Haiku
+
+#### Amazon Titan
+- `amazon.titan-text-express-v1` - Titan Text Express
+- `amazon.titan-text-lite-v1` - Titan Text Lite
+
+Model availability varies by AWS region. Check the [AWS Bedrock documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/models-regions.html) for the most current information.
+
+### IAM Policy Example
+
+Here's a minimal IAM policy for Bedrock access using the Converse API:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:Converse",
+        "bedrock:ConverseStream"
+      ],
+      "Resource": "arn:aws:bedrock:*::foundation-model/*"
+    }
+  ]
+}
+```
+
+For more restrictive access, limit the resource to specific models:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:Converse",
+        "bedrock:ConverseStream"
+      ],
+      "Resource": "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-*"
+    }
+  ]
+}
+```
+
+### Regional Considerations
+
+- **Model Availability**: Not all models are available in all regions. Check AWS documentation for current availability
+- **Latency**: Choose a region close to your Mattermost deployment for optimal performance
+- **Data Residency**: Select regions that meet your data sovereignty requirements
+- **Cost**: Pricing may vary by region
+
+### Supported Features
+
+AWS Bedrock through Mattermost Agents supports:
+
+- Streaming responses for real-time interaction
+- Tool/function calling for integrations
+- Multi-modal capabilities (text and images) with compatible models
+- Token usage tracking for cost management
+
+### Special Considerations
+
+- **Model Enablement**: You must explicitly enable models in the AWS Bedrock console before using them
+- **Quotas**: Be aware of AWS Bedrock service quotas and request increases if needed
+- **Cold Starts**: First requests to a model may experience slightly higher latency
+- **Cost Management**: Monitor usage through AWS Cost Explorer and consider setting up billing alerts
+- **API Key Expiration**: Bedrock console API keys (`bedrock-api-key-*`) expire after 12 hours. For production use, configure IAM user credentials or IAM roles for persistent authentication
 
 ## Cohere
 

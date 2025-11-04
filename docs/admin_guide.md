@@ -53,7 +53,7 @@ Select **Add an Agent** to create a new Agent, then configure the agent settings
 | **Display Name** | User-facing name shown in Mattermost |
 | **Agent Username** | The mattermost username for the agent. @ mentions to the agent will use this name |
 | **Agent Avatar** | Custom image for the agent |
-| **Service** | LLM provider for this agent (OpenAI, Anthropic, Cohere, Azure OpenAI, OpenAI-compatible) |
+| **Service** | LLM provider for this agent (OpenAI, Anthropic, AWS Bedrock, Cohere, Azure OpenAI, OpenAI-compatible) |
 | **Send User ID** | Whether to send Mattermost user IDs to the LLM provider |
 | **Default Model** | Specific model to use from your chosen provider |
 | **Input Token Limit** | Maximum tokens allowed in input (model-dependent) |
@@ -81,6 +81,15 @@ Some LLMs have additional configuration that can enable rich features, like Web 
 |---------|-------------|
 | **Enable Web Search** | Enabling web search will allow your Agent to leverage Anthropic's native web search tool, enabling Agents to respond with information more recent than the model's cutoff date.
 
+##### AWS Bedrock
+
+| Setting | Description |
+|---------|-------------|
+| **AWS Region** | The AWS region where your Bedrock service is available (e.g., us-east-1, us-west-2). |
+| **API Key** | Optional. AWS credentials can be provided via API Key field or through IAM roles, environment variables, or instance profiles. |
+
+AWS Bedrock provides access to multiple foundation models including Claude (Anthropic), Amazon Titan, and other models available through AWS. Authentication can be configured using AWS credentials in the API Key field, or by using IAM roles when running Mattermost on AWS infrastructure.
+
 
 Select **Save** to create the agent.
 
@@ -92,6 +101,7 @@ For each LLM provider you want to use, you'll need to configure authentication. 
 |----------|----------|----------|
 | **OpenAI** | API Key | Organization ID |
 | **Anthropic** | API Key | |
+| **AWS Bedrock** | AWS Region | API Key (can use IAM role) |
 | **Cohere** | API Key | |
 | **Azure OpenAI** | API Key, Resource Name, Deployment ID | |
 

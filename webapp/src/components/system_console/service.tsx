@@ -26,6 +26,7 @@ export type LLMService = {
     sendUserId: boolean
     outputTokenLimit: number
     useResponsesAPI: boolean
+    region: string
 }
 
 const mapServiceTypeToDisplayName = new Map<string, string>([
@@ -33,6 +34,7 @@ const mapServiceTypeToDisplayName = new Map<string, string>([
     ['openaicompatible', 'OpenAI Compatible'],
     ['azure', 'Azure'],
     ['anthropic', 'Anthropic'],
+    ['bedrock', 'AWS Bedrock'],
     ['cohere', 'Cohere'],
     ['asage', 'asksage (Experimental)'],
 ]);
@@ -56,6 +58,8 @@ const ServiceFields = (props: ServiceFieldsProps) => {
         switch (type) {
         case 'anthropic':
             return '8192';
+        case 'bedrock':
+            return '8192';
         default:
             return '0';
         }
@@ -75,6 +79,7 @@ const ServiceFields = (props: ServiceFieldsProps) => {
             >
                 <SelectionItemOption value='openai'>{'OpenAI'}</SelectionItemOption>
                 <SelectionItemOption value='anthropic'>{'Anthropic'}</SelectionItemOption>
+                <SelectionItemOption value='bedrock'>{'AWS Bedrock'}</SelectionItemOption>
                 <SelectionItemOption value='openaicompatible'>{'OpenAI Compatible'}</SelectionItemOption>
                 <SelectionItemOption value='azure'>{'Azure'}</SelectionItemOption>
                 <SelectionItemOption value='cohere'>{'Cohere'}</SelectionItemOption>
@@ -87,11 +92,20 @@ const ServiceFields = (props: ServiceFieldsProps) => {
                     onChange={(e) => props.onChange({...props.service, apiURL: e.target.value})}
                 />
             )}
+            {type === 'bedrock' && (
+                <TextItem
+                    label={intl.formatMessage({defaultMessage: 'AWS Region'})}
+                    value={props.service.region}
+                    onChange={(e) => props.onChange({...props.service, region: e.target.value})}
+                    helptext={intl.formatMessage({defaultMessage: 'AWS region where Bedrock is available (e.g., us-east-1, us-west-2)'})}
+                />
+            )}
             <TextItem
                 label={intl.formatMessage({defaultMessage: 'API Key'})}
                 type='password'
                 value={props.service.apiKey}
                 onChange={(e) => props.onChange({...props.service, apiKey: e.target.value})}
+                helptext={type === 'bedrock' ? intl.formatMessage({defaultMessage: 'Optional. Bedrock console API key (bedrock-api-key-...) OR IAM credentials (access_key:secret_key). Can also use IAM roles or environment variables.'}) : undefined}
             />
             {isOpenAIType && (
                 <>

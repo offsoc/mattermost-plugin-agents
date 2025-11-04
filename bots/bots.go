@@ -11,6 +11,7 @@ import (
 
 	"github.com/mattermost/mattermost-plugin-ai/anthropic"
 	"github.com/mattermost/mattermost-plugin-ai/asage"
+	"github.com/mattermost/mattermost-plugin-ai/bedrock"
 	"github.com/mattermost/mattermost-plugin-ai/config"
 	"github.com/mattermost/mattermost-plugin-ai/enterprise"
 	"github.com/mattermost/mattermost-plugin-ai/llm"
@@ -171,7 +172,7 @@ func (b *MMBots) EnsureBots() error {
 }
 
 func (b *MMBots) getLLM(serviceConfig llm.ServiceConfig, botConfig llm.BotConfig) (llm.LanguageModel, error) {
-	// Create the correct model
+	// Create the correc@t model
 	var result llm.LanguageModel
 	switch serviceConfig.Type {
 	case llm.ServiceTypeOpenAI:
@@ -182,6 +183,14 @@ func (b *MMBots) getLLM(serviceConfig llm.ServiceConfig, botConfig llm.BotConfig
 		result = openai.NewAzure(config.OpenAIConfigFromServiceConfig(serviceConfig, botConfig.EnabledNativeTools), b.llmUpstreamHTTPClient)
 	case llm.ServiceTypeAnthropic:
 		result = anthropic.New(serviceConfig, botConfig.EnabledNativeTools, b.llmUpstreamHTTPClient)
+	case llm.ServiceTypeBedrock:
+		// For Bedrock, Region contains the AWS region
+		var err error
+		result, err = bedrock.New(serviceConfig, serviceConfig.Region, b.llmUpstreamHTTPClient)
+		if err != nil {
+			b.pluginAPI.Log.Error("Failed to create Bedrock client", "error", err, "bot_name", botConfig.Name)
+			return nil, fmt.Errorf("failed to create Bedrock client: %w", err)
+		}
 	case llm.ServiceTypeASage:
 		result = asage.New(serviceConfig, b.llmUpstreamHTTPClient)
 	case llm.ServiceTypeCohere:
