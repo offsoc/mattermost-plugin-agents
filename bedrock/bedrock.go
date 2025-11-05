@@ -53,41 +53,55 @@ func New(llmService llm.ServiceConfig, awsRegion string, httpClient *http.Client
 		config.WithHTTPClient(httpClient),
 	}
 
-	// Load AWS configuration first
+	// Configure authentication based on provided credentials
+	// Priority: IAM credentials > Bearer token (API Key) > Default credential chain
+	var clientOpts []func(*bedrockruntime.Options)
+
+	// Option 1: IAM user credentials (takes precedence)
+	if llmService.AWSAccessKeyID != "" && llmService.AWSSecretAccessKey != "" {
+		// Use static IAM credentials for standard AWS SigV4 signing
+		configOpts = append(configOpts, config.WithCredentialsProvider(
+			aws.NewCredentialsCache(
+				credentials.NewStaticCredentialsProvider(
+					llmService.AWSAccessKeyID,
+					llmService.AWSSecretAccessKey,
+					"", // No session token for long-term credentials
+				),
+			),
+		))
+	} else if llmService.APIKey != "" {
+		// Option 2: Bedrock console API key (bearer token)
+		// Disable default credentials to force bearer token authentication
+		configOpts = append(configOpts, config.WithCredentialsProvider(aws.AnonymousCredentials{}))
+
+		clientOpts = append(clientOpts, func(o *bedrockruntime.Options) {
+			// Set credentials to anonymous to prevent any AWS credential provider from being used
+			o.Credentials = aws.AnonymousCredentials{}
+
+			// Use bearer token authentication (base64 encoded format from Bedrock console)
+			o.BearerAuthTokenProvider = bearer.TokenProviderFunc(func(ctx context.Context) (bearer.Token, error) {
+				return bearer.Token{Value: llmService.APIKey}, nil
+			})
+
+			// Force bearer auth to be the only auth scheme
+			o.AuthSchemePreference = []string{"httpBearerAuth"}
+		})
+	}
+	// Option 3: If no credentials provided, AWS SDK will use default credential chain
+	// (environment variables AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY, IAM role, etc.)
+
+	// Load AWS configuration
 	cfg, err := config.LoadDefaultConfig(context.Background(), configOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
 
-	// Configure authentication based on API key format
-	var clientOpts []func(*bedrockruntime.Options)
-
-	if llmService.APIKey != "" {
-		// Check if this is a Bedrock console API key (bearer token)
-		if strings.HasPrefix(llmService.APIKey, "bedrock-api-key-") {
-			// Use bearer token authentication (like AWS_BEARER_TOKEN_BEDROCK)
-			clientOpts = append(clientOpts, func(o *bedrockruntime.Options) {
-				o.BearerAuthTokenProvider = bearer.TokenProviderFunc(func(ctx context.Context) (bearer.Token, error) {
-					return bearer.Token{Value: llmService.APIKey}, nil
-				})
-				o.AuthSchemePreference = []string{"httpBearerAuth"}
-			})
-		} else {
-			// Parse standard AWS credential format
-			parts := strings.SplitN(llmService.APIKey, ":", 3)
-			switch {
-			case len(parts) == 2 && parts[0] != "" && parts[1] != "":
-				// Format: access_key:secret_key - use static credentials
-				cfg.Credentials = credentials.NewStaticCredentialsProvider(parts[0], parts[1], "")
-			case len(parts) == 3 && parts[0] != "" && parts[1] != "" && parts[2] != "":
-				// Format: access_key:secret_key:session_token (for STS temporary credentials)
-				cfg.Credentials = credentials.NewStaticCredentialsProvider(parts[0], parts[1], parts[2])
-			default:
-				return nil, fmt.Errorf("invalid API Key format for Bedrock: expected 'access_key_id:secret_access_key' (colon-separated) or 'bedrock-api-key-...' for Bedrock console keys")
-			}
-		}
+	// If APIURL is provided, use it as a custom base endpoint (for proxies, VPC endpoints, etc.)
+	if llmService.APIURL != "" {
+		clientOpts = append(clientOpts, func(o *bedrockruntime.Options) {
+			o.BaseEndpoint = aws.String(llmService.APIURL)
+		})
 	}
-	// If API key is empty, AWS SDK will use default credential chain (environment vars, IAM role, etc.)
 
 	client := bedrockruntime.NewFromConfig(cfg, clientOpts...)
 

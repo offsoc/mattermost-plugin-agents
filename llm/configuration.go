@@ -13,6 +13,10 @@ type ServiceConfig struct {
 	APIURL       string `json:"apiURL"`
 	Region       string `json:"region"` // For AWS Bedrock region
 
+	// AWS IAM credentials for Bedrock (optional, takes precedence over APIKey)
+	AWSAccessKeyID     string `json:"awsAccessKeyID"`
+	AWSSecretAccessKey string `json:"awsSecretAccessKey"`
+
 	// Renaming the JSON field to inputTokenLimit would require a migration, leaving as is for now.
 	InputTokenLimit         int  `json:"tokenLimit"`
 	StreamingTimeoutSeconds int  `json:"streamingTimeoutSeconds"`

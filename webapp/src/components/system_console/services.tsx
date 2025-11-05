@@ -26,6 +26,8 @@ const defaultNewService: LLMService = {
     outputTokenLimit: 0,
     useResponsesAPI: false,
     region: '',
+    awsAccessKeyID: '',
+    awsSecretAccessKey: '',
 };
 
 export const firstNewService = {

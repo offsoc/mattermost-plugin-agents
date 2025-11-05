@@ -27,6 +27,8 @@ export type LLMService = {
     outputTokenLimit: number
     useResponsesAPI: boolean
     region: string
+    awsAccessKeyID: string
+    awsSecretAccessKey: string
 }
 
 const mapServiceTypeToDisplayName = new Map<string, string>([
@@ -93,19 +95,40 @@ const ServiceFields = (props: ServiceFieldsProps) => {
                 />
             )}
             {type === 'bedrock' && (
-                <TextItem
-                    label={intl.formatMessage({defaultMessage: 'AWS Region'})}
-                    value={props.service.region}
-                    onChange={(e) => props.onChange({...props.service, region: e.target.value})}
-                    helptext={intl.formatMessage({defaultMessage: 'AWS region where Bedrock is available (e.g., us-east-1, us-west-2)'})}
-                />
+                <>
+                    <TextItem
+                        label={intl.formatMessage({defaultMessage: 'AWS Region'})}
+                        value={props.service.region}
+                        onChange={(e) => props.onChange({...props.service, region: e.target.value})}
+                        helptext={intl.formatMessage({defaultMessage: 'AWS region where Bedrock is available (e.g., us-east-1, us-west-2)'})}
+                    />
+                    <TextItem
+                        label={intl.formatMessage({defaultMessage: 'Custom Endpoint URL (Optional)'})}
+                        value={props.service.apiURL}
+                        onChange={(e) => props.onChange({...props.service, apiURL: e.target.value})}
+                        helptext={intl.formatMessage({defaultMessage: 'Optional custom endpoint for VPC endpoints or proxies (e.g., https://bedrock-runtime.vpce-xxx.us-east-1.vpce.amazonaws.com)'})}
+                    />
+                    <TextItem
+                        label={intl.formatMessage({defaultMessage: 'AWS Access Key ID (Optional)'})}
+                        value={props.service.awsAccessKeyID}
+                        onChange={(e) => props.onChange({...props.service, awsAccessKeyID: e.target.value})}
+                        helptext={intl.formatMessage({defaultMessage: 'IAM user access key ID. If set, these credentials take precedence over API Key. Can also be set via AWS_ACCESS_KEY_ID environment variable. System console takes precedence over environment variables.'})}
+                    />
+                    <TextItem
+                        label={intl.formatMessage({defaultMessage: 'AWS Secret Access Key (Optional)'})}
+                        type='password'
+                        value={props.service.awsSecretAccessKey}
+                        onChange={(e) => props.onChange({...props.service, awsSecretAccessKey: e.target.value})}
+                        helptext={intl.formatMessage({defaultMessage: 'IAM user secret access key. Required if AWS Access Key ID is provided. Can also be set via AWS_SECRET_ACCESS_KEY environment variable. System console takes precedence over environment variables.'})}
+                    />
+                </>
             )}
             <TextItem
                 label={intl.formatMessage({defaultMessage: 'API Key'})}
                 type='password'
                 value={props.service.apiKey}
                 onChange={(e) => props.onChange({...props.service, apiKey: e.target.value})}
-                helptext={type === 'bedrock' ? intl.formatMessage({defaultMessage: 'Optional. Bedrock console API key (bedrock-api-key-...) OR IAM credentials (access_key:secret_key). Can also use IAM roles or environment variables.'}) : undefined}
+                helptext={type === 'bedrock' ? intl.formatMessage({defaultMessage: 'Optional. Bedrock console API key (base64 encoded). If IAM credentials above are set, they take precedence.'}) : undefined}
             />
             {isOpenAIType && (
                 <>
