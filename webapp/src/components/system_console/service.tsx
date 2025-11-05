@@ -128,6 +128,7 @@ const ServiceFields = (props: ServiceFieldsProps) => {
                 type='password'
                 value={props.service.apiKey}
                 onChange={(e) => props.onChange({...props.service, apiKey: e.target.value})}
+                // eslint-disable-next-line no-undefined
                 helptext={type === 'bedrock' ? intl.formatMessage({defaultMessage: 'Optional. Bedrock console API key (base64 encoded). If IAM credentials above are set, they take precedence.'}) : undefined}
             />
             {isOpenAIType && (
