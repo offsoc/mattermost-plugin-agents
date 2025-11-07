@@ -90,7 +90,7 @@ func (b *MMBots) EnsureBots() error {
 			continue
 		}
 
-		// Validate service exists
+		// Get service by ID
 		service, ok := b.config.GetServiceByID(botCfg.ServiceID)
 		if !ok {
 			b.pluginAPI.Log.Error("Bot references non-existent service", "bot_name", botCfg.Name, "service_id", botCfg.ServiceID)
