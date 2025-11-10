@@ -353,7 +353,7 @@ func (p *MMPostStreamService) StreamToPost(ctx context.Context, stream *llm.Text
 							p.sendPostStreamingUpdateEvent(post, post.Message)
 							p.mmClient.LogDebug("Replaced post message with cleaned version", "post_id", post.Id, "original_length", len(post.Message), "cleaned_length", len(cleanedMsg))
 						}
-						
+
 						annotationsJSON, err := json.Marshal(annotations)
 						if err != nil {
 							p.mmClient.LogError("Failed to marshal annotations", "error", err)
