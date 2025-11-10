@@ -21,7 +21,7 @@ import (
 
 	"github.com/mattermost/mattermost-plugin-ai/config"
 	"github.com/mattermost/mattermost-plugin-ai/llm"
-	"github.com/mattermost/mattermost-plugin-ai/search_providers"
+	"github.com/mattermost/mattermost-plugin-ai/websearch"
 )
 
 const (
@@ -86,7 +86,7 @@ type webSearchService struct {
 	httpClient *http.Client
 	tool       *llm.Tool
 	sourceTool *llm.Tool
-	provider   search_providers.Provider
+	provider   websearch.Provider
 	mutex      sync.RWMutex
 }
 
@@ -143,7 +143,7 @@ func (s *webSearchService) Tool() *llm.Tool {
 			s.logWarn("web search misconfigured: missing Google API credentials")
 			return nil
 		}
-		s.provider = search_providers.NewGoogleProvider(
+		s.provider = websearch.NewGoogleProvider(
 			webCfg.Google.APIKey,
 			webCfg.Google.SearchEngineID,
 			webCfg.Google.APIURL,
@@ -155,7 +155,7 @@ func (s *webSearchService) Tool() *llm.Tool {
 			s.logWarn("web search misconfigured: missing Brave API key")
 			return nil
 		}
-		s.provider = search_providers.NewBraveProvider(
+		s.provider = websearch.NewBraveProvider(
 			webCfg.Brave.APIKey,
 			webCfg.Brave.APIURL,
 			webCfg.Brave.PollTimeout,

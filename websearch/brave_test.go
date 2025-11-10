@@ -1,7 +1,7 @@
 // Copyright (c) 2023-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
-package search_providers
+package websearch
 
 import (
 	"context"
@@ -17,7 +17,8 @@ func TestBraveProvider(t *testing.T) {
 	t.Run("successful search with summarizer returns answer with remapped citations", func(t *testing.T) {
 		// Mock Brave API server
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == "/res/v1/web/search" {
+			switch r.URL.Path {
+			case "/res/v1/web/search":
 				// Initial web search response with summarizer key
 				response := braveWebSearchResponse{
 					Summarizer: struct {
@@ -43,8 +44,8 @@ func TestBraveProvider(t *testing.T) {
 				}
 
 				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(response)
-			} else if r.URL.Path == "/res/v1/summarizer/search" {
+				_ = json.NewEncoder(w).Encode(response)
+			case "/res/v1/summarizer/search":
 				// Summarizer response
 				response := braveSummarizerResponse{
 					Type:   "summarizer",
@@ -63,7 +64,7 @@ func TestBraveProvider(t *testing.T) {
 				}
 
 				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(response)
+				_ = json.NewEncoder(w).Encode(response)
 			}
 		}))
 		defer server.Close()
@@ -107,7 +108,7 @@ func TestBraveProvider(t *testing.T) {
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(response)
+			_ = json.NewEncoder(w).Encode(response)
 		}))
 		defer server.Close()
 
@@ -137,7 +138,7 @@ func TestBraveProvider(t *testing.T) {
 
 	t.Run("converts citations directly", func(t *testing.T) {
 		provider := NewBraveProvider("test-key", "", 10, 250, http.DefaultClient, &mockLogger{})
-		
+
 		testCases := []struct {
 			name     string
 			input    string

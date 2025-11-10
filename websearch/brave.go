@@ -1,7 +1,7 @@
 // Copyright (c) 2023-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
-package search_providers
+package websearch
 
 import (
 	"context"
@@ -91,7 +91,8 @@ func (b *BraveProvider) Search(ctx context.Context, query string, limit int) (*S
 	}
 
 	var webSearchResp braveWebSearchResponse
-	if err := json.NewDecoder(resp.Body).Decode(&webSearchResp); err != nil {
+	err = json.NewDecoder(resp.Body).Decode(&webSearchResp)
+	if err != nil {
 		return nil, fmt.Errorf("failed to decode brave web search response: %w", err)
 	}
 
