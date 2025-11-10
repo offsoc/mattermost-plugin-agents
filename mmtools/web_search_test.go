@@ -150,24 +150,30 @@ func TestBuildWebSearchAnnotations(t *testing.T) {
 		},
 	}
 
-	t.Run("parses !!CITE!! format correctly", func(t *testing.T) {
+	t.Run("parses !!CITE!! format correctly and cleans text", func(t *testing.T) {
 		message := "Here is some text !!CITE1!! and more text !!CITE2!! at the end."
-		annotations := buildWebSearchAnnotations(message, results)
+		annotations, cleanedMessage := buildWebSearchAnnotationsAndCleanText(message, results)
 
 		require.Len(t, annotations, 2)
 
-		// First annotation
+		// Verify cleaned message has markers removed
+		require.Equal(t, "Here is some text  and more text  at the end.", cleanedMessage)
+		require.NotContains(t, cleanedMessage, "!!CITE")
+
+		// First annotation - should have zero-width indices in cleaned message
 		require.Equal(t, llm.AnnotationTypeURLCitation, annotations[0].Type)
 		require.Equal(t, 1, annotations[0].Index)
 		require.Equal(t, "https://example.com/page1", annotations[0].URL)
 		require.Equal(t, "Example Title 1", annotations[0].Title)
 		require.Equal(t, "This is snippet 1", annotations[0].CitedText)
+		require.Equal(t, annotations[0].StartIndex, annotations[0].EndIndex, "Should be zero-width")
 
 		// Second annotation
 		require.Equal(t, llm.AnnotationTypeURLCitation, annotations[1].Type)
 		require.Equal(t, 2, annotations[1].Index)
 		require.Equal(t, "https://example.com/page2", annotations[1].URL)
 		require.Equal(t, "Example Title 2", annotations[1].Title)
+		require.Equal(t, annotations[1].StartIndex, annotations[1].EndIndex, "Should be zero-width")
 	})
 
 	t.Run("ignores text without markers", func(t *testing.T) {

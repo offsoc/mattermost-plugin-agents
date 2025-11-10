@@ -343,7 +343,28 @@ func (p *MMPostStreamService) StreamToPost(ctx context.Context, stream *llm.Text
 				}
 				return
 			case llm.EventTypeAnnotations:
-				if annotations, ok := event.Value.([]llm.Annotation); ok {
+				// Handle annotations - might include cleaned message for web search citations
+				if annotationMap, ok := event.Value.(map[string]interface{}); ok {
+					// Web search annotations with cleaned message
+					if annotations, hasAnnotations := annotationMap["annotations"].([]llm.Annotation); hasAnnotations {
+						if cleanedMsg, hasCleaned := annotationMap["cleanedMessage"].(string); hasCleaned {
+							// Replace post message with cleaned version (citation markers removed)
+							post.Message = cleanedMsg
+							p.sendPostStreamingUpdateEvent(post, post.Message)
+							p.mmClient.LogDebug("Replaced post message with cleaned version", "post_id", post.Id, "original_length", len(post.Message), "cleaned_length", len(cleanedMsg))
+						}
+						
+						annotationsJSON, err := json.Marshal(annotations)
+						if err != nil {
+							p.mmClient.LogError("Failed to marshal annotations", "error", err)
+						} else {
+							post.AddProp(AnnotationsProp, string(annotationsJSON))
+							p.mmClient.LogDebug("Added annotations to post props", "post_id", post.Id, "count", len(annotations))
+							p.sendPostStreamingAnnotationsEvent(post, string(annotationsJSON))
+						}
+					}
+				} else if annotations, ok := event.Value.([]llm.Annotation); ok {
+					// Regular annotations without cleaned message
 					annotationsJSON, err := json.Marshal(annotations)
 					if err != nil {
 						p.mmClient.LogError("Failed to marshal annotations", "error", err)

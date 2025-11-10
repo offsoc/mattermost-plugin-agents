@@ -147,22 +147,34 @@ func (c *Conversations) ProcessUserRequestWithContext(bot *bots.Bot, postingUser
 
 // ProcessUserRequest processes a user request to a bot
 func (c *Conversations) ProcessUserRequest(bot *bots.Bot, postingUser *model.User, channel *model.Channel, post *model.Post) (*llm.TextStreamResult, error) {
-	// Create a context with default tools
+	// Extract web search context from conversation history to preserve citations
+	// This ensures citations from previous searches work in follow-up messages
+	webSearchParams := c.extractWebSearchContext(post)
+
+	var contextOpts []llm.ContextOption
+	contextOpts = append(contextOpts, c.contextBuilder.WithLLMContextTools(bot, mmapi.IsDMWith(bot.GetMMBot().UserId, channel)))
+	if len(webSearchParams) > 0 {
+		contextOpts = append(contextOpts, c.contextBuilder.WithLLMContextParameters(webSearchParams))
+	}
+
+	// Create a context with default tools and preserved web search context
 	llmContext := c.contextBuilder.BuildLLMContextUserRequest(
 		bot,
 		postingUser,
 		channel,
-		c.contextBuilder.WithLLMContextTools(bot, mmapi.IsDMWith(bot.GetMMBot().UserId, channel)),
+		contextOpts...,
 	)
 
-	// Initialize fresh web search tracking for this request cycle
-	// Results from previous searches in the thread can still be referenced for context,
-	// but each user question gets a fresh budget of searches
+	// If web search context wasn't found, initialize fresh tracking
 	if llmContext.Parameters == nil {
 		llmContext.Parameters = make(map[string]interface{})
 	}
-	llmContext.Parameters[mmtools.WebSearchCountKey] = 0
-	llmContext.Parameters[mmtools.WebSearchExecutedQueriesKey] = []string{}
+	if _, hasCount := llmContext.Parameters[mmtools.WebSearchCountKey]; !hasCount {
+		llmContext.Parameters[mmtools.WebSearchCountKey] = 0
+	}
+	if _, hasQueries := llmContext.Parameters[mmtools.WebSearchExecutedQueriesKey]; !hasQueries {
+		llmContext.Parameters[mmtools.WebSearchExecutedQueriesKey] = []string{}
+	}
 
 	// Check for auth errors in the tool store
 	if llmContext.Tools != nil {

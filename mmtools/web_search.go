@@ -739,26 +739,33 @@ func DecorateStreamWithAnnotations(result *llm.TextStreamResult, searchData []We
 	go func() {
 		defer close(output)
 		var builder strings.Builder
+
 		for event := range result.Stream {
 			switch event.Type {
 			case llm.EventTypeText:
 				if text, ok := event.Value.(string); ok {
 					builder.WriteString(text)
 				}
+				// Pass through text events as normal during streaming
 				output <- event
 			case llm.EventTypeEnd:
 				fullMessage := builder.String()
 				if logger != nil {
 					logger.Debug("Building annotations from message", "message_length", len(fullMessage), "num_results", len(flat))
 				}
-				annotations := buildWebSearchAnnotations(fullMessage, flat)
+				annotations, cleanedMessage := buildWebSearchAnnotationsAndCleanText(fullMessage, flat)
 				if logger != nil {
-					logger.Debug("Built annotations", "num_annotations", len(annotations))
+					logger.Debug("Built annotations", "num_annotations", len(annotations), "cleaned_length", len(cleanedMessage), "original_length", len(fullMessage))
 				}
+
+				// Send annotations with cleaned message metadata
 				if len(annotations) > 0 {
 					output <- llm.TextStreamEvent{
-						Type:  llm.EventTypeAnnotations,
-						Value: annotations,
+						Type: llm.EventTypeAnnotations,
+						Value: map[string]interface{}{
+							"annotations":    annotations,
+							"cleanedMessage": cleanedMessage,
+						},
 					}
 				}
 				output <- event
@@ -771,9 +778,11 @@ func DecorateStreamWithAnnotations(result *llm.TextStreamResult, searchData []We
 	return &llm.TextStreamResult{Stream: output}
 }
 
-func buildWebSearchAnnotations(message string, results []WebSearchResult) []llm.Annotation {
+// buildWebSearchAnnotationsAndCleanText finds citation markers, builds annotations, and returns
+// the message with markers removed. The frontend will re-insert markers based on annotations.
+func buildWebSearchAnnotationsAndCleanText(message string, results []WebSearchResult) ([]llm.Annotation, string) {
 	if len(message) == 0 || len(results) == 0 {
-		return nil
+		return nil, message
 	}
 
 	indexMap := make(map[int]WebSearchResult, len(results))
@@ -782,21 +791,22 @@ func buildWebSearchAnnotations(message string, results []WebSearchResult) []llm.
 	}
 
 	annotations := []llm.Annotation{}
+	var cleanedMessage strings.Builder
 	pos := 0
 	runeIndex := 0
+
 	for pos < len(message) {
 		// Look for "!!CITE" sequence
 		if pos+6 <= len(message) && message[pos:pos+6] == "!!CITE" {
-			startRuneIndex := runeIndex
+			markerStartPos := pos
+			markerStartRuneIndex := runeIndex
 
 			// Move past "!!CITE" (6 bytes, 6 runes since all ASCII)
 			pos += 6
-			runeIndex += 6
 
 			// Parse the number
 			numBuilder := strings.Builder{}
 			digitCursor := pos
-			digitRuneIndex := runeIndex
 			for digitCursor < len(message) {
 				digitRune, digitSize := utf8.DecodeRuneInString(message[digitCursor:])
 				if digitRune < '0' || digitRune > '9' {
@@ -804,52 +814,64 @@ func buildWebSearchAnnotations(message string, results []WebSearchResult) []llm.
 				}
 				numBuilder.WriteRune(digitRune)
 				digitCursor += digitSize
-				digitRuneIndex++
 			}
 
 			if numBuilder.Len() == 0 {
-				// No number found, skip ahead
+				// No number found, include in cleaned text and continue
+				cleanedMessage.WriteString(message[markerStartPos:digitCursor])
+				runeIndex += utf8.RuneCountInString(message[markerStartPos:digitCursor])
 				pos = digitCursor
-				runeIndex = digitRuneIndex
 				continue
 			}
 
 			// Check for closing "!!"
 			if digitCursor+2 <= len(message) && message[digitCursor:digitCursor+2] == "!!" {
-				closingRuneIndex := digitRuneIndex + 2
 				nextPos := digitCursor + 2
 
 				idx, err := strconv.Atoi(numBuilder.String())
 				if err == nil {
 					if res, ok := indexMap[idx]; ok {
+						// Found a valid citation - create annotation and DON'T include marker in cleaned text
 						annotations = append(annotations, llm.Annotation{
 							Type:       llm.AnnotationTypeURLCitation,
-							StartIndex: startRuneIndex,
-							EndIndex:   closingRuneIndex,
+							StartIndex: markerStartRuneIndex,
+							EndIndex:   markerStartRuneIndex, // Zero-width annotation - frontend will insert marker
 							URL:        res.URL,
 							Title:      res.Title,
 							CitedText:  res.Snippet,
 							Index:      idx,
 						})
+						// Skip the marker in cleaned message - frontend will insert it based on annotation
+						pos = nextPos
+						continue
 					}
 				}
 
+				// Not a valid citation, include in cleaned text
+				cleanedMessage.WriteString(message[markerStartPos:nextPos])
+				runeIndex += utf8.RuneCountInString(message[markerStartPos:nextPos])
 				pos = nextPos
-				runeIndex = closingRuneIndex
 				continue
 			}
 
-			// Didn't find closing "!!", continue scanning
+			// Didn't find closing "!!", include in cleaned text
+			cleanedMessage.WriteString(message[markerStartPos:digitCursor])
+			runeIndex += utf8.RuneCountInString(message[markerStartPos:digitCursor])
 			pos = digitCursor
-			runeIndex = digitRuneIndex
 			continue
 		}
 
-		// Move to next character
-		_, size := utf8.DecodeRuneInString(message[pos:])
+		// Regular character - add to cleaned message
+		r, size := utf8.DecodeRuneInString(message[pos:])
+		cleanedMessage.WriteRune(r)
 		pos += size
 		runeIndex++
 	}
 
+	return annotations, cleanedMessage.String()
+}
+
+func buildWebSearchAnnotations(message string, results []WebSearchResult) []llm.Annotation {
+	annotations, _ := buildWebSearchAnnotationsAndCleanText(message, results)
 	return annotations
 }
