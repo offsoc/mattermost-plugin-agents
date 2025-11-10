@@ -146,9 +146,10 @@ func NewCompatibleEmbeddings(config Config, httpClient *http.Client) *OpenAI {
 	}
 }
 
-func modifyCompletionRequestWithRequest(params openai.ChatCompletionNewParams, internalRequest llm.CompletionRequest) openai.ChatCompletionNewParams {
+func modifyCompletionRequestWithRequest(params openai.ChatCompletionNewParams, internalRequest llm.CompletionRequest, cfg llm.LanguageModelConfig) openai.ChatCompletionNewParams {
 	params.Messages = postsToChatCompletionMessages(internalRequest.Posts)
-	if internalRequest.Context.Tools != nil {
+	// Only add tools if not explicitly disabled
+	if !cfg.ToolsDisabled && internalRequest.Context.Tools != nil {
 		params.Tools = toolsToOpenAITools(internalRequest.Context.Tools.GetTools())
 	}
 	return params
@@ -302,10 +303,10 @@ type ToolBufferElement struct {
 	args strings.Builder
 }
 
-func (s *OpenAI) streamResultToChannels(params openai.ChatCompletionNewParams, llmContext *llm.Context, output chan<- llm.TextStreamEvent) {
+func (s *OpenAI) streamResultToChannels(params openai.ChatCompletionNewParams, llmContext *llm.Context, cfg llm.LanguageModelConfig, output chan<- llm.TextStreamEvent) {
 	// Route to Responses API or Completions API based on configuration
 	if s.config.UseResponsesAPI {
-		s.streamResponsesAPIToChannels(params, llmContext, output)
+		s.streamResponsesAPIToChannels(params, llmContext, cfg, output)
 	} else {
 		s.streamCompletionsAPIToChannels(params, llmContext, output)
 	}
@@ -468,7 +469,7 @@ func (s *OpenAI) streamCompletionsAPIToChannels(params openai.ChatCompletionNewP
 }
 
 // streamResponsesAPIToChannels uses the new Responses API for streaming
-func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewParams, llmContext *llm.Context, output chan<- llm.TextStreamEvent) {
+func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewParams, llmContext *llm.Context, cfg llm.LanguageModelConfig, output chan<- llm.TextStreamEvent) {
 	ctx, cancel := context.WithCancelCause(context.Background())
 	defer cancel(nil)
 
@@ -494,7 +495,7 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 	}()
 
 	// Convert ChatCompletionNewParams to ResponseNewParams
-	responseParams := s.convertToResponseParams(params, llmContext)
+	responseParams := s.convertToResponseParams(params, llmContext, cfg)
 
 	// Create a streaming request
 	stream := s.client.Responses.NewStreaming(ctx, responseParams)
@@ -821,7 +822,7 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 
 // convertToResponseParams converts ChatCompletionNewParams to ResponseNewParams
 // This is a simplified conversion that handles the basic use cases
-func (s *OpenAI) convertToResponseParams(params openai.ChatCompletionNewParams, llmContext *llm.Context) responses.ResponseNewParams {
+func (s *OpenAI) convertToResponseParams(params openai.ChatCompletionNewParams, llmContext *llm.Context, cfg llm.LanguageModelConfig) responses.ResponseNewParams {
 	result := responses.ResponseNewParams{}
 
 	// Convert model - directly assign as it's the same type
@@ -966,8 +967,8 @@ func (s *OpenAI) convertToResponseParams(params openai.ChatCompletionNewParams, 
 		}
 	}
 
-	// Add native tools if enabled
-	if len(s.config.EnabledNativeTools) > 0 {
+	// Add native tools if not explicitly disabled
+	if !cfg.ToolsDisabled && len(s.config.EnabledNativeTools) > 0 {
 		for _, nativeTool := range s.config.EnabledNativeTools {
 			if nativeTool == "web_search" {
 				// Add web search as a built-in tool
@@ -1004,11 +1005,11 @@ func (s *OpenAI) convertToResponseParams(params openai.ChatCompletionNewParams, 
 	return result
 }
 
-func (s *OpenAI) streamResult(params openai.ChatCompletionNewParams, llmContext *llm.Context) (*llm.TextStreamResult, error) {
+func (s *OpenAI) streamResult(params openai.ChatCompletionNewParams, llmContext *llm.Context, cfg llm.LanguageModelConfig) (*llm.TextStreamResult, error) {
 	eventStream := make(chan llm.TextStreamEvent)
 	go func() {
 		defer close(eventStream)
-		s.streamResultToChannels(params, llmContext, eventStream)
+		s.streamResultToChannels(params, llmContext, cfg, eventStream)
 	}()
 
 	return &llm.TextStreamResult{Stream: eventStream}, nil
@@ -1079,8 +1080,9 @@ func getModelConstant(model string) shared.ChatModel {
 }
 
 func (s *OpenAI) ChatCompletion(request llm.CompletionRequest, opts ...llm.LanguageModelOption) (*llm.TextStreamResult, error) {
-	params := s.completionRequestFromConfig(s.createConfig(opts))
-	params = modifyCompletionRequestWithRequest(params, request)
+	cfg := s.createConfig(opts)
+	params := s.completionRequestFromConfig(cfg)
+	params = modifyCompletionRequestWithRequest(params, request, cfg)
 	params.StreamOptions.IncludeUsage = openai.Bool(true)
 
 	if s.config.SendUserID {
@@ -1088,7 +1090,7 @@ func (s *OpenAI) ChatCompletion(request llm.CompletionRequest, opts ...llm.Langu
 			params.User = openai.String(request.Context.RequestingUser.Id)
 		}
 	}
-	return s.streamResult(params, request.Context)
+	return s.streamResult(params, request.Context, cfg)
 }
 
 func (s *OpenAI) ChatCompletionNoStream(request llm.CompletionRequest, opts ...llm.LanguageModelOption) (string, error) {
