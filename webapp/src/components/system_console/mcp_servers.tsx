@@ -19,9 +19,14 @@ export type MCPServerConfig = {
     headers: {[key: string]: string};
 };
 
+export type MCPEmbeddedServerConfig = {
+    enabled: boolean;
+};
+
 export type MCPConfig = {
     enabled: boolean;
     servers: MCPServerConfig[];
+    embeddedServer: MCPEmbeddedServerConfig;
     idleTimeoutMinutes?: number;
 };
 
@@ -235,6 +240,9 @@ const MCPServers = ({mcpConfig, onChange}: Props) => {
     const config: MCPConfig = {
         enabled: mcpConfig?.enabled || false,
         servers: Array.isArray(mcpConfig?.servers) ? mcpConfig.servers : [],
+        embeddedServer: mcpConfig?.embeddedServer || {
+            enabled: !mcpConfig?.enabled,
+        },
         idleTimeoutMinutes: mcpConfig?.idleTimeoutMinutes || 30,
     };
 
@@ -333,12 +341,23 @@ const MCPServers = ({mcpConfig, onChange}: Props) => {
                                         }}
                                         helptext={intl.formatMessage({defaultMessage: 'How long to keep an inactive user connection open before closing it automatically. Lower values save resources, higher values improve response times.'})}
                                     />
+                                    <BooleanItem
+                                        label={intl.formatMessage({defaultMessage: 'Enable Embedded Server'})}
+                                        value={config.embeddedServer.enabled}
+                                        onChange={(enabled) => onChange({
+                                            ...config,
+                                            embeddedServer: {
+                                                ...config.embeddedServer,
+                                                enabled,
+                                            },
+                                        })}
+                                        helpText={intl.formatMessage({defaultMessage: 'Enable the built-in Mattermost MCP server that provides AI tools for reading/creating channels, posts, searching content, and managing users and teams. Tools operate with the permissions of the user who invokes them.'})}
+                                    />
                                 </ItemList>
-
                                 <ServersList>
                                     {!Array.isArray(config.servers) || config.servers.length < 1 ? (
                                         <EmptyState>
-                                            <FormattedMessage defaultMessage='No MCP servers configured. Add a server to enable MCP tools.'/>
+                                            <FormattedMessage defaultMessage='No remote MCP servers configured. Add a server to connect to external MCP tools.'/>
                                         </EmptyState>
                                     ) : (
                                         config.servers.map((serverConfig, index) => (
@@ -358,7 +377,7 @@ const MCPServers = ({mcpConfig, onChange}: Props) => {
                                         onClick={addServer}
                                     >
                                         <PlusServerIcon/>
-                                        <FormattedMessage defaultMessage='Add MCP Server'/>
+                                        <FormattedMessage defaultMessage='Add Remote MCP Server'/>
                                     </TertiaryButton>
                                 </AddServerContainer>
                             </>

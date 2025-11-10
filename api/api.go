@@ -44,7 +44,9 @@ type Config interface {
 
 type MCPClientManager interface {
 	GetOAuthManager() *mcp.OAuthManager
+	GetToolsCache() *mcp.ToolsCache
 	ProcessOAuthCallback(ctx context.Context, loggedInUserID, state, code string) (*mcp.OAuthSession, error)
+	GetEmbeddedServer() mcp.EmbeddedMCPServer
 }
 
 // API represents the HTTP API functionality for the plugin
@@ -114,9 +116,20 @@ func (a *API) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Reques
 	router.Use(a.ginlogger)
 	router.Use(a.metricsMiddleware)
 
-	interPluginRoute := router.Group("/inter-plugin/v1")
-	interPluginRoute.Use(a.interPluginAuthorizationRequired)
-	interPluginRoute.POST("/simple_completion", a.handleInterPluginSimpleCompletion)
+	// LLM Bridge API v1 routes - inter-plugin only
+	llmBridgeRoute := router.Group("/bridge/v1")
+	llmBridgeRoute.Use(a.interPluginAuthorizationRequired)
+
+	// Discovery endpoints
+	llmBridgeRoute.GET("/agents", a.handleGetAgents)
+	llmBridgeRoute.GET("/services", a.handleGetServices)
+
+	// Completion endpoints
+	completionRoute := llmBridgeRoute.Group("/completion")
+	completionRoute.POST("/agent/:agent", a.handleAgentCompletionStreaming)
+	completionRoute.POST("/agent/:agent/nostream", a.handleAgentCompletionNoStream)
+	completionRoute.POST("/service/:service", a.handleServiceCompletionStreaming)
+	completionRoute.POST("/service/:service/nostream", a.handleServiceCompletionNoStream)
 
 	router.Use(a.MattermostAuthorizationRequired)
 
@@ -148,6 +161,7 @@ func (a *API) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Reques
 	adminRouter.GET("/reindex/status", a.handleGetJobStatus)
 	adminRouter.POST("/reindex/cancel", a.handleCancelJob)
 	adminRouter.GET("/mcp/tools", a.handleGetMCPTools)
+	adminRouter.POST("/mcp/tools/cache/clear", a.handleClearMCPToolsCache)
 
 	searchRouter := botRequiredRouter.Group("/search")
 	// Only returns search results

@@ -12,7 +12,6 @@ import (
 
 	"github.com/mattermost/mattermost-plugin-ai/llm"
 	"github.com/mattermost/mattermost/server/public/model"
-	"github.com/mattermost/mattermost/server/public/shared/mlog"
 )
 
 // ReadChannelArgs represents arguments for the read_channel tool
@@ -47,7 +46,7 @@ type GetChannelMembersArgs struct {
 	Page      int    `json:"page,omitempty" jsonschema:"Page number for pagination (default: 0),minimum=0"`
 }
 
-// AddUserToChannelArgs represents arguments for the add_user_to_channel tool (dev mode only)
+// AddUserToChannelArgs represents arguments for the add_user_to_channel tool
 type AddUserToChannelArgs struct {
 	UserID    string `json:"user_id" jsonschema:"ID of the user to add"`
 	ChannelID string `json:"channel_id" jsonschema:"ID of the channel to add user to"`
@@ -80,15 +79,9 @@ func (p *MattermostToolProvider) getChannelTools() []MCPTool {
 			Schema:      llm.NewJSONSchemaFromStruct[GetChannelMembersArgs](),
 			Resolver:    p.toolGetChannelMembers,
 		},
-	}
-}
-
-// getDevChannelTools returns development channel-related tools for MCP
-func (p *MattermostToolProvider) getDevChannelTools() []MCPTool {
-	return []MCPTool{
 		{
 			Name:        "add_user_to_channel",
-			Description: "Add a user to a channel (dev mode only)",
+			Description: "Add a user to a channel. Parameters: user_id (required), channel_id (required). Returns confirmation message.",
 			Schema:      llm.NewJSONSchemaFromStruct[AddUserToChannelArgs](),
 			Resolver:    p.toolAddUserToChannel,
 		},
@@ -159,7 +152,7 @@ func (p *MattermostToolProvider) toolReadChannel(mcpContext *MCPToolContext, arg
 		// Get user info for the post
 		user, _, err := client.GetUser(ctx, post.UserId, "")
 		if err != nil {
-			p.logger.Warn("failed to get user for post", mlog.String("user_id", post.UserId), mlog.Err(err))
+			p.logger.Warn("failed to get user for post", "user_id", post.UserId, "error", err)
 			result.WriteString(fmt.Sprintf("**Post %d** by Unknown User:\n", i+1))
 		} else {
 			result.WriteString(fmt.Sprintf("**Post %d** by %s:\n", i+1, user.Username))
@@ -367,7 +360,7 @@ func (p *MattermostToolProvider) toolGetChannelMembers(mcpContext *MCPToolContex
 	for i, member := range members {
 		user, _, err := client.GetUser(ctx, member.UserId, "")
 		if err != nil {
-			p.logger.Warn("failed to get user details for member", mlog.String("user_id", member.UserId), mlog.Err(err))
+			p.logger.Warn("failed to get user details for member", "user_id", member.UserId, "error", err)
 			result.WriteString(fmt.Sprintf("%d. User ID: %s (details unavailable)\n", i+1, member.UserId))
 			continue
 		}

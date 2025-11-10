@@ -152,7 +152,7 @@ func (c *Conversations) ProcessUserRequest(bot *bots.Bot, postingUser *model.Use
 		bot,
 		postingUser,
 		channel,
-		c.contextBuilder.WithLLMContextDefaultTools(bot, mmapi.IsDMWith(bot.GetMMBot().UserId, channel)),
+		c.contextBuilder.WithLLMContextTools(bot, mmapi.IsDMWith(bot.GetMMBot().UserId, channel)),
 	)
 
 	// Initialize fresh web search tracking for this request cycle
