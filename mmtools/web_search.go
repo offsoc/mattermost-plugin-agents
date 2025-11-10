@@ -6,7 +6,6 @@ package mmtools
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -22,6 +21,7 @@ import (
 
 	"github.com/mattermost/mattermost-plugin-ai/config"
 	"github.com/mattermost/mattermost-plugin-ai/llm"
+	"github.com/mattermost/mattermost-plugin-ai/search_providers"
 )
 
 const (
@@ -34,10 +34,9 @@ const (
 	// WebSearchCountKey is the key used to track the number of searches executed
 	WebSearchCountKey = "mm_web_search_count"
 
-	defaultGoogleSearchEndpoint = "https://www.googleapis.com/customsearch/v1"
-	minQueryLength              = 3
-	maxWebSearches              = 3
-	WebSearchDescription        = "Perform a live web search using Google's Custom Search API. Use this tool to retrieve current information. Keep your search queries generic and concise according to the user's ask. Do not pass this tool URLs. You are limited to 3 searches per conversation - use them wisely. DO NOT repeat a search query you have already executed. In your final answer, cite sources using the exact format !!CITE1!!, !!CITE2!!, etc. These markers will be automatically converted to clickable citation links. Do NOT include URLs directly in your response text. Instead of creating a new search, refer to previous 'Live web search results' - only create a new search if the previous results are not relevant."
+	minQueryLength       = 3
+	maxWebSearches       = 3
+	WebSearchDescription = "Perform a live web search using Google's Custom Search API. Use this tool to retrieve current information. Keep your search queries generic and concise according to the user's ask. Do not pass this tool URLs. You are limited to 3 searches per conversation - use them wisely. DO NOT repeat a search query you have already executed. In your final answer, cite sources using the exact format !!CITE1!!, !!CITE2!!, etc. These markers will be automatically converted to clickable citation links. Do NOT include URLs directly in your response text. Instead of creating a new search, refer to previous 'Live web search results' - only create a new search if the previous results are not relevant."
 	// WebSearchSourceFetchDescription describes the page retrieval tool.
 	WebSearchSourceFetchDescription = "Fetch the full HTML content at a given URL and convert it to plain text for analysis. Use this tool to fetch more content from a web search result. You can ONLY fetch URLs that were returned in search results. Responses from this tool should be scrutinized for relevance, as some fetches may return generic pages as they don't allow AI Agents to access them. YOU MUST NOT USE THIS TOOL FOR MORE THAN 3 TIMES PER USER REQUEST."
 )
@@ -87,6 +86,7 @@ type webSearchService struct {
 	httpClient *http.Client
 	tool       *llm.Tool
 	sourceTool *llm.Tool
+	provider   search_providers.Provider
 	mutex      sync.RWMutex
 }
 
@@ -117,10 +117,10 @@ func NewWebSearchService(cfgGetter func() *config.Config, logger WebSearchLog, h
 
 // Tool returns the web search tool if the configuration is valid and enabled.
 func (s *webSearchService) Tool() *llm.Tool {
-	s.mutex.RLock()
-	tool := s.tool
-	s.mutex.RUnlock()
-	if tool == nil {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	if s.tool == nil {
 		return nil
 	}
 
@@ -134,17 +134,41 @@ func (s *webSearchService) Tool() *llm.Tool {
 		return nil
 	}
 
-	if strings.ToLower(strings.TrimSpace(webCfg.Provider)) != "google" {
+	provider := strings.ToLower(strings.TrimSpace(webCfg.Provider))
+
+	// Initialize provider if not already done or if configuration changed
+	switch provider {
+	case "google":
+		if webCfg.Google.APIKey == "" || webCfg.Google.SearchEngineID == "" {
+			s.logWarn("web search misconfigured: missing Google API credentials")
+			return nil
+		}
+		s.provider = search_providers.NewGoogleProvider(
+			webCfg.Google.APIKey,
+			webCfg.Google.SearchEngineID,
+			webCfg.Google.APIURL,
+			s.httpClient,
+			s.logger,
+		)
+	case "brave":
+		if webCfg.Brave.APIKey == "" {
+			s.logWarn("web search misconfigured: missing Brave API key")
+			return nil
+		}
+		s.provider = search_providers.NewBraveProvider(
+			webCfg.Brave.APIKey,
+			webCfg.Brave.APIURL,
+			webCfg.Brave.PollTimeout,
+			webCfg.Brave.PollInterval,
+			s.httpClient,
+			s.logger,
+		)
+	default:
 		s.logDebug("web search provider not supported", "provider", webCfg.Provider)
 		return nil
 	}
 
-	if webCfg.Google.APIKey == "" || webCfg.Google.SearchEngineID == "" {
-		s.logWarn("web search misconfigured: missing API credentials")
-		return nil
-	}
-
-	return tool
+	return s.tool
 }
 
 // SourceTool returns the configured web source fetch tool or nil if unavailable.
@@ -165,11 +189,19 @@ func (s *webSearchService) SourceTool() *llm.Tool {
 		return nil
 	}
 
-	if strings.ToLower(strings.TrimSpace(webCfg.Provider)) != "google" {
-		return nil
-	}
+	provider := strings.ToLower(strings.TrimSpace(webCfg.Provider))
 
-	if webCfg.Google.APIKey == "" || webCfg.Google.SearchEngineID == "" {
+	// Check provider-specific credentials
+	switch provider {
+	case "google":
+		if webCfg.Google.APIKey == "" || webCfg.Google.SearchEngineID == "" {
+			return nil
+		}
+	case "brave":
+		if webCfg.Brave.APIKey == "" {
+			return nil
+		}
+	default:
 		return nil
 	}
 
@@ -241,9 +273,41 @@ func (s *webSearchService) resolve(llmContext *llm.Context, argsGetter llm.ToolA
 		}
 	}
 
-	results, err := s.googleSearch(llmContext, query, webCfg.Google, webCfg.Google.ResultLimit)
+	// Get the provider (should be initialized in Tool())
+	s.mutex.RLock()
+	provider := s.provider
+	s.mutex.RUnlock()
+
+	if provider == nil {
+		return "web search provider not initialized", errors.New("provider not initialized")
+	}
+
+	// Determine result limit based on provider
+	resultLimit := 5
+	providerName := strings.ToLower(strings.TrimSpace(webCfg.Provider))
+	switch providerName {
+	case "google":
+		resultLimit = webCfg.Google.ResultLimit
+	case "brave":
+		resultLimit = webCfg.Brave.ResultLimit
+	}
+
+	// Perform the search
+	searchResp, err := provider.Search(context.Background(), query, resultLimit)
 	if err != nil {
 		return "unable to perform web search", err
+	}
+
+	// Filter results by blacklist
+	var results []WebSearchResult
+	for _, res := range searchResp.Results {
+		if !isBlacklisted(res.URL, webCfg.DomainBlacklist) {
+			results = append(results, WebSearchResult{
+				Title:   res.Title,
+				URL:     res.URL,
+				Snippet: res.Snippet,
+			})
+		}
 	}
 
 	// Track executed query and increment search count even if no results found
@@ -325,7 +389,21 @@ func (s *webSearchService) resolve(llmContext *llm.Context, argsGetter llm.ToolA
 	builder.WriteString(fmt.Sprintf("Live web search results for \"%s\":\n", query))
 	remainingSearches := maxWebSearches - searchCount
 	builder.WriteString(fmt.Sprintf("(Search %d of %d - %d searches remaining)\n", searchCount, maxWebSearches, remainingSearches))
-	builder.WriteString("IMPORTANT: When citing these sources, use the exact format !!CITE1!!, !!CITE2!!, etc. Do NOT write URLs in your response.\n\n")
+
+	// If there's a pre-formatted answer (e.g., from Brave), include it with special instructions
+	if searchResp.Answer != "" {
+		builder.WriteString("\nSummary:\n")
+		builder.WriteString("The following summary was generated by the search provider and already includes properly formatted citations (!!CITE#!!).\n")
+		builder.WriteString("You can use this summary directly in your response, preserving all !!CITE#!! markers exactly as they appear.\n")
+		builder.WriteString("You may also add additional citations from the sources below if needed.\n\n")
+		builder.WriteString(searchResp.Answer)
+		builder.WriteString("\n\n")
+		builder.WriteString("IMPORTANT: When using the summary above, preserve all !!CITE#!! markers exactly as written. You can also cite sources directly using !!CITE1!!, !!CITE2!!, etc.\n\n")
+	} else {
+		builder.WriteString("IMPORTANT: When citing these sources, use the exact format !!CITE1!!, !!CITE2!!, etc. Do NOT write URLs in your response.\n\n")
+	}
+
+	builder.WriteString("Sources:\n")
 	for _, result := range results {
 		builder.WriteString(fmt.Sprintf("[%d] %s\n", result.Index, result.Title))
 		builder.WriteString(fmt.Sprintf("URL: %s\n", result.URL))
@@ -404,7 +482,7 @@ func (s *webSearchService) resolveSource(llmContext *llm.Context, argsGetter llm
 
 	// Security check 2: Check if the domain is blacklisted
 	cfg := s.cfgGetter()
-	if cfg != nil && isBlacklisted(pageURL, cfg.WebSearch.Google.DomainBlacklist) {
+	if cfg != nil && isBlacklisted(pageURL, cfg.WebSearch.DomainBlacklist) {
 		s.logWarn("source fetch blocked by domain blacklist", "url", pageURL)
 		return "this domain is blocked by the administrator's configuration", errors.New("domain blacklisted")
 	}
@@ -552,81 +630,6 @@ func extractBodyContent(n *html.Node) string {
 	}
 
 	return ""
-}
-
-func (s *webSearchService) googleSearch(ctx *llm.Context, query string, cfg config.WebSearchGoogleConfig, desiredLimit int) ([]WebSearchResult, error) {
-	endpoint := strings.TrimSpace(cfg.APIURL)
-	if endpoint == "" {
-		endpoint = defaultGoogleSearchEndpoint
-	}
-
-	limit := desiredLimit
-	if limit <= 0 {
-		limit = 5
-	}
-	if limit > 10 {
-		limit = 10
-	}
-
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, endpoint, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create web search request: %w", err)
-	}
-
-	values := url.Values{}
-	values.Set("key", cfg.APIKey)
-	values.Set("cx", cfg.SearchEngineID)
-	values.Set("q", query)
-	values.Set("num", strconv.Itoa(limit))
-	req.URL.RawQuery = values.Encode()
-	req.Header.Set("Accept", "application/json")
-
-	client := s.httpClient
-	if client == nil {
-		client = http.DefaultClient
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		s.logError("web search request failed", "error", err)
-		return nil, fmt.Errorf("web search request failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("web search request failed: status %s", resp.Status)
-	}
-
-	var payload googleSearchResponse
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return nil, fmt.Errorf("failed to decode web search response: %w", err)
-	}
-
-	results := make([]WebSearchResult, 0, len(payload.Items))
-	for _, item := range payload.Items {
-		itemURL := strings.TrimSpace(item.Link)
-
-		// Skip if domain is blacklisted
-		if isBlacklisted(itemURL, cfg.DomainBlacklist) {
-			continue
-		}
-
-		results = append(results, WebSearchResult{
-			Title:   strings.TrimSpace(item.Title),
-			URL:     itemURL,
-			Snippet: strings.TrimSpace(item.Snippet),
-		})
-	}
-
-	return results, nil
-}
-
-type googleSearchResponse struct {
-	Items []struct {
-		Title   string `json:"title"`
-		Link    string `json:"link"`
-		Snippet string `json:"snippet"`
-	} `json:"items"`
 }
 
 // isBlacklisted checks if a URL's domain matches any domain in the blacklist

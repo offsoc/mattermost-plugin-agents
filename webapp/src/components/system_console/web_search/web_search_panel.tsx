@@ -12,13 +12,20 @@ export type WebSearchGoogleConfig = {
     searchEngineId: string;
     resultLimit: number;
     apiURL: string;
-    domainBlacklist: string[];
+};
+
+export type WebSearchBraveConfig = {
+    apiKey: string;
+    resultLimit: number;
+    apiURL: string;
 };
 
 export type WebSearchConfig = {
     enabled: boolean;
     provider: string;
     google: WebSearchGoogleConfig;
+    brave: WebSearchBraveConfig;
+    domainBlacklist: string[];
 };
 
 type Props = {
@@ -29,12 +36,21 @@ type Props = {
 const WebSearchPanel = ({value, onChange}: Props) => {
     const intl = useIntl();
 
+    // Provide defaults for missing config objects
+    const google = value.google || {apiKey: '', searchEngineId: '', resultLimit: 5, apiURL: ''};
+    const brave = value.brave || {apiKey: '', resultLimit: 5, apiURL: ''};
+    const domainBlacklist = value.domainBlacklist || [];
+
     const handleUpdate = (patch: Partial<WebSearchConfig>) => {
         onChange({...value, ...patch});
     };
 
     const handleGoogleUpdate = (patch: Partial<WebSearchGoogleConfig>) => {
-        handleUpdate({google: {...value.google, ...patch}});
+        handleUpdate({google: {...google, ...patch}});
+    };
+
+    const handleBraveUpdate = (patch: Partial<WebSearchBraveConfig>) => {
+        handleUpdate({brave: {...brave, ...patch}});
     };
 
     return (
@@ -56,46 +72,80 @@ const WebSearchPanel = ({value, onChange}: Props) => {
                     disabled={!value.enabled}
                 >
                     <SelectionItemOption value='google'>{'Google Custom Search'}</SelectionItemOption>
+                    <SelectionItemOption value='brave'>{'Brave Search'}</SelectionItemOption>
                 </SelectionItem>
-                <TextItem
-                    label={intl.formatMessage({defaultMessage: 'Google API Key'})}
-                    type='password'
-                    value={value.google.apiKey}
-                    onChange={(e) => handleGoogleUpdate({apiKey: e.target.value})}
-                    disabled={!value.enabled || value.provider !== 'google'}
-                />
-                <TextItem
-                    label={intl.formatMessage({defaultMessage: 'Search Engine ID'})}
-                    value={value.google.searchEngineId}
-                    onChange={(e) => handleGoogleUpdate({searchEngineId: e.target.value})}
-                    disabled={!value.enabled || value.provider !== 'google'}
-                />
-                <TextItem
-                    label={intl.formatMessage({defaultMessage: 'Result Limit'})}
-                    type='number'
-                    value={value.google.resultLimit.toString()}
-                    onChange={(e) => {
-                        const parsed = parseInt(e.target.value, 10);
-                        handleGoogleUpdate({resultLimit: Number.isNaN(parsed) ? 5 : parsed});
-                    }}
-                    disabled={!value.enabled || value.provider !== 'google'}
-                />
-                <TextItem
-                    label={intl.formatMessage({defaultMessage: 'API URL (optional)'})}
-                    value={value.google.apiURL}
-                    onChange={(e) => handleGoogleUpdate({apiURL: e.target.value})}
-                    helptext={intl.formatMessage({defaultMessage: 'Override the default Google Custom Search endpoint if necessary.'})}
-                    disabled={!value.enabled || value.provider !== 'google'}
-                />
+                {value.provider === 'google' && (
+                    <>
+                        <TextItem
+                            label={intl.formatMessage({defaultMessage: 'Google API Key'})}
+                            type='password'
+                            value={google.apiKey}
+                            onChange={(e) => handleGoogleUpdate({apiKey: e.target.value})}
+                            disabled={!value.enabled}
+                        />
+                        <TextItem
+                            label={intl.formatMessage({defaultMessage: 'Search Engine ID'})}
+                            value={google.searchEngineId}
+                            onChange={(e) => handleGoogleUpdate({searchEngineId: e.target.value})}
+                            disabled={!value.enabled}
+                        />
+                        <TextItem
+                            label={intl.formatMessage({defaultMessage: 'Result Limit'})}
+                            type='number'
+                            value={google.resultLimit.toString()}
+                            onChange={(e) => {
+                                const parsed = parseInt(e.target.value, 10);
+                                handleGoogleUpdate({resultLimit: Number.isNaN(parsed) ? 5 : parsed});
+                            }}
+                            disabled={!value.enabled}
+                        />
+                        <TextItem
+                            label={intl.formatMessage({defaultMessage: 'API URL (optional)'})}
+                            value={google.apiURL}
+                            onChange={(e) => handleGoogleUpdate({apiURL: e.target.value})}
+                            helptext={intl.formatMessage({defaultMessage: 'Override the default Google Custom Search endpoint if necessary.'})}
+                            disabled={!value.enabled}
+                        />
+                    </>
+                )}
+                {value.provider === 'brave' && (
+                    <>
+                        <TextItem
+                            label={intl.formatMessage({defaultMessage: 'Brave API Key'})}
+                            type='password'
+                            value={brave.apiKey}
+                            onChange={(e) => handleBraveUpdate({apiKey: e.target.value})}
+                            helptext={intl.formatMessage({defaultMessage: 'Brave Search API Key. Requires a Pro AI plan subscription.'})}
+                            disabled={!value.enabled}
+                        />
+                        <TextItem
+                            label={intl.formatMessage({defaultMessage: 'Brave Result Limit'})}
+                            type='number'
+                            value={brave.resultLimit.toString()}
+                            onChange={(e) => {
+                                const parsed = parseInt(e.target.value, 10);
+                                handleBraveUpdate({resultLimit: Number.isNaN(parsed) ? 5 : parsed});
+                            }}
+                            disabled={!value.enabled}
+                        />
+                        <TextItem
+                            label={intl.formatMessage({defaultMessage: 'Brave API URL (optional)'})}
+                            value={brave.apiURL}
+                            onChange={(e) => handleBraveUpdate({apiURL: e.target.value})}
+                            helptext={intl.formatMessage({defaultMessage: 'Override the default Brave Search endpoint if necessary.'})}
+                            disabled={!value.enabled}
+                        />
+                    </>
+                )}
                 <TextItem
                     label={intl.formatMessage({defaultMessage: 'Domain Blacklist (optional)'})}
-                    value={(value.google.domainBlacklist || []).join(', ')}
+                    value={domainBlacklist.join(', ')}
                     onChange={(e) => {
                         const domains = e.target.value.split(',').map((d) => d.trim()).filter((d) => d !== '');
-                        handleGoogleUpdate({domainBlacklist: domains});
+                        handleUpdate({domainBlacklist: domains});
                     }}
                     helptext={intl.formatMessage({defaultMessage: 'Comma-separated list of domains to exclude from search results (e.g., example.com, spam-site.org). Results from these domains will be filtered out and the LLM will never see them.'})}
-                    disabled={!value.enabled || value.provider !== 'google'}
+                    disabled={!value.enabled}
                 />
             </ItemList>
         </Panel>

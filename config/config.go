@@ -30,17 +30,26 @@ type Config struct {
 }
 
 type WebSearchConfig struct {
-	Enabled  bool                  `json:"enabled"`
-	Provider string                `json:"provider"`
-	Google   WebSearchGoogleConfig `json:"google"`
+	Enabled         bool                  `json:"enabled"`
+	Provider        string                `json:"provider"`
+	Google          WebSearchGoogleConfig `json:"google"`
+	Brave           WebSearchBraveConfig  `json:"brave"`
+	DomainBlacklist []string              `json:"domainBlacklist"`
 }
 
 type WebSearchGoogleConfig struct {
-	APIKey          string   `json:"apiKey"`
-	SearchEngineID  string   `json:"searchEngineId"`
-	ResultLimit     int      `json:"resultLimit"`
-	APIURL          string   `json:"apiURL"`
-	DomainBlacklist []string `json:"domainBlacklist"`
+	APIKey         string `json:"apiKey"`
+	SearchEngineID string `json:"searchEngineId"`
+	ResultLimit    int    `json:"resultLimit"`
+	APIURL         string `json:"apiURL"`
+}
+
+type WebSearchBraveConfig struct {
+	APIKey       string `json:"apiKey"`
+	APIURL       string `json:"apiURL"`
+	ResultLimit  int    `json:"resultLimit"`
+	PollTimeout  int    `json:"pollTimeout"`
+	PollInterval int    `json:"pollInterval"`
 }
 
 func (c *Config) Clone() *Config {
