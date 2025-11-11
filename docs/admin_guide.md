@@ -306,7 +306,7 @@ The plugin includes an embedded Mattermost MCP server that provides your AI agen
 - **Agent Integration**: When enabled, all configured agents can access Mattermost tools like reading posts, searching channels, and creating content
 - **Built-in Tools**: Exposes tools for reading posts and channels, searching posts, creating posts and channels, searching for users, and getting channel/team information
 
-The embedded server operates transparently in the background. Agents will automatically use these tools when appropriate to complete user requests.
+When enabled, agents will automatically use these tools when appropriate to complete user requests.
 
 ### External MCP Client Access
 
@@ -317,33 +317,32 @@ The plugin can expose its MCP server to external MCP clients such as Claude web,
 #### Requirements
 
 - Mattermost Server v11.2 or later
-- MCP integration enabled in plugin settings
 - Valid authentication method (OAuth or Personal Access Token)
 
 #### Enabling External Access
 
 1. Navigate to **System Console > Plugins > Agents > MCP Servers**
-2. Set **Enable Plugin Server** to **True**
+2. Set **Enable Mattermost MCP Server (HTTP)** to **True**
 3. The MCP server will be available at: `https://your-mattermost-server/plugins/mattermost-ai/mcp-server/mcp`
 
 #### Authentication Methods
 
-**OAuth with Dynamic Client Registration (Recommended)**
+**OAuth 2.0**
 
-The MCP server supports OAuth 2.0 authentication with Dynamic Client Registration (DCR/RFC 7591), allowing external clients to automatically register and obtain credentials:
+The MCP server supports OAuth 2.0 authentication with both manual and automatic client registration:
 
+- **Client Registration Methods**:
+  - Dynamic Client Registration (DCR/RFC 7591): External clients can automatically register and obtain credentials
+  - Manual Registration: Create OAuth applications through **Product menu > Integrations > OAuth 2.0 Applications**. See the [OAuth 2.0 documentation](https://developers.mattermost.com/integrate/apps/authentication/oauth2/) for details.
 - Supports both public clients (e.g., desktop applications) and confidential clients (e.g., server applications)
-- Client registration handled through Mattermost's OAuth infrastructure
 - Authorization through standard Mattermost OAuth flows
 - OAuth metadata endpoints:
   - Protected resource metadata: `https://your-mattermost-server/plugins/mattermost-ai/mcp-server/.well-known/oauth-protected-resource`
   - Authorization server metadata: `https://your-mattermost-server/.well-known/oauth-authorization-server`
 
-For more information on Mattermost's OAuth 2.0 implementation, see the [OAuth 2.0 documentation](https://developers.mattermost.com/integrate/apps/authentication/oauth2/).
-
 **Personal Access Tokens**
 
-For simpler setups or automation scenarios, you can authenticate using Mattermost Personal Access Tokens:
+You can authenticate using Mattermost Personal Access Tokens:
 
 1. Create a Personal Access Token in Mattermost (**User Settings > Security > Personal Access Tokens**)
 2. Configure your MCP client to use Bearer token authentication with the PAT 
