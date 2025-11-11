@@ -38,6 +38,7 @@ type LanguageModelConfig struct {
 	EnableVision       bool
 	JSONOutputFormat   *jsonschema.Schema
 	ToolsDisabled      bool
+	DisabledToolsInfo  []ToolInfo // Info about tools that are disabled but could be useful in different contexts
 }
 
 type LanguageModelOption func(*LanguageModelConfig)
@@ -58,9 +59,10 @@ func WithJSONOutput[T any]() LanguageModelOption {
 	}
 }
 
-func WithToolsDisabled() LanguageModelOption {
+func WithToolsDisabled(disabledTools ...ToolInfo) LanguageModelOption {
 	return func(cfg *LanguageModelConfig) {
 		cfg.ToolsDisabled = true
+		cfg.DisabledToolsInfo = disabledTools
 	}
 }
 

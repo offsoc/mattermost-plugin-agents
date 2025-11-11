@@ -31,7 +31,7 @@ import (
 // Mock implementations
 type mockToolProvider struct{}
 
-func (m *mockToolProvider) GetTools(isDM bool, bot *bots.Bot) []llm.Tool {
+func (m *mockToolProvider) GetTools(bot *bots.Bot) []llm.Tool {
 	tools := []llm.Tool{}
 
 	tools = append(tools, llm.Tool{

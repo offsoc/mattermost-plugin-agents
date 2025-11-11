@@ -124,7 +124,12 @@ func (c *Conversations) ProcessUserRequestWithContext(bot *bots.Bot, postingUser
 	isDM := mmapi.IsDMWith(bot.GetMMBot().UserId, channel)
 	var opts []llm.LanguageModelOption
 	if !isDM {
-		opts = append(opts, llm.WithToolsDisabled())
+		// In non-DM channels, disable tools for security but provide info about DM-only tools
+		var toolsInfo []llm.ToolInfo
+		if context.Tools != nil {
+			toolsInfo = context.Tools.GetToolsInfo()
+		}
+		opts = append(opts, llm.WithToolsDisabled(toolsInfo...))
 	}
 	result, err := bot.LLM().ChatCompletion(completionRequest, opts...)
 	if err != nil {
@@ -144,12 +149,13 @@ func (c *Conversations) ProcessUserRequestWithContext(bot *bots.Bot, postingUser
 
 // ProcessUserRequest processes a user request to a bot
 func (c *Conversations) ProcessUserRequest(bot *bots.Bot, postingUser *model.User, channel *model.Channel, post *model.Post) (*llm.TextStreamResult, error) {
-	// Create a context with default tools
+	// Create a context with tools for LLM awareness
+	// Security restriction is enforced later via WithToolsDisabled based on channel type
 	context := c.contextBuilder.BuildLLMContextUserRequest(
 		bot,
 		postingUser,
 		channel,
-		c.contextBuilder.WithLLMContextTools(bot, mmapi.IsDMWith(bot.GetMMBot().UserId, channel)),
+		c.contextBuilder.WithLLMContextTools(bot),
 	)
 
 	// Check for auth errors in the tool store

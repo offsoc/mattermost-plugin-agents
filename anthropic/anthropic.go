@@ -208,11 +208,22 @@ func (a *Anthropic) streamChatWithTools(state messageState) {
 		params.Tools = convertTools(state.tools)
 	}
 
+	// Build system message, potentially including disabled tools info
+	systemMessage := state.system
+	if state.config.ToolsDisabled && len(state.config.DisabledToolsInfo) > 0 {
+		disabledToolsMessage := buildDisabledToolsMessage(state.config.DisabledToolsInfo)
+		if systemMessage != "" {
+			systemMessage += "\n\n" + disabledToolsMessage
+		} else {
+			systemMessage = disabledToolsMessage
+		}
+	}
+
 	// Only include system message if it's non-empty
 	// Anthropic requires text content blocks to be non-empty
-	if state.system != "" {
+	if systemMessage != "" {
 		params.System = []anthropicSDK.TextBlockParam{{
-			Text: state.system,
+			Text: systemMessage,
 		}}
 	}
 
@@ -481,6 +492,22 @@ func convertTools(tools []llm.Tool) []anthropicSDK.ToolUnionParam {
 		}
 	}
 	return converted
+}
+
+// buildDisabledToolsMessage creates a system message informing the LLM about tools
+// that are available in DM but not in the current context (e.g., a channel).
+func buildDisabledToolsMessage(toolsInfo []llm.ToolInfo) string {
+	if len(toolsInfo) == 0 {
+		return ""
+	}
+
+	message := "IMPORTANT: The following tools are available in a Direct Message (DM) or via the Agents tab, but cannot be used in this channel for security reasons:\n\n"
+	for _, tool := range toolsInfo {
+		message += fmt.Sprintf("- %s: %s\n", tool.Name, tool.Description)
+	}
+	message += "\nIf a user's request would benefit from using one of these tools, politely inform them that this capability is available in a DM with you or by using the Agents tab on the right-hand side, and suggest they try it there instead."
+
+	return message
 }
 
 func (a *Anthropic) InputTokenLimit() int {

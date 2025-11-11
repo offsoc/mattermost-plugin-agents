@@ -148,11 +148,34 @@ func NewCompatibleEmbeddings(config Config, httpClient *http.Client) *OpenAI {
 
 func modifyCompletionRequestWithRequest(params openai.ChatCompletionNewParams, internalRequest llm.CompletionRequest, cfg llm.LanguageModelConfig) openai.ChatCompletionNewParams {
 	params.Messages = postsToChatCompletionMessages(internalRequest.Posts)
+
 	// Only add tools if not explicitly disabled
 	if !cfg.ToolsDisabled && internalRequest.Context.Tools != nil {
 		params.Tools = toolsToOpenAITools(internalRequest.Context.Tools.GetTools())
+	} else if cfg.ToolsDisabled && len(cfg.DisabledToolsInfo) > 0 {
+		// If tools are disabled but we have tool info, append it to help the LLM
+		// inform the user about DM-only capabilities
+		disabledToolsMessage := buildDisabledToolsMessage(cfg.DisabledToolsInfo)
+		params.Messages = append(params.Messages, openai.SystemMessage(disabledToolsMessage))
 	}
+
 	return params
+}
+
+// buildDisabledToolsMessage creates a system message informing the LLM about tools
+// that are available in DM but not in the current context (e.g., a channel).
+func buildDisabledToolsMessage(toolsInfo []llm.ToolInfo) string {
+	if len(toolsInfo) == 0 {
+		return ""
+	}
+
+	message := "\nIMPORTANT: The following tools are available in a Direct Message (DM) or via the Agents tab, but cannot be used in this channel for security reasons:\n\n"
+	for _, tool := range toolsInfo {
+		message += fmt.Sprintf("- %s: %s\n", tool.Name, tool.Description)
+	}
+	message += "\nIf a user's request would benefit from using one of these tools, politely inform them that this capability is available in a DM with you or by using the Agents tab on the right-hand side, and suggest they try it there instead."
+
+	return message
 }
 
 // schemaToFunctionParameters converts a jsonschema.Schema to shared.FunctionParameters

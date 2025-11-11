@@ -15,7 +15,7 @@ import (
 
 // ToolProvider provides built-in tools for a bot and context
 type ToolProvider interface {
-	GetTools(isDM bool, bot *bots.Bot) []llm.Tool
+	GetTools(bot *bots.Bot) []llm.Tool
 }
 
 // MCPToolProvider provides MCP tools for a user
@@ -112,7 +112,7 @@ func (b *Builder) WithLLMContextRequestingUser(user *model.User) llm.ContextOpti
 
 // getToolsStoreForUser returns a tool store for a specific user, including MCP tools
 // Session information is extracted from the llm.Context
-func (b *Builder) getToolsStoreForUser(c *llm.Context, bot *bots.Bot, isDM bool, userID string) *llm.ToolStore {
+func (b *Builder) getToolsStoreForUser(c *llm.Context, bot *bots.Bot, userID string) *llm.ToolStore {
 	// Check for nil bot, which is unexpected
 	if bot == nil {
 		b.pluginAPI.Log.Error("Unexpected nil bot when getting tool store for user", "userID", userID)
@@ -133,10 +133,12 @@ func (b *Builder) getToolsStoreForUser(c *llm.Context, bot *bots.Bot, isDM bool,
 	// Create a tool store that requires user approval for tool calls
 	store := llm.NewToolStore(&b.pluginAPI.Log, b.configProvider.GetEnableLLMTrace())
 
-	// Add built-in tools
-	store.AddTools(b.toolProvider.GetTools(isDM, bot))
+	// Add built-in tools (always add for LLM awareness; execution controlled via WithToolsDisabled)
+	store.AddTools(b.toolProvider.GetTools(bot))
 
-	// Add MCP tools if available, enabled, and in a DM
+	// Add MCP tools if available and enabled
+	// Note: MCP tools are only available in DMs - check if channel is a DM
+	isDM := c.Channel != nil && c.Channel.Type == "D"
 	if b.mcpToolProvider != nil && isDM {
 		// Get tools from all connected servers
 		mcpTools, mcpErrors := b.mcpToolProvider.GetToolsForUser(userID)
@@ -157,8 +159,10 @@ func (b *Builder) getToolsStoreForUser(c *llm.Context, bot *bots.Bot, isDM bool,
 	return store
 }
 
-// WithLLMContextTools adds tools to the LLM context the requester can access
-func (b *Builder) WithLLMContextTools(bot *bots.Bot, isDM bool) llm.ContextOption {
+// WithLLMContextTools adds tools to the LLM context the requester can access.
+// Tools are always added for LLM awareness; execution is controlled via WithToolsDisabled()
+// based on the context (e.g., DM vs channel).
+func (b *Builder) WithLLMContextTools(bot *bots.Bot) llm.ContextOption {
 	return func(c *llm.Context) {
 		if c.RequestingUser == nil {
 			b.pluginAPI.Log.Error("Cannot add tools to context: RequestingUser is nil")
@@ -166,13 +170,13 @@ func (b *Builder) WithLLMContextTools(bot *bots.Bot, isDM bool) llm.ContextOptio
 		}
 
 		// Get tools using session info from llm.Context
-		c.Tools = b.getToolsStoreForUser(c, bot, isDM, c.RequestingUser.Id)
+		c.Tools = b.getToolsStoreForUser(c, bot, c.RequestingUser.Id)
 	}
 }
 
 // WithLLMContextDefaultTools adds default tools to the LLM context for the requesting user
-func (b *Builder) WithLLMContextDefaultTools(bot *bots.Bot, isDM bool) llm.ContextOption {
-	return b.WithLLMContextTools(bot, isDM)
+func (b *Builder) WithLLMContextDefaultTools(bot *bots.Bot) llm.ContextOption {
+	return b.WithLLMContextTools(bot)
 }
 
 // WithLLMContextNoTools explicitly disables tools for this context session only,

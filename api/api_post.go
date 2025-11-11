@@ -15,7 +15,6 @@ import (
 	"github.com/mattermost/mattermost-plugin-ai/bots"
 	"github.com/mattermost/mattermost-plugin-ai/conversations"
 	"github.com/mattermost/mattermost-plugin-ai/llm"
-	"github.com/mattermost/mattermost-plugin-ai/mmapi"
 	"github.com/mattermost/mattermost-plugin-ai/react"
 	"github.com/mattermost/mattermost-plugin-ai/streaming"
 	"github.com/mattermost/mattermost-plugin-ai/threads"
@@ -139,7 +138,7 @@ func (a *API) handleThreadAnalysis(c *gin.Context) {
 		bot,
 		user,
 		channel,
-		a.contextBuilder.WithLLMContextDefaultTools(bot, mmapi.IsDMWith(bot.GetMMBot().UserId, channel)),
+		a.contextBuilder.WithLLMContextDefaultTools(bot),
 	)
 
 	// Create thread analyzer
