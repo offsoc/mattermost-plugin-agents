@@ -305,7 +305,6 @@ The plugin includes an embedded Mattermost MCP server that provides your AI agen
 - **Configuration**: Enable or disable through **System Console > Plugins > Agents > MCP Servers > Enable Embedded MCP Server**
 - **Agent Integration**: When enabled, all configured agents can access Mattermost tools like reading posts, searching channels, and creating content
 - **Built-in Tools**: Exposes tools for reading posts and channels, searching posts, creating posts and channels, searching for users, and getting channel/team information
-- **OAuth Metadata**: Authorization server metadata is available at `https://your-mattermost-server/.well-known/oauth-authorization-server`
 
 The embedded server operates transparently in the background. Agents will automatically use these tools when appropriate to complete user requests.
 
@@ -336,7 +335,9 @@ The MCP server supports OAuth 2.0 authentication with Dynamic Client Registratio
 - Supports both public clients (e.g., desktop applications) and confidential clients (e.g., server applications)
 - Client registration handled through Mattermost's OAuth infrastructure
 - Authorization through standard Mattermost OAuth flows
-- OAuth metadata available at: `https://your-mattermost-server/plugins/mattermost-ai/mcp-server/.well-known/oauth-protected-resource`
+- OAuth metadata endpoints:
+  - Protected resource metadata: `https://your-mattermost-server/plugins/mattermost-ai/mcp-server/.well-known/oauth-protected-resource`
+  - Authorization server metadata: `https://your-mattermost-server/.well-known/oauth-authorization-server`
 
 For more information on Mattermost's OAuth 2.0 implementation, see the [OAuth 2.0 documentation](https://developers.mattermost.com/integrate/apps/authentication/oauth2/).
 
