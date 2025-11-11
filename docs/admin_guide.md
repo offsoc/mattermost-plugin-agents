@@ -298,49 +298,98 @@ The Model Context Protocol (MCP) integration allows Agents to connect to externa
 
 > **Note:** The plugin currently doesn't render Markdown links (e.g., JIRA ticket links) in bot responses. URLs are displayed in plain text rather than as clickable Markdown-rendered links. This is not a bug but intended security behavior to prevent potential data exfiltration through links. While this limitation exists, improvements to link handling are being considered for future development.
 
-### Embedded Mattermost MCP Server
+## Mattermost MCP Server
 
-The plugin includes an embedded Mattermost MCP server that provides your AI agents with direct access to Mattermost functionality. This embedded server:
+The Mattermost MCP Server enables AI agents and external applications to interact with your Mattermost instance through the Model Context Protocol (MCP). This standardized protocol allows AI assistants to read messages, search content, create posts, and manage channels and teams programmatically.
 
-- **Configuration**: Enable or disable through **System Console > Plugins > Agents > MCP Servers > Enable Embedded MCP Server**
-- **Agent Integration**: When enabled, all configured agents can access Mattermost tools like reading posts, searching channels, and creating content
-- **Built-in Tools**: Exposes tools for reading posts and channels, searching posts, creating posts and channels, searching for users, and getting channel/team information
+### Overview
 
-When enabled, agents will automatically use these tools when appropriate to complete user requests.
+The Mattermost MCP Server provides:
 
-### External MCP Client Access
+- **Direct Mattermost Integration**: AI agents can access your Mattermost data and functionality through a standardized API
+- **Security and Permissions**: All operations respect Mattermost's permission system - users only access what they're authorized to see
+- **Flexible Deployment**: Available as an embedded server for Mattermost AI agents or as an HTTP server for external MCP clients
+- **Rich Toolset**: Comprehensive tools for reading, searching, and creating content
 
-The plugin can expose its MCP server to external MCP clients such as Claude web, Claude Code, or other MCP-compatible applications. This allows AI assistants running outside of Mattermost to interact with your Mattermost instance.
+**Use Cases:**
 
-**Note:** The server uses streamable HTTP transport and does not support traditional Server-Sent Events (SSE) transport. External clients must use the streamable HTTP transport available at the `/mcp` endpoint.
+With the Mattermost MCP Server, you can:
 
-#### Requirements
+- **Automated Channel Summaries**: Ask your AI agent to summarize activity across channels, catching up on discussions while you were away
+- **Cross-Channel Updates**: Have your agent post status updates to multiple channels simultaneously, keeping distributed teams synchronized
+- **Intelligent Search**: Search across your entire Mattermost workspace from any MCP-enabled client to find relevant discussions, decisions, or information
+- **Team Coordination**: Get lists of channel or team members, helping you quickly identify who to contact or mention
+- **Workflow Automation**: Use external MCP clients to automate routine tasks like posting standup updates, creating project channels, or notifying teams of important events
+- **Context-Aware Assistance**: AI agents can read conversation threads to understand context before responding or taking action
 
+### Available Tools
+
+The MCP server provides the following tools to AI agents and external clients:
+
+- **read_post**: Read a specific post and its thread
+- **read_channel**: Retrieve recent posts from a channel
+- **search_posts**: Search across Mattermost content with optional team/channel filters
+- **create_post**: Create new posts or replies in channels
+- **create_channel**: Create new public or private channels
+- **get_channel_info**: Retrieve channel details by ID or name
+- **get_team_info**: Retrieve team details by ID or name
+- **search_users**: Find users by username, email, or name
+- **get_channel_members**: List all members of a channel
+- **get_team_members**: List all members of a team
+
+### Deployment
+
+![MCP Server Configuration](img/system-console-mcp.PNG)
+
+#### For AI Agents
+
+The embedded MCP server provides Mattermost AI agents with direct access to Mattermost functionality:
+
+1. Navigate to **System Console > Plugins > Agents > MCP Servers**
+2. Set **Enable Embedded Server** to **True**
+3. When enabled, all configured agents can access Mattermost tools
+
+Agents will automatically use these tools when appropriate to complete user requests.
+
+#### For External Clients
+
+Enable external MCP clients (such as Claude web, Claude Code, or other MCP-compatible applications) to interact with your Mattermost instance.
+
+**Requirements:**
 - Mattermost Server v11.2 or later
 - Valid authentication method (OAuth or Personal Access Token)
 
-#### Enabling External Access
+**Note:** The server uses streamable HTTP transport and does not support traditional Server-Sent Events (SSE) transport. External clients must use the streamable HTTP transport available at the `/mcp` endpoint.
+
+**Enabling:**
 
 1. Navigate to **System Console > Plugins > Agents > MCP Servers**
 2. Set **Enable Mattermost MCP Server (HTTP)** to **True**
 3. The MCP server will be available at: `https://your-mattermost-server/plugins/mattermost-ai/mcp-server/mcp`
 
-#### Authentication Methods
+**Authentication:**
 
-**OAuth 2.0**
+*OAuth 2.0*
 
-The MCP server supports OAuth 2.0 authentication with both manual and automatic client registration:
+The MCP server supports OAuth 2.0 authentication with both manual and automatic client registration.
 
-- **Client Registration Methods**:
-  - Dynamic Client Registration (DCR/RFC 7591): External clients can automatically register and obtain credentials
-  - Manual Registration: Create OAuth applications through **Product menu > Integrations > OAuth 2.0 Applications**. See the [OAuth 2.0 documentation](https://developers.mattermost.com/integrate/apps/authentication/oauth2/) for details.
+**Prerequisites:**
+- Enable OAuth 2.0 service provider in **System Console > Integrations > Integration Management**:
+  - Set **Enable OAuth 2.0 Service Provider** to **True**
+  - For automatic client registration, set **Enable OAuth 2.0 Dynamic Client Registration** to **True** (Note: DCR is an unprotected endpoint - see the [OAuth 2.0 documentation](https://developers.mattermost.com/integrate/apps/authentication/oauth2/) for security considerations)
+
+**Client Registration Methods:**
+- **Dynamic Client Registration (DCR/RFC 7591)**: External clients can automatically register and obtain credentials without manual setup
+- **Manual Registration**: Create OAuth applications through **Product menu > Integrations > OAuth 2.0 Applications**. See the [OAuth 2.0 documentation](https://developers.mattermost.com/integrate/apps/authentication/oauth2/) for details.
+
+**Additional Details:**
 - Supports both public clients (e.g., desktop applications) and confidential clients (e.g., server applications)
 - Authorization through standard Mattermost OAuth flows
 - OAuth metadata endpoints:
   - Protected resource metadata: `https://your-mattermost-server/plugins/mattermost-ai/mcp-server/.well-known/oauth-protected-resource`
   - Authorization server metadata: `https://your-mattermost-server/.well-known/oauth-authorization-server`
 
-**Personal Access Tokens**
+*Personal Access Tokens*
 
 You can authenticate using Mattermost Personal Access Tokens:
 
