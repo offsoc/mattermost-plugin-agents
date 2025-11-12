@@ -208,14 +208,11 @@ func (a *Anthropic) streamChatWithTools(state messageState) {
 		params.Tools = convertTools(state.tools)
 	}
 
-	// Build system message, potentially including disabled tools info
-	systemMessage := state.system
-
 	// Only include system message if it's non-empty
 	// Anthropic requires text content blocks to be non-empty
-	if systemMessage != "" {
+	if state.system != "" {
 		params.System = []anthropicSDK.TextBlockParam{{
-			Text: systemMessage,
+			Text: state.system,
 		}}
 	}
 

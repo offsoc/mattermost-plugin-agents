@@ -148,7 +148,6 @@ func NewCompatibleEmbeddings(config Config, httpClient *http.Client) *OpenAI {
 
 func modifyCompletionRequestWithRequest(params openai.ChatCompletionNewParams, internalRequest llm.CompletionRequest, cfg llm.LanguageModelConfig) openai.ChatCompletionNewParams {
 	params.Messages = postsToChatCompletionMessages(internalRequest.Posts)
-
 	// Only add tools if not explicitly disabled
 	if !cfg.ToolsDisabled && internalRequest.Context.Tools != nil {
 		params.Tools = toolsToOpenAITools(internalRequest.Context.Tools.GetTools())
