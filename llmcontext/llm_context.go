@@ -137,13 +137,15 @@ func (b *Builder) getToolsStoreForUser(c *llm.Context, bot *bots.Bot, userID str
 	store.AddTools(b.toolProvider.GetTools(bot))
 
 	// Add MCP tools if available and enabled
-	// Note: MCP tools are only available in DMs - check if channel is a DM
-	isDM := c.Channel != nil && c.Channel.Type == "D"
-	if b.mcpToolProvider != nil && isDM {
+	// Note: MCP tools are only executable in DMs, but we always add them to the store
+	// so that GetToolsInfo() can inform the LLM about their availability.
+	// Actual execution is controlled via WithToolsDisabled() based on channel type.
+	if b.mcpToolProvider != nil {
 		// Get tools from all connected servers
 		mcpTools, mcpErrors := b.mcpToolProvider.GetToolsForUser(userID)
 
 		// Add tools from successfully connected servers even if some had errors
+		// These will be disabled in non-DM channels via WithToolsDisabled()
 		if len(mcpTools) > 0 {
 			store.AddTools(mcpTools)
 		}

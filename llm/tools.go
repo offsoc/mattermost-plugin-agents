@@ -156,7 +156,7 @@ func BuildDisabledToolsMessage(toolsInfo []ToolInfo) string {
 	for _, tool := range toolsInfo {
 		message += fmt.Sprintf("- %s: %s\n", tool.Name, tool.Description)
 	}
-	message += "\nIf a user's request would benefit from using one of these tools, politely inform them that this capability is available only if they DM you directly or use the Agents tab on the right-hand side."
+	message += "\nIf a user's request requires one of these tools, respond with a single concise sentence explaining that the capability is available only if they DM you directly or use the Agents tab on the right-hand side. Do not ask follow-up questions or offer to help them switch contexts."
 
 	return message
 }
