@@ -17,7 +17,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/mattermost/mattermost-plugin-ai/llm"
 	"github.com/mattermost/mattermost-plugin-ai/subtitles"
 	"github.com/openai/openai-go/v2"
@@ -157,11 +156,28 @@ func modifyCompletionRequestWithRequest(params openai.ChatCompletionNewParams, i
 }
 
 // schemaToFunctionParameters converts a jsonschema.Schema to shared.FunctionParameters
-func schemaToFunctionParameters(schema *jsonschema.Schema) shared.FunctionParameters {
+func schemaToFunctionParameters(schema any) shared.FunctionParameters {
 	// Default schema that satisfies OpenAI's requirements
 	defaultSchema := shared.FunctionParameters{
 		"type":       "object",
 		"properties": map[string]any{},
+	}
+
+	if schema == nil {
+		return defaultSchema
+	}
+
+	// If it's already a map, use it directly
+	if schemaMap, ok := schema.(map[string]interface{}); ok {
+		result := schemaMap
+		// Ensure the result has the required fields for OpenAI
+		if _, hasType := result["type"]; !hasType {
+			result["type"] = "object"
+		}
+		if _, hasProps := result["properties"]; !hasProps {
+			result["properties"] = map[string]any{}
+		}
+		return result
 	}
 
 	// Convert the schema to a map by marshaling and unmarshaling
@@ -585,8 +601,10 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 				// If we haven't sent the complete reasoning yet, send it now
 				if !reasoningComplete && reasoningSummaryBuffer.Len() > 0 {
 					output <- llm.TextStreamEvent{
-						Type:  llm.EventTypeReasoningEnd,
-						Value: reasoningSummaryBuffer.String(),
+						Type: llm.EventTypeReasoningEnd,
+						Value: llm.ReasoningData{
+							Text: reasoningSummaryBuffer.String(),
+						},
 					}
 					reasoningComplete = true
 				}
@@ -684,8 +702,10 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 				// If we haven't sent the complete reasoning yet and this is a tool call, send reasoning first
 				if !reasoningComplete && reasoningSummaryBuffer.Len() > 0 {
 					output <- llm.TextStreamEvent{
-						Type:  llm.EventTypeReasoningEnd,
-						Value: reasoningSummaryBuffer.String(),
+						Type: llm.EventTypeReasoningEnd,
+						Value: llm.ReasoningData{
+							Text: reasoningSummaryBuffer.String(),
+						},
 					}
 					reasoningComplete = true
 				}
@@ -749,8 +769,10 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 			// If we still have unsent reasoning (edge case: no output text), send it now
 			if !reasoningComplete && reasoningSummaryBuffer.Len() > 0 {
 				output <- llm.TextStreamEvent{
-					Type:  llm.EventTypeReasoningEnd,
-					Value: reasoningSummaryBuffer.String(),
+					Type: llm.EventTypeReasoningEnd,
+					Value: llm.ReasoningData{
+						Text: reasoningSummaryBuffer.String(),
+					},
 				}
 			}
 
