@@ -87,6 +87,15 @@ func (c *Conversations) SetMeetingsService(meetingsService MeetingsService) {
 
 // ProcessUserRequestWithContext is an internal helper that uses an existing context to process a message
 func (c *Conversations) ProcessUserRequestWithContext(bot *bots.Bot, postingUser *model.User, channel *model.Channel, post *model.Post, context *llm.Context) (*llm.TextStreamResult, error) {
+	isDM := mmapi.IsDMWith(bot.GetMMBot().UserId, channel)
+	var disabledToolsInfo []llm.ToolInfo
+	if !isDM && context != nil && context.Tools != nil {
+		disabledToolsInfo = context.Tools.GetToolsInfo()
+	}
+	if context != nil {
+		context.DisabledToolsInfo = disabledToolsInfo
+	}
+
 	var posts []llm.Post
 	if post.RootId == "" {
 		// A new conversation
@@ -121,15 +130,10 @@ func (c *Conversations) ProcessUserRequestWithContext(bot *bots.Bot, postingUser
 		Posts:   posts,
 		Context: context,
 	}
-	isDM := mmapi.IsDMWith(bot.GetMMBot().UserId, channel)
 	var opts []llm.LanguageModelOption
 	if !isDM {
 		// In non-DM channels, disable tools for security but provide info about DM-only tools
-		var toolsInfo []llm.ToolInfo
-		if context.Tools != nil {
-			toolsInfo = context.Tools.GetToolsInfo()
-		}
-		opts = append(opts, llm.WithToolsDisabled(toolsInfo...))
+		opts = append(opts, llm.WithToolsDisabled())
 	}
 	result, err := bot.LLM().ChatCompletion(completionRequest, opts...)
 	if err != nil {

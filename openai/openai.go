@@ -152,11 +152,6 @@ func modifyCompletionRequestWithRequest(params openai.ChatCompletionNewParams, i
 	// Only add tools if not explicitly disabled
 	if !cfg.ToolsDisabled && internalRequest.Context.Tools != nil {
 		params.Tools = toolsToOpenAITools(internalRequest.Context.Tools.GetTools())
-	} else if cfg.ToolsDisabled && len(cfg.DisabledToolsInfo) > 0 {
-		// If tools are disabled but we have tool info, append it to help the LLM
-		// inform the user about DM-only capabilities
-		disabledToolsMessage := llm.BuildDisabledToolsMessage(cfg.DisabledToolsInfo)
-		params.Messages = append(params.Messages, openai.SystemMessage(disabledToolsMessage))
 	}
 
 	return params

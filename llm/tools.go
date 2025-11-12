@@ -145,22 +145,6 @@ func (s *ToolStore) GetToolsInfo() []ToolInfo {
 	return result
 }
 
-// BuildDisabledToolsMessage creates a system message informing the LLM about tools
-// that are available in DM or Agents tab but not in the current context (e.g., a channel).
-func BuildDisabledToolsMessage(toolsInfo []ToolInfo) string {
-	if len(toolsInfo) == 0 {
-		return ""
-	}
-
-	message := "IMPORTANT: The following tools are available in a Direct Message (DM) or via the Agents tab, but cannot be used in this channel for security reasons:\n\n"
-	for _, tool := range toolsInfo {
-		message += fmt.Sprintf("- %s: %s\n", tool.Name, tool.Description)
-	}
-	message += "\nIf a user's request requires one of these tools, respond with a single concise sentence explaining that the capability is available only if they DM you directly or use the Agents tab on the right-hand side. Do not ask follow-up questions or offer to help them switch contexts."
-
-	return message
-}
-
 func (s *ToolStore) TraceUnknown(name string, argsGetter ToolArgumentGetter) {
 	if s.log != nil && s.doTrace {
 		args := ""

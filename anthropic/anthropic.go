@@ -210,14 +210,6 @@ func (a *Anthropic) streamChatWithTools(state messageState) {
 
 	// Build system message, potentially including disabled tools info
 	systemMessage := state.system
-	if state.config.ToolsDisabled && len(state.config.DisabledToolsInfo) > 0 {
-		disabledToolsMessage := llm.BuildDisabledToolsMessage(state.config.DisabledToolsInfo)
-		if systemMessage != "" {
-			systemMessage += "\n\n" + disabledToolsMessage
-		} else {
-			systemMessage = disabledToolsMessage
-		}
-	}
 
 	// Only include system message if it's non-empty
 	// Anthropic requires text content blocks to be non-empty
