@@ -395,6 +395,8 @@ func (p *MMPostStreamService) StreamToPost(ctx context.Context, stream *llm.Text
 						handler := p.toolCallHandler
 						if handler != nil {
 							handler(post.Id, autoApprovedIDs)
+						} else {
+							p.mmClient.LogError("Tool call handler is nil, cannot execute auto-approved tools", "post_id", post.Id)
 						}
 					}
 				}

@@ -18,7 +18,7 @@ import (
 )
 
 // HandleToolCall handles tool call approval/rejection
-func (c *Conversations) HandleToolCall(userID string, post *model.Post, channel *model.Channel, acceptedToolIDs []string, autoApproveTool string) error {
+func (c *Conversations) HandleToolCall(userID string, post *model.Post, channel *model.Channel, acceptedToolIDs []string) error {
 	bot := c.bots.GetBotByID(post.UserId)
 	if bot == nil {
 		return fmt.Errorf("unable to get bot")
@@ -33,13 +33,6 @@ func (c *Conversations) HandleToolCall(userID string, post *model.Post, channel 
 	rootPostID := post.RootId
 	if rootPostID == "" {
 		rootPostID = post.Id
-	}
-
-	// Handle permission updates
-	if autoApproveTool != "" {
-		if addErr := mcp.AddAutoApproval(c.mmClient, userID, rootPostID, autoApproveTool); addErr != nil {
-			c.mmClient.LogError("Failed to add auto-approval for tool", "error", addErr, "tool", autoApproveTool)
-		}
 	}
 
 	toolsJSON := post.GetProp(streaming.ToolCallProp)
@@ -67,19 +60,15 @@ func (c *Conversations) HandleToolCall(userID string, post *model.Post, channel 
 		c.contextBuilder.WithLLMContextDefaultTools(bot, mmapi.IsDMWith(bot.GetMMBot().UserId, channel)),
 	)
 
-	// Check if tool is auto-approved
-	isAutoApproved := func(toolName string) bool {
-		return slices.Contains(autoApprovedTools, toolName)
-	}
-
 	for i := range tools {
-		// Mark if tool was auto-approved
-		if isAutoApproved(tools[i].Name) {
+		// Mark tools as auto-approved if they match the user's saved preferences
+		// This is used by the UI to display auto-approval status to the user
+		if slices.Contains(autoApprovedTools, tools[i].Name) {
 			tools[i].AutoApproved = true
 		}
 
 		// Check if tool should be executed (either explicitly accepted OR auto-approved)
-		shouldExecute := slices.Contains(acceptedToolIDs, tools[i].ID) || isAutoApproved(tools[i].Name)
+		shouldExecute := slices.Contains(acceptedToolIDs, tools[i].ID) || tools[i].AutoApproved
 
 		if shouldExecute {
 			result, resolveErr := llmContext.Tools.ResolveTool(tools[i].Name, func(args any) error {
@@ -212,8 +201,8 @@ func (c *Conversations) HandleAutoApprovedToolCall(postID string, toolIDs []stri
 		return
 	}
 
-	// Call HandleToolCall with all tool IDs accepted and no permission changes
-	if err := c.HandleToolCall(userID, post, channel, toolIDs, ""); err != nil {
+	// Call HandleToolCall with all tool IDs accepted
+	if err := c.HandleToolCall(userID, post, channel, toolIDs); err != nil {
 		c.mmClient.LogError("Failed to handle auto-approved tool call", "error", err, "post_id", postID)
 	}
 }

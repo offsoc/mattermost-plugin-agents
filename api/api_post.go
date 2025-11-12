@@ -285,7 +285,6 @@ func (a *API) handleToolCall(c *gin.Context) {
 
 	var data struct {
 		AcceptedToolIDs []string `json:"accepted_tool_ids"`
-		AutoApproveTool string   `json:"auto_approve_tool,omitempty"`
 	}
 
 	if err := c.ShouldBindJSON(&data); err != nil {
@@ -293,7 +292,7 @@ func (a *API) handleToolCall(c *gin.Context) {
 		return
 	}
 
-	err := a.conversationsService.HandleToolCall(userID, post, channel, data.AcceptedToolIDs, data.AutoApproveTool)
+	err := a.conversationsService.HandleToolCall(userID, post, channel, data.AcceptedToolIDs)
 	if err != nil {
 		if err.Error() == "post missing pending tool calls" || err.Error() == "post pending tool calls not valid JSON" {
 			c.AbortWithError(http.StatusBadRequest, err)

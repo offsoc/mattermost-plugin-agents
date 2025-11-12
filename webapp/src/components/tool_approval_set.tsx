@@ -1,16 +1,16 @@
 // Copyright (c) 2023-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
-import React, {useState, useEffect} from 'react';
+import React, {useState} from 'react';
 import styled from 'styled-components';
 import {FormattedMessage} from 'react-intl';
 import {WebSocketMessage} from '@mattermost/client';
 
-import {doToolCall, getToolPermissions, updateToolPermission} from '@/client';
-import {ToolPermissionWebsocketMessage} from '@/websocket';
+import {doToolCall, updateToolPermission} from '@/client';
 
 import {ToolCall, ToolCallStatus} from './llmbot_post/llmbot_post';
 import ToolCard from './tool_card';
+import {useToolPermissions} from './use_tool_permissions';
 
 // Styled components
 const ToolCallsContainer = styled.div`
@@ -49,66 +49,21 @@ const ToolApprovalSet: React.FC<ToolApprovalSetProps> = (props) => {
     // Track which tools are currently being processed
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
-    const [autoApprovedTools, setAutoApprovedTools] = useState<string[]>([]);
-    const [permissionsLoading, setPermissionsLoading] = useState(true);
+
+    // Use custom hook to manage permissions and WebSocket updates
+    const {autoApprovedTools, permissionsLoading} = useToolPermissions({
+        postID: props.postID,
+        rootPostID: props.rootPostID,
+        websocketRegister: props.websocketRegister,
+        websocketUnregister: props.websocketUnregister,
+    });
 
     // Track user manual overrides of the default collapse state
     const [userExpandedTools, setUserExpandedTools] = useState<string[]>([]); // User clicked to expand a normally-collapsed tool
     const [userCollapsedTools, setUserCollapsedTools] = useState<string[]>([]); // User clicked to collapse a normally-expanded tool
     const [toolDecisions, setToolDecisions] = useState<ToolDecision>({});
 
-    // Load permissions from KV store on mount or when postID changes
-    useEffect(() => {
-        const loadPermissions = async () => {
-            setPermissionsLoading(true);
-            try {
-                const permissions = await getToolPermissions(props.postID);
-                setAutoApprovedTools(permissions);
-            } catch (err) {
-                // Log error but continue with empty permissions - don't block UI
-                setAutoApprovedTools([]);
-            } finally {
-                setPermissionsLoading(false);
-            }
-        };
-
-        loadPermissions();
-    }, [props.postID]);
-
-    // Register WebSocket listener for tool permission updates
-    useEffect(() => {
-        if (props.websocketRegister && props.websocketUnregister) {
-            const listenerID = `tool-approval-set-${props.postID}`;
-
-            const handleToolPermissionUpdate = (msg: WebSocketMessage<ToolPermissionWebsocketMessage>) => {
-                const {tool_name, permission} = msg.data;
-
-                // Update local state based on the permission change
-                if (permission === 'auto-approve') {
-                    setAutoApprovedTools((prev) => {
-                        if (!prev.includes(tool_name)) {
-                            return [...prev, tool_name];
-                        }
-                        return prev;
-                    });
-                } else {
-                    setAutoApprovedTools((prev) => prev.filter((t) => t !== tool_name));
-                }
-            };
-
-            props.websocketRegister(props.rootPostID, listenerID, handleToolPermissionUpdate);
-
-            return () => {
-                if (props.websocketUnregister) {
-                    props.websocketUnregister(props.rootPostID, listenerID);
-                }
-            };
-        }
-
-        return () => {/* no cleanup */};
-    }, [props.rootPostID, props.postID, props.websocketRegister, props.websocketUnregister]);
-
-    const handleToolDecision = async (toolID: string, approved: boolean, autoApproveTool?: string) => {
+    const handleToolDecision = async (toolID: string, approved: boolean) => {
         if (isSubmitting) {
             return;
         }
@@ -138,7 +93,7 @@ const ToolApprovalSet: React.FC<ToolApprovalSetProps> = (props) => {
 
         setIsSubmitting(true);
         try {
-            await doToolCall(props.postID, approvedToolIDs, autoApproveTool);
+            await doToolCall(props.postID, approvedToolIDs);
         } catch (err) {
             setError('Failed to submit tool decisions');
             setIsSubmitting(false);
@@ -150,8 +105,14 @@ const ToolApprovalSet: React.FC<ToolApprovalSetProps> = (props) => {
             return;
         }
 
-        // Add to local auto-approved state
-        setAutoApprovedTools((prev) => [...prev, toolName]);
+        // Update permission via dedicated endpoint
+        // The WebSocket will update the autoApprovedTools state via the custom hook
+        try {
+            await updateToolPermission(props.postID, toolName, 'auto-approve');
+        } catch (err) {
+            setError('Failed to update tool permission');
+            return;
+        }
 
         // Find ALL pending tools with the same name and approve them all
         const matchingToolIDs = props.toolCalls.
@@ -186,7 +147,7 @@ const ToolApprovalSet: React.FC<ToolApprovalSetProps> = (props) => {
 
         setIsSubmitting(true);
         try {
-            await doToolCall(props.postID, approvedToolIDs, toolName);
+            await doToolCall(props.postID, approvedToolIDs);
         } catch (err) {
             setError('Failed to submit tool decisions');
             setIsSubmitting(false);
@@ -194,23 +155,12 @@ const ToolApprovalSet: React.FC<ToolApprovalSetProps> = (props) => {
     };
 
     const handlePermissionChange = async (toolName: string, permission: 'ask' | 'auto-approve') => {
-        // Update local state optimistically
-        if (permission === 'auto-approve') {
-            setAutoApprovedTools((prev) => [...prev, toolName]);
-        } else {
-            setAutoApprovedTools((prev) => prev.filter((t) => t !== toolName));
-        }
-
         // Send update to backend using dedicated permission endpoint
+        // The WebSocket will update the autoApprovedTools state via the custom hook
         try {
             await updateToolPermission(props.postID, toolName, permission);
         } catch (err) {
-            // Revert optimistic update on error
-            if (permission === 'auto-approve') {
-                setAutoApprovedTools((prev) => prev.filter((t) => t !== toolName));
-            } else {
-                setAutoApprovedTools((prev) => [...prev, toolName]);
-            }
+            setError('Failed to update tool permission');
         }
     };
 

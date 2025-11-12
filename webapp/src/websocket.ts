@@ -13,11 +13,13 @@ type WebsocketListenerObject = {
 }
 type WebsocketListeners = WebsocketListenerObject[]
 
+export type ToolPermission = 'auto-approve' | 'ask';
+
 export type ToolPermissionWebsocketMessage = {
     user_id: string;
     root_post_id: string;
     tool_name: string;
-    permission: 'auto-approve' | 'ask';
+    permission: ToolPermission;
 }
 
 type ToolPermissionListener = (msg: WebSocketMessage<ToolPermissionWebsocketMessage>) => void

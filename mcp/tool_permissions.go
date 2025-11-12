@@ -5,6 +5,7 @@ package mcp
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/mattermost/mattermost-plugin-ai/mmapi"
@@ -49,14 +50,7 @@ func IsToolAutoApproved(client mmapi.Client, userID, rootPostID, toolName string
 		return false, err
 	}
 
-	// Check if tool is in the auto-approved list
-	for _, approvedTool := range permissions.AutoApprovedTools {
-		if approvedTool == toolName {
-			return true, nil
-		}
-	}
-
-	return false, nil
+	return slices.Contains(permissions.AutoApprovedTools, toolName), nil
 }
 
 // AddAutoApproval adds a tool to the auto-approve list for this conversation
@@ -67,11 +61,9 @@ func AddAutoApproval(client mmapi.Client, userID, rootPostID, toolName string) e
 	}
 
 	// Check if already in list
-	for _, approvedTool := range permissions.AutoApprovedTools {
-		if approvedTool == toolName {
-			// Already auto-approved, nothing to do
-			return nil
-		}
+	if slices.Contains(permissions.AutoApprovedTools, toolName) {
+		// Already auto-approved, nothing to do
+		return nil
 	}
 
 	// Add to list
@@ -94,19 +86,17 @@ func RemoveAutoApproval(client mmapi.Client, userID, rootPostID, toolName string
 		return err
 	}
 
-	// Filter out the tool
-	filtered := make([]string, 0, len(permissions.AutoApprovedTools))
 	found := false
-	for _, approvedTool := range permissions.AutoApprovedTools {
-		if approvedTool != toolName {
-			filtered = append(filtered, approvedTool)
-		} else {
+	filtered := slices.DeleteFunc(permissions.AutoApprovedTools, func(t string) bool {
+		if t == toolName {
 			found = true
+			return true
 		}
-	}
+		return false
+	})
 
-	// If tool wasn't in list, nothing to do
 	if !found {
+		// Tool wasn't in list, nothing to do
 		return nil
 	}
 

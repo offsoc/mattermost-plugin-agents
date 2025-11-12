@@ -174,26 +174,13 @@ export async function updateToolPermission(
     });
 }
 
-export async function doToolCall(
-    postid: string,
-    toolIDs: string[],
-    autoApproveTool?: string,
-) {
+export async function doToolCall(postid: string, toolIDs: string[]) {
     const url = `${postRoute(postid)}/tool_call`;
-    const body: {
-        accepted_tool_ids: string[];
-        auto_approve_tool?: string;
-    } = {
-        accepted_tool_ids: toolIDs,
-    };
-
-    if (autoApproveTool) {
-        body.auto_approve_tool = autoApproveTool;
-    }
-
     const response = await fetch(url, Client4.getOptions({
         method: 'POST',
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+            accepted_tool_ids: toolIDs,
+        }),
     }));
 
     if (response.ok) {
