@@ -17,7 +17,7 @@ const ToolCallsContainer = styled.div`
     display: flex;
     flex-direction: column;
     gap: 8px;
-    margin-bottom: 12px;
+    margin: 16px 0;
 `;
 
 const StatusBar = styled.div`
@@ -236,6 +236,7 @@ const ToolApprovalSet: React.FC<ToolApprovalSetProps> = (props) => {
                     onToggleCollapse={() => toggleCollapse(tool.id, tool.name, true)}
                     onApprove={() => handleToolDecision(tool.id, true)}
                     onReject={() => handleToolDecision(tool.id, false)}
+                    decision={toolDecisions[tool.id]}
                     onAcceptAll={() => handleAcceptAll(tool.id, tool.name)}
                     onPermissionChange={(permission) => handlePermissionChange(tool.name, permission)}
                     autoApproved={autoApprovedTools.includes(tool.name)}
