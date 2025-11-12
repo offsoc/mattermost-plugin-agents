@@ -173,7 +173,7 @@ func (c *Conversations) HandleRegenerate(userID string, post *model.Post, channe
 		}
 
 		// Create a context with tools for LLM awareness
-		// Security restriction is enforced via WithToolsDisabled based on channel type
+		// Security restriction is enforced inside ProcessUserRequestWithContext via WithToolsDisabled based on channel type
 		contextWithCallback := c.contextBuilder.BuildLLMContextUserRequest(
 			bot,
 			user,
@@ -182,6 +182,7 @@ func (c *Conversations) HandleRegenerate(userID string, post *model.Post, channe
 		)
 
 		// Process the user request with the context that has the callback
+		// Note: ProcessUserRequestWithContext internally checks if this is a DM and applies WithToolsDisabled() if not
 		var processErr error
 		result, processErr = c.ProcessUserRequestWithContext(bot, user, channel, respondingToPost, contextWithCallback)
 		if processErr != nil {
