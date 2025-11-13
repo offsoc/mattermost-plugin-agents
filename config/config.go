@@ -154,17 +154,11 @@ func OpenAIConfigFromServiceConfig(serviceConfig llm.ServiceConfig, botConfig ll
 		streamingTimeout = time.Duration(serviceConfig.StreamingTimeoutSeconds) * time.Second
 	}
 
-	// Use bot's model if specified, otherwise fall back to service's default model
-	model := botConfig.Model
-	if model == "" {
-		model = serviceConfig.DefaultModel
-	}
-
 	return openai.Config{
 		APIKey:             serviceConfig.APIKey,
 		APIURL:             serviceConfig.APIURL,
 		OrgID:              serviceConfig.OrgID,
-		DefaultModel:       model,
+		DefaultModel:       serviceConfig.DefaultModel,
 		InputTokenLimit:    serviceConfig.InputTokenLimit,
 		OutputTokenLimit:   serviceConfig.OutputTokenLimit,
 		StreamingTimeout:   streamingTimeout,
