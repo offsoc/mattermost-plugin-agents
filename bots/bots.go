@@ -108,6 +108,11 @@ func (b *MMBots) EnsureBots() error {
 			return fmt.Errorf("duplicate bot name: %s", botCfg.Name)
 		}
 
+		// Use bot's model if specified, otherwise fall back to service's default model
+		if botCfg.Model != "" {
+			service.DefaultModel = botCfg.Model
+		}
+
 		bot := &Bot{cfg: botCfg, service: service}
 		bots = append(bots, bot)
 		aiBotsByUsername[botCfg.Name] = bot
@@ -173,11 +178,6 @@ func (b *MMBots) EnsureBots() error {
 }
 
 func (b *MMBots) getLLM(serviceConfig llm.ServiceConfig, botConfig llm.BotConfig) (llm.LanguageModel, error) {
-	// Use bot's model if specified, otherwise fall back to service's default model
-	if botConfig.Model != "" {
-		serviceConfig.DefaultModel = botConfig.Model
-	}
-
 	// Create the correct model
 	var result llm.LanguageModel
 	switch serviceConfig.Type {
@@ -232,11 +232,6 @@ func (b *MMBots) GetTranscribe() Transcriber {
 	}
 
 	service := bot.service
-	// Use bot's model if specified, otherwise fall back to service's default model
-	if bot.cfg.Model != "" {
-		service.DefaultModel = bot.cfg.Model
-	}
-
 	switch service.Type {
 	case llm.ServiceTypeOpenAI:
 		return openai.New(config.OpenAIConfigFromServiceConfig(service, bot.cfg), b.llmUpstreamHTTPClient)
