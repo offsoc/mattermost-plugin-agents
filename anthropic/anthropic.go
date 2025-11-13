@@ -202,7 +202,11 @@ func (a *Anthropic) streamChatWithTools(state messageState) {
 		Model:     anthropicSDK.Model(state.config.Model),
 		MaxTokens: int64(state.config.MaxGeneratedTokens),
 		Messages:  state.messages,
-		Tools:     convertTools(state.tools),
+	}
+
+	// Only add tools if not explicitly disabled
+	if !state.config.ToolsDisabled {
+		params.Tools = convertTools(state.tools)
 	}
 
 	// Only include system message if it's non-empty
@@ -213,8 +217,8 @@ func (a *Anthropic) streamChatWithTools(state messageState) {
 		}}
 	}
 
-	// Add native tools if enabled
-	if a.isNativeToolEnabled("web_search") {
+	// Add native tools if not explicitly disabled
+	if !state.config.ToolsDisabled && a.isNativeToolEnabled("web_search") {
 		// Add web search as a native tool
 		webSearchTool := anthropicSDK.WebSearchTool20250305Param{
 			Name: "web_search",
