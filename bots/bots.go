@@ -185,7 +185,7 @@ func (b *MMBots) getLLM(serviceConfig llm.ServiceConfig, botConfig llm.BotConfig
 	case llm.ServiceTypeAnthropic:
 		result = anthropic.New(serviceConfig, botConfig, b.llmUpstreamHTTPClient)
 	case llm.ServiceTypeASage:
-		result = asage.New(serviceConfig, b.llmUpstreamHTTPClient)
+		result = asage.New(serviceConfig, botConfig, b.llmUpstreamHTTPClient)
 	case llm.ServiceTypeCohere:
 		// Set the Cohere OpenAI compatibility endpoint
 		cohereCfg := serviceConfig

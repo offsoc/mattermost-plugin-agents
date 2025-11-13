@@ -50,9 +50,15 @@ func New(llmService llm.ServiceConfig, botConfig llm.BotConfig, httpClient *http
 		option.WithHTTPClient(httpClient),
 	)
 
+	// Use bot's model if specified, otherwise fall back to service's default model
+	model := botConfig.Model
+	if model == "" {
+		model = llmService.DefaultModel
+	}
+
 	return &Anthropic{
 		client:             client,
-		defaultModel:       llmService.DefaultModel,
+		defaultModel:       model,
 		inputTokenLimit:    llmService.InputTokenLimit,
 		outputTokenLimit:   llmService.OutputTokenLimit,
 		enabledNativeTools: botConfig.EnabledNativeTools,

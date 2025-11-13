@@ -19,12 +19,18 @@ type Provider struct {
 	outputTokenLimit int
 }
 
-func New(llmService llm.ServiceConfig, httpClient *http.Client) *Provider {
+func New(llmService llm.ServiceConfig, botConfig llm.BotConfig, httpClient *http.Client) *Provider {
 	client := NewClient(llmService.APIKey, httpClient, llmService.APIURL)
+
+	// Use bot's model if specified, otherwise fall back to service's default model
+	model := botConfig.Model
+	if model == "" {
+		model = llmService.DefaultModel
+	}
 
 	return &Provider{
 		client:           client,
-		defaultModel:     llmService.DefaultModel,
+		defaultModel:     model,
 		inputTokenLimit:  llmService.InputTokenLimit,
 		outputTokenLimit: llmService.OutputTokenLimit,
 	}
