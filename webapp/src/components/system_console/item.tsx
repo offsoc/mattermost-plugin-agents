@@ -1,10 +1,11 @@
 // Copyright (c) 2023-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
-import React, {useRef} from 'react';
+import React from 'react';
 import styled from 'styled-components';
 import {FormattedMessage} from 'react-intl';
-import {ChevronDownIcon} from '@mattermost/compass-icons/components';
+import CreatableSelect from 'react-select/creatable';
+import {StylesConfig, SingleValue} from 'react-select';
 
 export const ItemList = styled.div`
 	display: grid;
@@ -96,62 +97,88 @@ export type ComboboxItemProps = {
     onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
 };
 
+type SelectOption = {
+    value: string
+    label: string
+}
+
 export const ComboboxItem = (props: ComboboxItemProps) => {
-    const listId = `${props.label.replace(/\s+/g, '-').toLowerCase()}-datalist`;
-    const inputRef = useRef<HTMLInputElement>(null);
+    // Convert ComboboxOption[] to SelectOption[] for react-select
+    const selectOptions: SelectOption[] = props.options.map((opt) => ({
+        value: opt.id,
+        label: opt.displayName,
+    }));
 
-    const showDropdown = () => {
-        if (inputRef.current) {
-            inputRef.current.focus();
+    // Find current selection or create custom option
+    const currentValue: SelectOption | null = props.value
+        ? selectOptions.find((opt) => opt.value === props.value) || {value: props.value, label: props.value}
+        : null;
 
-            // Trigger datalist by temporarily clearing and restoring value
-            const currentValue = inputRef.current.value;
-            inputRef.current.value = '';
+    const handleChange = (newValue: SingleValue<SelectOption>) => {
+        // Create a synthetic event to match the existing onChange signature
+        const syntheticEvent = {
+            target: {
+                value: newValue?.value || '',
+            },
+        } as React.ChangeEvent<HTMLInputElement>;
 
-            // Dispatch input event to trigger datalist
-            const inputEvent = new Event('input', {bubbles: true});
-            inputRef.current.dispatchEvent(inputEvent);
+        props.onChange(syntheticEvent);
+    };
 
-            // Small delay to allow datalist to appear, then restore value
-            setTimeout(() => {
-                if (inputRef.current) {
-                    inputRef.current.value = currentValue;
-                    inputRef.current.setSelectionRange(currentValue.length, currentValue.length);
-                }
-            }, 0);
-        }
+    const selectStyles: StylesConfig<SelectOption, false> = {
+        control: (base, state) => ({
+            ...base,
+            minHeight: '35px',
+            height: '35px',
+            borderRadius: '2px',
+            borderColor: state.isFocused ? '#66afe9' : 'rgba(var(--center-channel-color-rgb), 0.16)',
+            boxShadow: state.isFocused
+                ? 'inset 0 1px 1px rgba(0, 0, 0, 0.075), 0 0 8px rgba(102, 175, 233, 0.75)'
+                : '0px 1px 1px rgba(0, 0, 0, 0.075) inset',
+            '&:hover': {
+                borderColor: state.isFocused ? '#66afe9' : 'rgba(var(--center-channel-color-rgb), 0.16)',
+            },
+        }),
+        valueContainer: (base) => ({
+            ...base,
+            height: '35px',
+            padding: '0 12px',
+        }),
+        input: (base) => ({
+            ...base,
+            margin: '0',
+            padding: '0',
+        }),
+        indicatorSeparator: () => ({
+            display: 'none',
+        }),
+        dropdownIndicator: (base) => ({
+            ...base,
+            padding: '4px',
+            color: 'rgba(var(--center-channel-color-rgb), 0.56)',
+            '&:hover': {
+                color: 'rgba(var(--center-channel-color-rgb), 0.72)',
+            },
+        }),
+        menu: (base) => ({
+            ...base,
+            zIndex: 9999,
+        }),
     };
 
     return (
         <>
             <ItemLabel>{props.label}</ItemLabel>
             <TextFieldContainer>
-                <ComboboxInputWrapper>
-                    <StyledComboboxInput
-                        ref={inputRef}
-                        value={props.value}
-                        type='text'
-                        placeholder={props.placeholder || props.label}
-                        onChange={props.onChange}
-                        onClick={showDropdown}
-                        onFocus={showDropdown}
-                        list={listId}
-                        autoComplete='off'
-                    />
-                    <ComboboxChevron onClick={showDropdown}>
-                        <ChevronDownIcon size={18}/>
-                    </ComboboxChevron>
-                    <datalist id={listId}>
-                        {props.options.map((option) => (
-                            <option
-                                key={option.id}
-                                value={option.id}
-                            >
-                                {option.displayName}
-                            </option>
-                        ))}
-                    </datalist>
-                </ComboboxInputWrapper>
+                <CreatableSelect<SelectOption, false>
+                    value={currentValue}
+                    onChange={handleChange}
+                    options={selectOptions}
+                    placeholder={props.placeholder || props.label}
+                    styles={selectStyles}
+                    isClearable={false}
+                    formatCreateLabel={(inputValue) => `Use custom model: ${inputValue}`}
+                />
                 {props.helptext &&
                 <HelpText>{props.helptext}</HelpText>
                 }
@@ -203,53 +230,6 @@ export const StyledInput = styled.input<{ as?: string }>`
 		border-color: $66afe9;
 		box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.075), 0 0 8px rgba(102, 175, 233, 0.75);
 		outline: 0;
-	}
-`;
-
-const ComboboxInputWrapper = styled.div`
-	position: relative;
-	display: flex;
-	align-items: center;
-`;
-
-const StyledComboboxInput = styled.input`
-	appearance: none;
-	display: flex;
-	padding: 7px 36px 7px 12px;
-	align-items: flex-start;
-	border-radius: 2px;
-	border: 1px solid rgba(var(--center-channel-color-rgb), 0.16);
-	box-shadow: 0px 1px 1px rgba(0, 0, 0, 0.075) inset;
-	height: 35px;
-	background: white;
-	width: 100%;
-
-	font-size: 14px;
-	font-weight: 400;
-	line-height: 20px;
-
-	&:focus {
-		border-color: #66afe9;
-		box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.075), 0 0 8px rgba(102, 175, 233, 0.75);
-		outline: 0;
-	}
-`;
-
-const ComboboxChevron = styled.div`
-	position: absolute;
-	right: 8px;
-	top: 50%;
-	transform: translateY(-50%);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	cursor: pointer;
-	color: rgba(var(--center-channel-color-rgb), 0.56);
-	pointer-events: auto;
-	padding: 4px;
-
-	&:hover {
-		color: rgba(var(--center-channel-color-rgb), 0.72);
 	}
 `;
 
