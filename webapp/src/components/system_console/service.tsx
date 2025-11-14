@@ -7,15 +7,12 @@ import {useIntl} from 'react-intl';
 
 import {TrashCanOutlineIcon, ChevronDownIcon, ChevronUpIcon} from '@mattermost/compass-icons/components';
 
-import {Client4} from '@mattermost/client';
-
 import IconAI from '../assets/icon_ai';
 
 import {ButtonIcon} from '../assets/buttons';
 
 import {BooleanItem, ItemList, SelectionItem, SelectionItemOption, TextItem, ComboboxItem} from './item';
-
-const client = new Client4();
+import {fetchModels} from '../../client';
 
 export type LLMService = {
     id: string
@@ -76,27 +73,17 @@ const ServiceFields = (props: ServiceFieldsProps) => {
             return;
         }
 
-        const fetchModels = async () => {
+        const loadModels = async () => {
             setLoadingModels(true);
             setModelsFetchError('');
 
             try {
-                const url = '/plugins/mattermost-ai/admin/models/fetch';
-                const response = await fetch(url, client.getOptions({
-                    method: 'POST',
-                    body: JSON.stringify({
-                        serviceType: type,
-                        apiKey: props.service.apiKey,
-                        apiURL: props.service.apiURL || '',
-                        orgID: props.service.orgId || '',
-                    }),
-                }));
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                const data: ModelInfo[] = await response.json();
+                const data: ModelInfo[] = await fetchModels(
+                    type,
+                    props.service.apiKey,
+                    props.service.apiURL || '',
+                    props.service.orgId || ''
+                );
                 setAvailableModels(data);
             } catch (error) {
                 console.error('Failed to fetch models:', error);
@@ -107,7 +94,7 @@ const ServiceFields = (props: ServiceFieldsProps) => {
             }
         };
 
-        fetchModels();
+        loadModels();
     }, [type, props.service.apiKey, props.service.apiURL, props.service.orgId, supportsModelFetching]);
 
     const getDefaultOutputTokenLimit = () => {
