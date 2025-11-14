@@ -5,10 +5,11 @@ import MattermostContainer from 'helpers/mmcontainer';
 import { OpenAIMockContainer, RunOpenAIMocks } from 'helpers/openai-mock';
 import { createBotConfigHelper, generateBotId } from 'helpers/bot-config';
 
-let mattermost: MattermostContainer;
-let openAIMock: OpenAIMockContainer;
+function createTestSuite() {
+    let mattermost: MattermostContainer;
+    let openAIMock: OpenAIMockContainer;
 
-test.describe('Bot Configuration Tests', () => {
+    test.describe('Bot Configuration Tests', () => {
     // Setup for all tests in the file
     test.beforeAll(async () => {
         mattermost = await RunContainer();
@@ -341,5 +342,6 @@ Always be helpful!
             tokenLimit: originalService!.tokenLimit
         });
     });
-    });
-});
+}
+
+createTestSuite();

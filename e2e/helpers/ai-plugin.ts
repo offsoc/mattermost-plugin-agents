@@ -95,4 +95,13 @@ export class AIPlugin {
     }
   }
 
+  async closeRHS() {
+    const closeButton = this.page.locator('#rhsContainer button[aria-label="Close"]').first();
+    const isVisible = await closeButton.isVisible().catch(() => false);
+    if (isVisible) {
+      await closeButton.click();
+      await this.page.waitForTimeout(500);
+    }
+  }
+
 }

@@ -89,6 +89,25 @@ export class MattermostPage {
             await this.page.waitForTimeout(500);
         }
     }
+
+    async createAndNavigateToDMWithBot(mattermost: any, username: string, password: string, botUsername: string) {
+        // Get client for the user
+        const userClient = await mattermost.getClient(username, password);
+        const currentUser = await userClient.getMe();
+
+        // Get the bot user by username
+        const botUser = await userClient.getUserByUsername(botUsername);
+
+        // Create or get DM channel
+        const channel = await userClient.createDirectChannel([currentUser.id, botUser.id]);
+
+        // Navigate to the DM channel
+        const teams = await userClient.getMyTeams();
+        const team = teams[0];
+
+        await this.page.goto(`${mattermost.url()}/${team.name}/messages/@${botUsername}`);
+        await this.page.waitForTimeout(2000);
+    }
 }
 
 // Legacy function for backward compatibility

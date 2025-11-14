@@ -31,3 +31,5 @@ mcpserver/data/
 
 # Emacs/Vi
 *~
+
+.mcp.json

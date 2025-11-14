@@ -11,21 +11,22 @@ import { createBotConfigHelper } from 'helpers/bot-config';
 const username = 'regularuser';
 const password = 'regularuser';
 
-let mattermost: MattermostContainer;
-let openAIMock: OpenAIMockContainer;
+function createTestSuite() {
+    let mattermost: MattermostContainer;
+    let openAIMock: OpenAIMockContainer;
 
-// Common test setup
-async function setupTestPage(page) {
-    const mmPage = new MattermostPage(page);
-    const aiPlugin = new AIPlugin(page);
-    const url = mattermost.url();
+    // Common test setup
+    async function setupTestPage(page) {
+        const mmPage = new MattermostPage(page);
+        const aiPlugin = new AIPlugin(page);
+        const url = mattermost.url();
 
-    await mmPage.login(url, username, password);
+        await mmPage.login(url, username, password);
 
-    return { mmPage, aiPlugin };
-}
+        return { mmPage, aiPlugin };
+    }
 
-test.describe('Bot Identity Changes', () => {
+    test.describe('Bot Identity Changes', () => {
     // Setup for all tests in the file
     test.beforeAll(async () => {
         mattermost = await RunContainer();
@@ -160,4 +161,7 @@ test.describe('Bot Identity Changes', () => {
             displayName: 'Mock Bot'
         });
     });
-});
+    });
+}
+
+createTestSuite();

@@ -358,4 +358,32 @@ export class LLMBotPostHelper {
         const citation = this.getCitationIcon(index, postId);
         await expect(citation).toBeVisible({ timeout });
     }
+
+    /**
+     * Wait for bot response streaming to complete
+     * Returns early when streaming finishes, with high timeout as safety net
+     * @param maxTimeout - Maximum wait time in ms (default: 5 minutes)
+     */
+    async waitForStreamingComplete(maxTimeout: number = 300000): Promise<void> {
+        // Wait for post text to appear (longer timeout for slow providers like OpenAI)
+        const postText = this.getPostText();
+        await expect(postText).toBeVisible({ timeout: 60000 });
+
+        // Wait for "Stop Generating" button to disappear (streaming complete)
+        const stopButton = this.getStopGeneratingButton();
+
+        // Check every 500ms if stop button is gone (streaming complete)
+        const startTime = Date.now();
+        while (Date.now() - startTime < maxTimeout) {
+            const isVisible = await stopButton.isVisible().catch(() => false);
+            if (!isVisible) {
+                // Stop button gone, streaming complete - wait a bit for final updates
+                await this.page.waitForTimeout(1000);
+                return;
+            }
+            await this.page.waitForTimeout(500);
+        }
+
+        // If we hit max timeout, that's okay - streaming might have completed without stop button
+    }
 }

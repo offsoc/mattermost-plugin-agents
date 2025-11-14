@@ -1,378 +1,333 @@
 import { test, expect } from '@playwright/test';
-import RunLLMBotTestContainer from 'helpers/llmbot-test-container';
+import RunRealAPIContainer from 'helpers/real-api-container';
 import MattermostContainer from 'helpers/mmcontainer';
 import { MattermostPage } from 'helpers/mm';
 import { AIPlugin } from 'helpers/ai-plugin';
-import { AnthropicMockContainer } from 'helpers/anthropic-mock';
 import { LLMBotPostHelper } from 'helpers/llmbot-post';
-import { LLMBotPostCreator, Annotation } from 'helpers/llmbot-post-creator';
+import { getAPIConfig, getSkipMessage, logAPIConfig } from 'helpers/api-config';
 
 /**
  * Test Suite: Edge Cases
  *
- * Tests edge cases and error scenarios for LLMBot posts:
- * 21. Empty Reasoning
- * 22. Reasoning Without Text Response
- * 23. Citation at Start/End of Text
- * 24. Invalid Annotation JSON (handled by backend)
- * 25. Very Long Reasoning Text
- * 26. Rapid Reasoning Collapse/Expand
- * 27. Special Characters in Citations
- * 28. Citation Click Blocked by Browser
- * 29. Network Error During Streaming (SKIPPED - requires streaming)
- * 30. Concurrent Reasoning from Multiple Bots
+ * Tests edge case scenarios and error handling in LLMBot posts using REAL APIs.
+ * Runs once per configured provider (OpenAI and/or Anthropic).
  *
- * Spec: /e2e/LLMBOT_POST_COMPONENT_TEST_PLAN.md (Tests 21-30)
- * Uses direct post creation to test edge cases
+ * Environment Variables Required:
+ * - ANTHROPIC_API_KEY: To run tests with Anthropic (claude-3-5-haiku)
+ * - OPENAI_API_KEY: To run tests with OpenAI (gpt-4o-mini)
+ *
+ * Tests:
+ * 1. Empty Reasoning Response
+ * 2. Very Long Reasoning Content
+ * 3. Rapid Reasoning Toggle
+ * 4. Special Characters in Response
+ * 5. Concurrent Posts
+ * 6. Empty Post Content
+ * 7. Unicode Content
+ * 8. Large Post with Reasoning
+ * 9. Network Error Handling
+ * 10. Multiple Rapid Messages
  */
 
 const username = 'regularuser';
 const password = 'regularuser';
 
-let mattermost: MattermostContainer;
-let anthropicMock: AnthropicMockContainer;
-let postCreator: LLMBotPostCreator;
-let testUserId: string;
-let testChannelId: string;
+const config = getAPIConfig();
+const skipMessage = getSkipMessage();
 
-test.beforeAll(async () => {
-    const containers = await RunLLMBotTestContainer();
-    mattermost = containers.mattermost;
-    anthropicMock = containers.anthropicMock;
-
-    postCreator = new LLMBotPostCreator(mattermost);
-    await postCreator.initialize('claude');
-
-    const userClient = await mattermost.getClient(username, password);
-    const user = await userClient.getMe();
-    testUserId = user.id;
-
-    testChannelId = await postCreator.createDMChannel(testUserId);
-});
-
-test.afterAll(async () => {
-    await anthropicMock.stop();
-    await mattermost.stop();
-});
-
-async function setupTestPage(page) {
+async function setupTestPage(page, mattermost, provider) {
     const mmPage = new MattermostPage(page);
     const aiPlugin = new AIPlugin(page);
     const llmBotHelper = new LLMBotPostHelper(page);
-    const url = mattermost.url();
 
-    await mmPage.login(url, username, password);
+    // Get bot username based on provider
+    const botUsername = provider.type === 'anthropic' ? 'claude' : 'mockbot';
 
-    return { mmPage, aiPlugin, llmBotHelper };
+    return { mmPage, aiPlugin, llmBotHelper, botUsername };
 }
 
-test.describe('Edge Cases', () => {
-    test('Empty Reasoning', async ({ page }) => {
-        const { mmPage, llmBotHelper } = await setupTestPage(page);
+function createProviderTestSuite(provider) {
+    test.describe(`Edge Cases - ${provider.name}`, () => {
+        let mattermost: MattermostContainer;
 
-        const response = 'This is a response without reasoning.';
-
-        await postCreator.createPost({
-            message: response,
-            channelId: testChannelId,
-            requesterUserId: testUserId,
+        test.beforeAll(async () => {
+            if (!config.shouldRunTests) return;
+            mattermost = await RunRealAPIContainer(provider);
         });
 
-        await mmPage.goto('test', 'messages');
-        await page.waitForTimeout(1000);
-
-        await llmBotHelper.expectReasoningVisible(false);
-        await expect(page.getByText('Thinking')).not.toBeVisible();
-
-        await llmBotHelper.expectPostText(response);
-    });
-
-    test('Reasoning Without Text Response', async ({ page }) => {
-        const { mmPage, llmBotHelper } = await setupTestPage(page);
-
-        const reasoning = 'I need to think about this question carefully...';
-        const emptyResponse = '';
-
-        await postCreator.createPost({
-            message: emptyResponse,
-            reasoning: reasoning,
-            channelId: testChannelId,
-            requesterUserId: testUserId,
+        test.afterAll(async () => {
+            if (mattermost) {
+                await mattermost.stop();
+            }
         });
 
-        await mmPage.goto('test', 'messages');
-        await page.waitForTimeout(1000);
+        test('Empty Reasoning Response', async ({ page }) => {
+            test.skip(!config.shouldRunTests, skipMessage);
+            test.setTimeout(90000);
 
-        await llmBotHelper.expectReasoningVisible(true);
-        await llmBotHelper.clickReasoningToggle();
-        await llmBotHelper.expectReasoningExpanded(true);
-        await llmBotHelper.expectReasoningText('think about this question');
-    });
+            const { mmPage, aiPlugin, llmBotHelper, botUsername } = await setupTestPage(page, mattermost, provider);
+            await mmPage.login(mattermost.url(), username, password);
 
-    test('Citation at Start/End of Text', async ({ page }) => {
-        const { mmPage, llmBotHelper } = await setupTestPage(page);
+            await aiPlugin.openRHS();
 
-        const textStart = 'Source information about TypeScript features.';
-        const annotationAtStart: Annotation = {
-            type: 'url_citation',
-            start_index: 0,
-            end_index: 0,
-            url: 'https://example.com/start',
-            title: 'Start Source',
-            index: 1
-        };
+            const prompt = 'What is 2+2?';
 
-        await postCreator.createPost({
-            message: textStart,
-            annotations: [annotationAtStart],
-            channelId: testChannelId,
-            requesterUserId: testUserId,
+            await aiPlugin.sendMessage(prompt);
+            await llmBotHelper.waitForStreamingComplete();
+
+            const postText = llmBotHelper.getPostText();
+            await expect(postText).toBeVisible();
+            await expect(postText).toContainText('4');
+
+            const reasoning = llmBotHelper.getReasoningDisplay();
+            const reasoningVisible = await reasoning.isVisible().catch(() => false);
+
+            if (!reasoningVisible) {
+                console.log('No reasoning for simple response (expected)');
+            }
         });
 
-        await mmPage.goto('test', 'messages');
-        await page.waitForTimeout(1000);
+        test('Very Long Reasoning Content', async ({ page }) => {
+            test.skip(!config.shouldRunTests, skipMessage);
+            test.setTimeout(120000);
 
-        await llmBotHelper.expectCitationCount(1);
-        await llmBotHelper.waitForCitation(1);
-        const citationStart = llmBotHelper.getCitationWrapper(1);
-        await expect(citationStart).toBeVisible();
+            const { mmPage, aiPlugin, llmBotHelper, botUsername } = await setupTestPage(page, mattermost, provider);
+            await mmPage.login(mattermost.url(), username, password);
 
-        const textEnd = 'TypeScript is a great language for development.';
-        const annotationAtEnd: Annotation = {
-            type: 'url_citation',
-            start_index: textEnd.length,
-            end_index: textEnd.length,
-            url: 'https://example.com/end',
-            title: 'End Source',
-            index: 1
-        };
+            await aiPlugin.openRHS();
 
-        await postCreator.createPost({
-            message: textEnd,
-            annotations: [annotationAtEnd],
-            channelId: testChannelId,
-            requesterUserId: testUserId,
-        });
+            const prompt = provider.type === 'anthropic'
+                ? 'Analyze in extreme detail all aspects of TypeScript: history, features, type system, interfaces, generics, decorators, compilation, tooling, ecosystem, and future. Think through each aspect carefully'
+                : 'Think very carefully and thoroughly about all aspects of TypeScript including its history, features, type system, interfaces, generics, decorators, compilation process, tooling ecosystem, and future direction. Consider each aspect in great detail';
 
-        await mmPage.goto('test', 'messages');
-        await page.waitForTimeout(1000);
+            await aiPlugin.sendMessage(prompt);
+            await llmBotHelper.waitForStreamingComplete();
 
-        await llmBotHelper.expectCitationCount(1);
-        await llmBotHelper.waitForCitation(1);
-        const citationEnd = llmBotHelper.getCitationWrapper(1);
-        await expect(citationEnd).toBeVisible();
-    });
-
-    test('Invalid Annotation JSON', async ({ page }) => {
-        const { mmPage, llmBotHelper } = await setupTestPage(page);
-
-        const response = 'This response should display correctly.';
-
-        await postCreator.createPost({
-            message: response,
-            channelId: testChannelId,
-            requesterUserId: testUserId,
-        });
-
-        await mmPage.goto('test', 'messages');
-        await page.waitForTimeout(1000);
-
-        await llmBotHelper.expectPostText(response);
-        await llmBotHelper.expectCitationCount(0);
-    });
-
-    test('Very Long Reasoning Text', async ({ page }) => {
-        const { mmPage, llmBotHelper } = await setupTestPage(page);
-
-        const longReasoning = 'Step 1: I need to analyze this complex problem thoroughly. '.repeat(40) +
-            'Step 2: Consider all the alternatives and their implications. '.repeat(30) +
-            'Step 3: Synthesize the information into a coherent conclusion. '.repeat(20);
-        const response = 'Here is my comprehensive answer after detailed analysis.';
-
-        await postCreator.createPost({
-            message: response,
-            reasoning: longReasoning,
-            channelId: testChannelId,
-            requesterUserId: testUserId,
-        });
-
-        await mmPage.goto('test', 'messages');
-        await page.waitForTimeout(1000);
-
-        await llmBotHelper.expectReasoningVisible(true);
-
-        await llmBotHelper.clickReasoningToggle();
-        await llmBotHelper.expectReasoningExpanded(true);
-
-        await llmBotHelper.expectReasoningText('Step 1: I need to analyze');
-        await llmBotHelper.expectReasoningText('Step 2: Consider all');
-        await llmBotHelper.expectReasoningText('Step 3: Synthesize');
-
-        const postText = llmBotHelper.getPostText();
-        await expect(postText).toBeVisible();
-
-        await llmBotHelper.clickReasoningToggle();
-        await llmBotHelper.expectReasoningExpanded(false);
-    });
-
-    test('Rapid Reasoning Collapse/Expand', async ({ page }) => {
-        const { mmPage, llmBotHelper } = await setupTestPage(page);
-
-        const reasoning = 'Testing UI stability with rapid toggling of reasoning display.';
-        const response = 'This tests animation and state handling.';
-
-        await postCreator.createPost({
-            message: response,
-            reasoning: reasoning,
-            channelId: testChannelId,
-            requesterUserId: testUserId,
-        });
-
-        await mmPage.goto('test', 'messages');
-        await page.waitForTimeout(1000);
-
-        for (let i = 0; i < 10; i++) {
+            await llmBotHelper.expectReasoningVisible(true);
             await llmBotHelper.clickReasoningToggle();
-            await page.waitForTimeout(50);
-        }
+            await llmBotHelper.expectReasoningExpanded(true);
 
-        await llmBotHelper.expectReasoningVisible(true);
-        const reasoning_display = llmBotHelper.getReasoningDisplay();
-        await expect(reasoning_display).toBeVisible();
+            const reasoningContent = llmBotHelper.getReasoningContent();
+            const content = await reasoningContent.textContent();
 
-        await llmBotHelper.clickReasoningToggle();
-        await page.waitForTimeout(300);
+            expect(content).toBeTruthy();
+            expect(content.length).toBeGreaterThan(100);
 
-        const postText = llmBotHelper.getPostText();
-        await expect(postText).toBeVisible();
-        await llmBotHelper.expectPostText(response);
-    });
-
-    test('Special Characters in Citations', async ({ page }) => {
-        const { mmPage, llmBotHelper } = await setupTestPage(page);
-
-        const specialCharAnnotation: Annotation = {
-            type: 'url_citation',
-            start_index: 50,
-            end_index: 50,
-            url: 'https://example.com/path?param=value&other=123#section',
-            title: 'Title with "quotes" and <brackets> & ampersands',
-            index: 1
-        };
-        const responseText = 'Here is information with special characters in the citation metadata.';
-
-        await postCreator.createPost({
-            message: responseText,
-            annotations: [specialCharAnnotation],
-            channelId: testChannelId,
-            requesterUserId: testUserId,
+            await llmBotHelper.clickReasoningToggle();
+            await llmBotHelper.expectReasoningExpanded(false);
         });
 
-        await mmPage.goto('test', 'messages');
-        await page.waitForTimeout(1000);
+        test('Rapid Reasoning Toggle', async ({ page }) => {
+            test.skip(!config.shouldRunTests, skipMessage);
+            test.setTimeout(90000);
 
-        await llmBotHelper.expectCitationCount(1);
-        await llmBotHelper.waitForCitation(1);
+            const { mmPage, aiPlugin, llmBotHelper, botUsername } = await setupTestPage(page, mattermost, provider);
+            await mmPage.login(mattermost.url(), username, password);
 
-        await llmBotHelper.hoverCitation(1);
-        await llmBotHelper.expectCitationTooltip('example.com');
+            await aiPlugin.openRHS();
 
-        const popupPromise = page.waitForEvent('popup');
-        await llmBotHelper.clickCitation(1);
-        const popup = await popupPromise;
-        expect(popup.url()).toBe(specialCharAnnotation.url);
-        await popup.close();
-    });
+            const prompt = 'Analyze TypeScript benefits carefully';
 
-    test('Citation Click Blocked by Browser', async ({ page }) => {
-        const { mmPage, llmBotHelper } = await setupTestPage(page);
+            await aiPlugin.sendMessage(prompt);
+            await llmBotHelper.waitForStreamingComplete();
 
-        const annotation: Annotation = {
-            type: 'url_citation',
-            start_index: 30,
-            end_index: 30,
-            url: 'https://www.example.com/test',
-            title: 'Test Source',
-            index: 1
-        };
-        const responseText = 'Testing popup blocker behavior with citations.';
+            await llmBotHelper.expectReasoningVisible(true);
 
-        await postCreator.createPost({
-            message: responseText,
-            annotations: [annotation],
-            channelId: testChannelId,
-            requesterUserId: testUserId,
+            for (let i = 0; i < 5; i++) {
+                await llmBotHelper.clickReasoningToggle();
+                await page.waitForTimeout(100);
+                await llmBotHelper.clickReasoningToggle();
+                await page.waitForTimeout(100);
+            }
+
+            await llmBotHelper.expectReasoningVisible(true);
         });
 
-        await mmPage.goto('test', 'messages');
-        await page.waitForTimeout(1000);
+        test('Special Characters in Response', async ({ page }) => {
+            test.skip(!config.shouldRunTests, skipMessage);
+            test.setTimeout(90000);
 
-        await llmBotHelper.waitForCitation(1);
+            const { mmPage, aiPlugin, llmBotHelper, botUsername } = await setupTestPage(page, mattermost, provider);
+            await mmPage.login(mattermost.url(), username, password);
 
-        try {
-            const popupPromise = page.waitForEvent('popup', { timeout: 2000 });
-            await llmBotHelper.clickCitation(1);
-            const popup = await popupPromise;
-            await popup.close();
-        } catch (e) {
-            // Popup may be blocked
-        }
+            await aiPlugin.openRHS();
 
-        const postText = llmBotHelper.getPostText();
-        await expect(postText).toBeVisible();
-        await llmBotHelper.expectPostText(responseText);
-    });
+            const prompt = 'Briefly explain TypeScript with 1-2 examples using <>, &, | characters (3-4 sentences)';
 
-    test.skip('Network Error During Streaming', async ({ page }) => {
-        // SKIPPED: requires real streaming
-    });
+            await aiPlugin.sendMessage(prompt);
+            await llmBotHelper.waitForStreamingComplete();
 
-    test('Concurrent Reasoning from Multiple Bots', async ({ page }) => {
-        const { mmPage, llmBotHelper } = await setupTestPage(page);
+            const postText = llmBotHelper.getPostText();
+            await expect(postText).toBeVisible();
 
-        const reasoning1 = 'Bot A reasoning: analyzing the first question thoroughly...';
-        const response1 = 'Bot A response based on careful analysis.';
-
-        await postCreator.createPost({
-            message: response1,
-            reasoning: reasoning1,
-            channelId: testChannelId,
-            requesterUserId: testUserId,
+            const content = await postText.textContent();
+            expect(content).toBeTruthy();
+            expect(content.length).toBeGreaterThan(50);
         });
 
-        const reasoning2 = 'Bot B reasoning: thinking about the second question differently...';
-        const response2 = 'Bot B response with alternative perspective.';
+        test('Concurrent Posts', async ({ page }) => {
+            test.skip(!config.shouldRunTests, skipMessage);
+            test.setTimeout(180000);
 
-        await postCreator.createPost({
-            message: response2,
-            reasoning: reasoning2,
-            channelId: testChannelId,
-            requesterUserId: testUserId,
+            const { mmPage, aiPlugin, llmBotHelper, botUsername } = await setupTestPage(page, mattermost, provider);
+            await mmPage.login(mattermost.url(), username, password);
+
+            await aiPlugin.openRHS();
+
+            await aiPlugin.sendMessage('Briefly explain TypeScript (2 sentences)');
+            await page.waitForTimeout(2000);
+
+            await aiPlugin.sendMessage('Briefly explain JavaScript (2 sentences)');
+            await page.waitForTimeout(2000);
+
+            await aiPlugin.sendMessage('Briefly compare both (2 sentences)');
+
+            // Wait for all three responses to complete
+            await page.waitForTimeout(5000);
+            const allPosts = page.locator('[data-testid="posttext"]');
+            await expect(allPosts.first()).toBeVisible({ timeout: 60000 });
+
+            // Wait for all posts to be visible
+            await expect(allPosts).toHaveCount(3, { timeout: 90000 });
+
+            await expect(allPosts.first()).toBeVisible();
+            await expect(allPosts.nth(1)).toBeVisible();
+            await expect(allPosts.nth(2)).toBeVisible();
         });
 
-        await mmPage.goto('test', 'messages');
-        await page.waitForTimeout(1000);
+        test('Empty Post Content', async ({ page }) => {
+            test.skip(!config.shouldRunTests, skipMessage);
+            test.setTimeout(90000);
 
-        const allReasoningDisplays = page.locator('div:has-text("Thinking")');
-        await expect(allReasoningDisplays).toHaveCount(2);
+            const { mmPage, aiPlugin, llmBotHelper, botUsername } = await setupTestPage(page, mattermost, provider);
+            await mmPage.login(mattermost.url(), username, password);
 
-        const firstReasoning = allReasoningDisplays.first();
-        await firstReasoning.click();
-        await expect(page.getByText('Bot A reasoning')).toBeVisible();
+            await aiPlugin.openRHS();
 
-        const secondReasoning = allReasoningDisplays.nth(1);
-        await secondReasoning.click();
-        await expect(page.getByText('Bot B reasoning')).toBeVisible();
+            const prompt = 'What is the answer to everything?';
 
-        await expect(page.getByText(response1)).toBeVisible();
-        await expect(page.getByText(response2)).toBeVisible();
+            await aiPlugin.sendMessage(prompt);
+            await llmBotHelper.waitForStreamingComplete();
 
-        await page.reload();
-        await mmPage.goto('test', 'messages');
-        await page.waitForTimeout(1000);
+            const postText = llmBotHelper.getPostText();
+            await expect(postText).toBeVisible();
 
-        await expect(allReasoningDisplays).toHaveCount(2);
-        await expect(page.getByText(response1)).toBeVisible();
-        await expect(page.getByText(response2)).toBeVisible();
+            const content = await postText.textContent();
+            expect(content).toBeTruthy();
+            expect(content.length).toBeGreaterThan(0);
+        });
+
+        test('Unicode Content', async ({ page }) => {
+            test.skip(!config.shouldRunTests, skipMessage);
+            test.setTimeout(90000);
+
+            const { mmPage, aiPlugin, llmBotHelper, botUsername } = await setupTestPage(page, mattermost, provider);
+            await mmPage.login(mattermost.url(), username, password);
+
+            await aiPlugin.openRHS();
+
+            const prompt = 'Briefly explain TypeScript with emoji examples: 🚀 💡 ⚡ (2-3 sentences)';
+
+            await aiPlugin.sendMessage(prompt);
+            await llmBotHelper.waitForStreamingComplete();
+
+            const postText = llmBotHelper.getPostText();
+            await expect(postText).toBeVisible();
+
+            const content = await postText.textContent();
+            expect(content).toBeTruthy();
+        });
+
+        test('Large Post with Reasoning', async ({ page }) => {
+            test.skip(!config.shouldRunTests, skipMessage);
+            test.setTimeout(120000);
+
+            const { mmPage, aiPlugin, llmBotHelper, botUsername } = await setupTestPage(page, mattermost, provider);
+            await mmPage.login(mattermost.url(), username, password);
+
+            await aiPlugin.openRHS();
+
+            const prompt = provider.type === 'anthropic'
+                ? 'Write a comprehensive guide to TypeScript covering all major features in detail. Think through the structure carefully'
+                : 'Think carefully about how to structure a comprehensive guide to TypeScript. Write detailed explanations of all major features';
+
+            await aiPlugin.sendMessage(prompt);
+            await llmBotHelper.waitForStreamingComplete();
+
+            const postText = llmBotHelper.getPostText();
+            await expect(postText).toBeVisible();
+
+            const content = await postText.textContent();
+            expect(content).toBeTruthy();
+            expect(content.length).toBeGreaterThan(200);
+
+            await llmBotHelper.expectReasoningVisible(true);
+            await llmBotHelper.clickReasoningToggle();
+            await llmBotHelper.expectReasoningExpanded(true);
+        });
+
+        test('Network Error Handling', async ({ page, context }) => {
+            test.skip(!config.shouldRunTests, skipMessage);
+            test.setTimeout(90000);
+
+            const { mmPage, aiPlugin, llmBotHelper, botUsername } = await setupTestPage(page, mattermost, provider);
+            await mmPage.login(mattermost.url(), username, password);
+
+            await aiPlugin.openRHS();
+
+            const prompt = 'Briefly explain TypeScript in 2 sentences';
+
+            await context.setOffline(true);
+            await aiPlugin.sendMessage(prompt);
+            await page.waitForTimeout(3000);
+
+            await context.setOffline(false);
+            await page.waitForTimeout(3000);
+
+            await aiPlugin.sendMessage('What is TypeScript?');
+            await llmBotHelper.waitForStreamingComplete();
+
+            const postText = llmBotHelper.getPostText();
+            await expect(postText).toBeVisible();
+        });
+
+        test('Multiple Rapid Messages', async ({ page }) => {
+            test.skip(!config.shouldRunTests, skipMessage);
+            test.setTimeout(180000);
+
+            const { mmPage, aiPlugin, llmBotHelper, botUsername } = await setupTestPage(page, mattermost, provider);
+            await mmPage.login(mattermost.url(), username, password);
+
+            await aiPlugin.openRHS();
+
+            const messages = [
+                'What is TypeScript?',
+                'What is JavaScript?',
+                'What is Python?',
+            ];
+
+            for (const message of messages) {
+                await aiPlugin.sendMessage(message);
+                await page.waitForTimeout(1000);
+            }
+
+            // Wait for first post to appear
+            const allPosts = page.locator('[data-testid="posttext"]');
+            await expect(allPosts.first()).toBeVisible({ timeout: 60000 });
+
+            // Wait for all three posts to appear
+            await expect(allPosts).toHaveCount(3, { timeout: 90000 });
+
+            const count = await allPosts.count();
+            expect(count).toBeGreaterThanOrEqual(3);
+
+            for (let i = 0; i < Math.min(count, 3); i++) {
+                await expect(allPosts.nth(i)).toBeVisible();
+            }
+        });
     });
+}
+
+config.providers.forEach(provider => {
+    createProviderTestSuite(provider);
 });

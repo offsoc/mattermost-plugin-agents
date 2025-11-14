@@ -11,21 +11,22 @@ import { createBotConfigHelper, generateBotId } from 'helpers/bot-config';
 const username = 'regularuser';
 const password = 'regularuser';
 
-let mattermost: MattermostContainer;
-let openAIMock: OpenAIMockContainer;
+function createTestSuite() {
+    let mattermost: MattermostContainer;
+    let openAIMock: OpenAIMockContainer;
 
-// Common test setup
-async function setupTestPage(page) {
-    const mmPage = new MattermostPage(page);
-    const aiPlugin = new AIPlugin(page);
-    const url = mattermost.url();
+    // Common test setup
+    async function setupTestPage(page) {
+        const mmPage = new MattermostPage(page);
+        const aiPlugin = new AIPlugin(page);
+        const url = mattermost.url();
 
-    await mmPage.login(url, username, password);
+        await mmPage.login(url, username, password);
 
-    return { mmPage, aiPlugin };
-}
+        return { mmPage, aiPlugin };
+    }
 
-test.describe('Reasoning Configuration Tests', () => {
+    test.describe('Reasoning Configuration Tests', () => {
     // Setup for all tests in the file
     test.beforeAll(async () => {
         mattermost = await RunContainer();
@@ -327,4 +328,7 @@ test.describe('Reasoning Configuration Tests', () => {
             await botConfig.deleteService('reasoning-persist-test');
         });
     });
-});
+    });
+}
+
+createTestSuite();
