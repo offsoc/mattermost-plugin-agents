@@ -52,7 +52,10 @@ export class AIPlugin {
   }
 
   async waitForBotResponse(expectedText: string) {
-    await expect(this.page.getByText(expectedText)).toBeVisible();
+    // Scope to RHS container to avoid matching text elsewhere on the page
+    const rhsContainer = this.page.getByTestId('mattermost-ai-rhs');
+    // For duplicate responses in loops, use first() to match the first occurrence
+    await expect(rhsContainer.getByText(expectedText).first()).toBeVisible();
   }
 
   async expectTextInTextarea(text: string) {
@@ -69,7 +72,7 @@ export class AIPlugin {
   }
 
   async clickChatHistoryItem(index: number = 0) {
-    const threadItems = this.threadsListContainer.locator('div').first();
+    const threadItems = this.threadsListContainer.locator('div');
     await threadItems.nth(index).click();
   }
 

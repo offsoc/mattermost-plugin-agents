@@ -68,6 +68,27 @@ export class MattermostPage {
 
 		await this.page.getByText('Mark as Unread').click();
     }
+
+    async goto(team: string, view: string) {
+        // Navigate to team and open AI messages view
+        if (view === 'messages') {
+            // Open the AI RHS messages view
+            const appBarIcon = this.page.locator('#app-bar-icon-mattermost-ai');
+            await appBarIcon.waitFor({ state: 'visible', timeout: 10000 });
+
+            // Check if RHS is already open
+            const rhsContainer = this.page.getByTestId('mattermost-ai-rhs');
+            const isRHSVisible = await rhsContainer.isVisible().catch(() => false);
+
+            if (!isRHSVisible) {
+                await appBarIcon.click();
+                await rhsContainer.waitFor({ state: 'visible', timeout: 10000 });
+            }
+
+            // Wait a bit for posts to load
+            await this.page.waitForTimeout(500);
+        }
+    }
 }
 
 // Legacy function for backward compatibility
