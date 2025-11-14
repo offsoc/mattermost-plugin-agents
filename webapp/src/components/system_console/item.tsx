@@ -100,19 +100,25 @@ export const ComboboxItem = (props: ComboboxItemProps) => {
     const listId = `${props.label.replace(/\s+/g, '-').toLowerCase()}-datalist`;
     const inputRef = useRef<HTMLInputElement>(null);
 
-    const handleIconClick = () => {
+    const showDropdown = () => {
         if (inputRef.current) {
             inputRef.current.focus();
-            // Trigger the datalist by simulating user input
-            const event = new Event('input', {bubbles: true});
-            inputRef.current.dispatchEvent(event);
-        }
-    };
 
-    const handleInputClick = () => {
-        if (inputRef.current) {
-            // Show the datalist on first click
-            inputRef.current.showPicker?.();
+            // Trigger datalist by temporarily clearing and restoring value
+            const currentValue = inputRef.current.value;
+            inputRef.current.value = '';
+
+            // Dispatch input event to trigger datalist
+            const inputEvent = new Event('input', {bubbles: true});
+            inputRef.current.dispatchEvent(inputEvent);
+
+            // Small delay to allow datalist to appear, then restore value
+            setTimeout(() => {
+                if (inputRef.current) {
+                    inputRef.current.value = currentValue;
+                    inputRef.current.setSelectionRange(currentValue.length, currentValue.length);
+                }
+            }, 0);
         }
     };
 
@@ -127,11 +133,12 @@ export const ComboboxItem = (props: ComboboxItemProps) => {
                         type='text'
                         placeholder={props.placeholder || props.label}
                         onChange={props.onChange}
-                        onClick={handleInputClick}
+                        onClick={showDropdown}
+                        onFocus={showDropdown}
                         list={listId}
                         autoComplete='off'
                     />
-                    <ComboboxChevron onClick={handleIconClick}>
+                    <ComboboxChevron onClick={showDropdown}>
                         <ChevronDownIcon size={18}/>
                     </ComboboxChevron>
                     <datalist id={listId}>
