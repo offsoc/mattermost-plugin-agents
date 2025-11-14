@@ -65,9 +65,21 @@ const ServiceFields = (props: ServiceFieldsProps) => {
     // Determine if we should support model fetching for this service type
     const supportsModelFetching = type === 'anthropic' || type === 'openai' || type === 'azure' || type === 'openaicompatible';
 
-    // Fetch models when API key changes for supported service types
+    // Fetch models when API key or URL changes for supported service types
     useEffect(() => {
-        if (!supportsModelFetching || !props.service.apiKey) {
+        if (!supportsModelFetching) {
+            setAvailableModels([]);
+            setModelsFetchError('');
+            return;
+        }
+
+        // For openaicompatible, API key is optional if there's an API URL
+        // For other types, API key is required
+        const hasRequiredCredentials = type === 'openaicompatible'
+            ? (props.service.apiKey || props.service.apiURL)
+            : props.service.apiKey;
+
+        if (!hasRequiredCredentials) {
             setAvailableModels([]);
             setModelsFetchError('');
             return;
@@ -87,7 +99,7 @@ const ServiceFields = (props: ServiceFieldsProps) => {
                 setAvailableModels(data);
             } catch (error) {
                 console.error('Failed to fetch models:', error);
-                setModelsFetchError(intl.formatMessage({defaultMessage: 'Failed to fetch models. Please check your API key.'}));
+                setModelsFetchError(intl.formatMessage({defaultMessage: 'Failed to fetch models. Please check your API key and API URL.'}));
                 setAvailableModels([]);
             } finally {
                 setLoadingModels(false);
@@ -95,7 +107,7 @@ const ServiceFields = (props: ServiceFieldsProps) => {
         };
 
         loadModels();
-    }, [type, props.service.apiKey, props.service.apiURL, props.service.orgId, supportsModelFetching]);
+    }, [type, props.service.apiKey, props.service.apiURL, props.service.orgId, supportsModelFetching, intl]);
 
     const getDefaultOutputTokenLimit = () => {
         switch (type) {
