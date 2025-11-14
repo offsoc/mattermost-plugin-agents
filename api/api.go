@@ -25,6 +25,7 @@ import (
 	"github.com/mattermost/mattermost-plugin-ai/meetings"
 	"github.com/mattermost/mattermost-plugin-ai/metrics"
 	"github.com/mattermost/mattermost-plugin-ai/mmapi"
+	"github.com/mattermost/mattermost-plugin-ai/openai"
 	"github.com/mattermost/mattermost-plugin-ai/search"
 	"github.com/mattermost/mattermost-plugin-ai/streaming"
 	"github.com/mattermost/mattermost/server/public/model"
@@ -364,6 +365,7 @@ type FetchModelsRequest struct {
 	ServiceType string `json:"serviceType"`
 	APIKey      string `json:"apiKey"`
 	APIURL      string `json:"apiURL"`
+	OrgID       string `json:"orgID"`
 }
 
 func (a *API) handleFetchModels(c *gin.Context) {
@@ -389,6 +391,8 @@ func (a *API) handleFetchModels(c *gin.Context) {
 	switch req.ServiceType {
 	case "anthropic":
 		models, err = anthropic.FetchModels(req.APIKey, a.llmUpstreamHTTPClient)
+	case "openai", "azure", "openaicompatible":
+		models, err = openai.FetchModels(req.APIKey, req.APIURL, req.OrgID, a.llmUpstreamHTTPClient)
 	default:
 		c.AbortWithError(http.StatusBadRequest, fmt.Errorf("model fetching not supported for service type: %s", req.ServiceType))
 		return

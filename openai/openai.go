@@ -1296,3 +1296,44 @@ func getEmbeddingModelConstant(model string) openai.EmbeddingModel {
 func (s *OpenAI) Dimensions() int {
 	return s.config.EmbeddingDimensions
 }
+
+// FetchModels retrieves the list of available models from the OpenAI API
+func FetchModels(apiKey string, apiURL string, orgID string, httpClient *http.Client) ([]llm.ModelInfo, error) {
+	opts := []option.RequestOption{
+		option.WithAPIKey(apiKey),
+		option.WithHTTPClient(httpClient),
+	}
+
+	// Add base URL if provided (for OpenAI Compatible services)
+	if apiURL != "" {
+		opts = append(opts, option.WithBaseURL(strings.TrimSuffix(apiURL, "/")))
+	}
+
+	// Add organization ID if provided
+	if orgID != "" {
+		opts = append(opts, option.WithOrganization(orgID))
+	}
+
+	client := openai.NewClient(opts...)
+
+	// Use AutoPaging to automatically handle pagination
+	autoPager := client.Models.ListAutoPaging(context.Background())
+
+	var models []llm.ModelInfo
+
+	// Iterate through all pages
+	for autoPager.Next() {
+		model := autoPager.Current()
+		models = append(models, llm.ModelInfo{
+			ID:          model.ID,
+			DisplayName: model.ID, // OpenAI doesn't have separate display names
+		})
+	}
+
+	// Check if there was an error during iteration
+	if err := autoPager.Err(); err != nil {
+		return nil, err
+	}
+
+	return models, nil
+}

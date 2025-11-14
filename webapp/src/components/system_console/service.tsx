@@ -66,7 +66,7 @@ const ServiceFields = (props: ServiceFieldsProps) => {
     const [modelsFetchError, setModelsFetchError] = useState<string>('');
 
     // Determine if we should support model fetching for this service type
-    const supportsModelFetching = type === 'anthropic';
+    const supportsModelFetching = type === 'anthropic' || type === 'openai' || type === 'azure' || type === 'openaicompatible';
 
     // Fetch models when API key changes for supported service types
     useEffect(() => {
@@ -88,6 +88,7 @@ const ServiceFields = (props: ServiceFieldsProps) => {
                         serviceType: type,
                         apiKey: props.service.apiKey,
                         apiURL: props.service.apiURL || '',
+                        orgID: props.service.orgId || '',
                     }),
                 }));
 
@@ -107,7 +108,7 @@ const ServiceFields = (props: ServiceFieldsProps) => {
         };
 
         fetchModels();
-    }, [type, props.service.apiKey, props.service.apiURL, supportsModelFetching]);
+    }, [type, props.service.apiKey, props.service.apiURL, props.service.orgId, supportsModelFetching]);
 
     const getDefaultOutputTokenLimit = () => {
         switch (type) {
