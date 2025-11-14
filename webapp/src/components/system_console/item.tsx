@@ -1,9 +1,10 @@
 // Copyright (c) 2023-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
-import React from 'react';
+import React, {useRef} from 'react';
 import styled from 'styled-components';
 import {FormattedMessage} from 'react-intl';
+import {ChevronDownIcon} from '@mattermost/compass-icons/components';
 
 export const ItemList = styled.div`
 	display: grid;
@@ -97,29 +98,53 @@ export type ComboboxItemProps = {
 
 export const ComboboxItem = (props: ComboboxItemProps) => {
     const listId = `${props.label.replace(/\s+/g, '-').toLowerCase()}-datalist`;
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    const handleIconClick = () => {
+        if (inputRef.current) {
+            inputRef.current.focus();
+            // Trigger the datalist by simulating user input
+            const event = new Event('input', {bubbles: true});
+            inputRef.current.dispatchEvent(event);
+        }
+    };
+
+    const handleInputClick = () => {
+        if (inputRef.current) {
+            // Show the datalist on first click
+            inputRef.current.showPicker?.();
+        }
+    };
 
     return (
         <>
             <ItemLabel>{props.label}</ItemLabel>
             <TextFieldContainer>
-                <StyledInput
-                    value={props.value}
-                    type='text'
-                    placeholder={props.placeholder || props.label}
-                    onChange={props.onChange}
-                    list={listId}
-                    autoComplete='off'
-                />
-                <datalist id={listId}>
-                    {props.options.map((option) => (
-                        <option
-                            key={option.id}
-                            value={option.id}
-                        >
-                            {option.displayName}
-                        </option>
-                    ))}
-                </datalist>
+                <ComboboxInputWrapper>
+                    <StyledComboboxInput
+                        ref={inputRef}
+                        value={props.value}
+                        type='text'
+                        placeholder={props.placeholder || props.label}
+                        onChange={props.onChange}
+                        onClick={handleInputClick}
+                        list={listId}
+                        autoComplete='off'
+                    />
+                    <ComboboxChevron onClick={handleIconClick}>
+                        <ChevronDownIcon size={18}/>
+                    </ComboboxChevron>
+                    <datalist id={listId}>
+                        {props.options.map((option) => (
+                            <option
+                                key={option.id}
+                                value={option.id}
+                            >
+                                {option.displayName}
+                            </option>
+                        ))}
+                    </datalist>
+                </ComboboxInputWrapper>
                 {props.helptext &&
                 <HelpText>{props.helptext}</HelpText>
                 }
@@ -171,6 +196,53 @@ export const StyledInput = styled.input<{ as?: string }>`
 		border-color: $66afe9;
 		box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.075), 0 0 8px rgba(102, 175, 233, 0.75);
 		outline: 0;
+	}
+`;
+
+const ComboboxInputWrapper = styled.div`
+	position: relative;
+	display: flex;
+	align-items: center;
+`;
+
+const StyledComboboxInput = styled.input`
+	appearance: none;
+	display: flex;
+	padding: 7px 36px 7px 12px;
+	align-items: flex-start;
+	border-radius: 2px;
+	border: 1px solid rgba(var(--center-channel-color-rgb), 0.16);
+	box-shadow: 0px 1px 1px rgba(0, 0, 0, 0.075) inset;
+	height: 35px;
+	background: white;
+	width: 100%;
+
+	font-size: 14px;
+	font-weight: 400;
+	line-height: 20px;
+
+	&:focus {
+		border-color: #66afe9;
+		box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.075), 0 0 8px rgba(102, 175, 233, 0.75);
+		outline: 0;
+	}
+`;
+
+const ComboboxChevron = styled.div`
+	position: absolute;
+	right: 8px;
+	top: 50%;
+	transform: translateY(-50%);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	color: rgba(var(--center-channel-color-rgb), 0.56);
+	pointer-events: auto;
+	padding: 4px;
+
+	&:hover {
+		color: rgba(var(--center-channel-color-rgb), 0.72);
 	}
 `;
 
