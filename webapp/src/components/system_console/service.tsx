@@ -13,7 +13,7 @@ import IconAI from '../assets/icon_ai';
 
 import {ButtonIcon} from '../assets/buttons';
 
-import {BooleanItem, ItemList, SelectionItem, SelectionItemOption, TextItem} from './item';
+import {BooleanItem, ItemList, SelectionItem, SelectionItemOption, TextItem, ComboboxItem} from './item';
 
 const client = new Client4();
 
@@ -175,40 +175,29 @@ const ServiceFields = (props: ServiceFieldsProps) => {
                     )}
                 </>
             )}
-            {supportsModelFetching && availableModels.length > 0 && (
-                <SelectionItem
-                    label={intl.formatMessage({defaultMessage: 'Select model'})}
+            {supportsModelFetching && availableModels.length > 0 ? (
+                <ComboboxItem
+                    label={intl.formatMessage({defaultMessage: 'Default model'})}
+                    value={props.service.defaultModel}
+                    options={availableModels}
+                    placeholder={intl.formatMessage({defaultMessage: 'Select a model or enter custom model name'})}
+                    onChange={(e) => props.onChange({...props.service, defaultModel: e.target.value})}
+                    helptext={intl.formatMessage({defaultMessage: 'Select from the list or type a custom model name'})}
+                />
+            ) : (
+                <TextItem
+                    label={intl.formatMessage({defaultMessage: 'Default model'})}
                     value={props.service.defaultModel}
                     onChange={(e) => props.onChange({...props.service, defaultModel: e.target.value})}
-                    helptext={intl.formatMessage({defaultMessage: 'Quick selection from available models'})}
-                >
-                    <SelectionItemOption value=''>
-                        {intl.formatMessage({defaultMessage: 'Select a model...'})}
-                    </SelectionItemOption>
-                    {availableModels.map((model) => (
-                        <SelectionItemOption
-                            key={model.id}
-                            value={model.id}
-                        >
-                            {model.displayName}
-                        </SelectionItemOption>
-                    ))}
-                </SelectionItem>
-            )}
-            <TextItem
-                label={intl.formatMessage({defaultMessage: 'Default model'})}
-                value={props.service.defaultModel}
-                onChange={(e) => props.onChange({...props.service, defaultModel: e.target.value})}
-                helptext={
-                    supportsModelFetching && loadingModels ?
-                        intl.formatMessage({defaultMessage: 'Loading models...'}) :
-                        supportsModelFetching && modelsFetchError ?
-                            modelsFetchError :
-                            supportsModelFetching && availableModels.length > 0 ?
-                                intl.formatMessage({defaultMessage: 'You can select from the list above or enter a custom model name'}) :
+                    helptext={
+                        supportsModelFetching && loadingModels ?
+                            intl.formatMessage({defaultMessage: 'Loading models...'}) :
+                            supportsModelFetching && modelsFetchError ?
+                                modelsFetchError :
                                 undefined
-                }
-            />
+                    }
+                />
+            )}
             <TextItem
                 label={intl.formatMessage({defaultMessage: 'Input token limit'})}
                 type='number'

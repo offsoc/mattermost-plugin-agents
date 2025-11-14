@@ -81,6 +81,53 @@ export const SelectionItem = (props: SelectionItemProps) => {
 export const SelectionItemOption = styled.option`
 `;
 
+export type ComboboxOption = {
+    id: string
+    displayName: string
+}
+
+export type ComboboxItemProps = {
+    label: string
+    value: string
+    options: ComboboxOption[]
+    placeholder?: string
+    helptext?: string
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+};
+
+export const ComboboxItem = (props: ComboboxItemProps) => {
+    const listId = `${props.label.replace(/\s+/g, '-').toLowerCase()}-datalist`;
+
+    return (
+        <>
+            <ItemLabel>{props.label}</ItemLabel>
+            <TextFieldContainer>
+                <StyledInput
+                    value={props.value}
+                    type='text'
+                    placeholder={props.placeholder || props.label}
+                    onChange={props.onChange}
+                    list={listId}
+                    autoComplete='off'
+                />
+                <datalist id={listId}>
+                    {props.options.map((option) => (
+                        <option
+                            key={option.id}
+                            value={option.id}
+                        >
+                            {option.displayName}
+                        </option>
+                    ))}
+                </datalist>
+                {props.helptext &&
+                <HelpText>{props.helptext}</HelpText>
+                }
+            </TextFieldContainer>
+        </>
+    );
+};
+
 export const ItemLabel = styled.label`
 	font-size: 14px;
 	font-weight: 600;
