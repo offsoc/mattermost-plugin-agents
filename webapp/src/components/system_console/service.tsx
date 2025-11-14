@@ -11,8 +11,9 @@ import IconAI from '../assets/icon_ai';
 
 import {ButtonIcon} from '../assets/buttons';
 
-import {BooleanItem, ItemList, SelectionItem, SelectionItemOption, TextItem, ComboboxItem} from './item';
 import {fetchModels} from '../../client';
+
+import {BooleanItem, ItemList, SelectionItem, SelectionItemOption, TextItem, ComboboxItem} from './item';
 
 export type LLMService = {
     id: string
@@ -67,19 +68,11 @@ const ServiceFields = (props: ServiceFieldsProps) => {
 
     // Fetch models when API key or URL changes for supported service types
     useEffect(() => {
-        if (!supportsModelFetching) {
-            setAvailableModels([]);
-            setModelsFetchError('');
-            return;
-        }
-
         // For openaicompatible, API key is optional if there's an API URL
         // For other types, API key is required
-        const hasRequiredCredentials = type === 'openaicompatible'
-            ? (props.service.apiKey || props.service.apiURL)
-            : props.service.apiKey;
+        const hasRequiredCredentials = type === 'openaicompatible' ? (props.service.apiKey || props.service.apiURL) : props.service.apiKey;
 
-        if (!hasRequiredCredentials) {
+        if (!supportsModelFetching || !hasRequiredCredentials) {
             setAvailableModels([]);
             setModelsFetchError('');
             return;
@@ -94,11 +87,10 @@ const ServiceFields = (props: ServiceFieldsProps) => {
                     type,
                     props.service.apiKey,
                     props.service.apiURL || '',
-                    props.service.orgId || ''
+                    props.service.orgId || '',
                 );
                 setAvailableModels(data);
             } catch (error) {
-                console.error('Failed to fetch models:', error);
                 setModelsFetchError(intl.formatMessage({defaultMessage: 'Failed to fetch models. Please check your API key and API URL.'}));
                 setAvailableModels([]);
             } finally {
@@ -117,6 +109,15 @@ const ServiceFields = (props: ServiceFieldsProps) => {
             return '0';
         }
     };
+
+    let loadModelsHelpText = '';
+    if (supportsModelFetching) {
+        if (loadingModels) {
+            loadModelsHelpText = intl.formatMessage({defaultMessage: 'Loading models...'});
+        } else if (modelsFetchError) {
+            loadModelsHelpText = modelsFetchError;
+        }
+    }
 
     return (
         <>
@@ -189,13 +190,7 @@ const ServiceFields = (props: ServiceFieldsProps) => {
                     label={intl.formatMessage({defaultMessage: 'Default model'})}
                     value={props.service.defaultModel}
                     onChange={(e) => props.onChange({...props.service, defaultModel: e.target.value})}
-                    helptext={
-                        supportsModelFetching && loadingModels ?
-                            intl.formatMessage({defaultMessage: 'Loading models...'}) :
-                            supportsModelFetching && modelsFetchError ?
-                                modelsFetchError :
-                                undefined
-                    }
+                    helptext={loadModelsHelpText}
                 />
             )}
             <TextItem

@@ -110,9 +110,7 @@ export const ComboboxItem = (props: ComboboxItemProps) => {
     }));
 
     // Find current selection or create custom option
-    const currentValue: SelectOption | null = props.value
-        ? selectOptions.find((opt) => opt.value === props.value) || {value: props.value, label: props.value}
-        : null;
+    const currentValue: SelectOption | null = props.value ? selectOptions.find((opt) => opt.value === props.value) || {value: props.value, label: props.value} : null;
 
     const handleChange = (newValue: SingleValue<SelectOption>) => {
         // Create a synthetic event to match the existing onChange signature
@@ -132,9 +130,7 @@ export const ComboboxItem = (props: ComboboxItemProps) => {
             height: '35px',
             borderRadius: '2px',
             borderColor: state.isFocused ? '#66afe9' : 'rgba(var(--center-channel-color-rgb), 0.16)',
-            boxShadow: state.isFocused
-                ? 'inset 0 1px 1px rgba(0, 0, 0, 0.075), 0 0 8px rgba(102, 175, 233, 0.75)'
-                : '0px 1px 1px rgba(0, 0, 0, 0.075) inset',
+            boxShadow: state.isFocused ? 'inset 0 1px 1px rgba(0, 0, 0, 0.075), 0 0 8px rgba(102, 175, 233, 0.75)' : '0px 1px 1px rgba(0, 0, 0, 0.075) inset',
             '&:hover': {
                 borderColor: state.isFocused ? '#66afe9' : 'rgba(var(--center-channel-color-rgb), 0.16)',
             },
@@ -177,7 +173,7 @@ export const ComboboxItem = (props: ComboboxItemProps) => {
                     placeholder={props.placeholder || props.label}
                     styles={selectStyles}
                     isClearable={false}
-                    formatCreateLabel={(inputValue) => `Use custom model: ${inputValue}`}
+                    formatCreateLabel={(inputValue: string) => `Use custom model: ${inputValue}`}
                 />
                 {props.helptext &&
                 <HelpText>{props.helptext}</HelpText>
