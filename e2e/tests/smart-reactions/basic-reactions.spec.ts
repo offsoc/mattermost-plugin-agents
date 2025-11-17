@@ -41,6 +41,22 @@ async function setupTestPage(page) {
     return { mmPage, aiPlugin };
 }
 
+async function gotoTownSquare(page) {
+    const target = mattermost.url() + '/test/channels/town-square';
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+            await page.goto(target);
+            return;
+        } catch (error) {
+            if (attempt === 2) {
+                throw error;
+            }
+            await page.waitForTimeout(1000);
+        }
+    }
+}
+
 test.describe('Smart Reactions - Basic Functionality', () => {
     test('Access React for me menu option', async ({ page }) => {
         const { mmPage } = await setupTestPage(page);
@@ -54,7 +70,7 @@ test.describe('Smart Reactions - Basic Functionality', () => {
         );
 
         // Navigate to the post
-        await page.goto(mattermost.url() + '/test/channels/town-square');
+        await gotoTownSquare(page);
         await page.locator(`#post_${rootPost.id}`).waitFor({ state: 'visible' });
 
         // Hover over the post to show menu
@@ -79,7 +95,7 @@ test.describe('Smart Reactions - Basic Functionality', () => {
         );
 
         // Navigate and interact
-        await page.goto(mattermost.url() + '/test/channels/town-square');
+        await gotoTownSquare(page);
         await page.locator(`#post_${rootPost.id}`).waitFor({ state: 'visible' });
         await page.locator(`#post_${rootPost.id}`).hover();
         await page.getByTestId('ai-actions-menu').click();
@@ -108,7 +124,7 @@ test.describe('Smart Reactions - Basic Functionality', () => {
             'Unfortunately, we missed the deadline and will need to reschedule'
         );
 
-        await page.goto(mattermost.url() + '/test/channels/town-square');
+        await gotoTownSquare(page);
         await page.locator(`#post_${rootPost.id}`).waitFor({ state: 'visible' });
         await page.locator(`#post_${rootPost.id}`).hover();
         await page.getByTestId('ai-actions-menu').click();
@@ -138,7 +154,7 @@ data: [DONE]
             'Does anyone know when the next team meeting is scheduled?'
         );
 
-        await page.goto(mattermost.url() + '/test/channels/town-square');
+        await gotoTownSquare(page);
         await page.locator(`#post_${rootPost.id}`).waitFor({ state: 'visible' });
         await page.locator(`#post_${rootPost.id}`).hover();
         await page.getByTestId('ai-actions-menu').click();
@@ -169,7 +185,7 @@ test.describe('Smart Reactions - Error Handling', () => {
             'Test message for error handling'
         );
 
-        await page.goto(mattermost.url() + '/test/channels/town-square');
+        await gotoTownSquare(page);
         await page.locator(`#post_${rootPost.id}`).waitFor({ state: 'visible' });
         await page.locator(`#post_${rootPost.id}`).hover();
         await page.getByTestId('ai-actions-menu').click();

@@ -18,6 +18,7 @@ export class MattermostPage {
         await this.page.getByPlaceholder('Password').fill(password);
         await this.page.getByPlaceholder("Email or Username").fill(username);
         await this.page.getByTestId('saveSetting').click();
+        await this.page.getByTestId('channel_view').waitFor({state: 'visible', timeout: 30000});
     }
 
     async sendChannelMessage(message: string) {

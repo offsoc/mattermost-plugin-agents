@@ -51,6 +51,27 @@ const RunContainer = async (): Promise<MattermostContainer> => {
 				  "serviceID": "second-service",
 			  },
 		  ],
+		  "embeddingSearchConfig": {
+			  "type": "composite",
+			  "dimensions": 512,
+			  "vectorStore": {
+				  "type": "pgvector",
+				  "parameters": {
+					  "dimensions": 512
+				  }
+			  },
+			  "embeddingProvider": {
+				  "type": "mock",
+				  "parameters": {}
+			  },
+			  "parameters": {},
+			  "chunkingOptions": {
+				  "chunkSize": 500,
+				  "chunkOverlap": 100,
+				  "minChunkSize": 0.75,
+				  "chunkingStrategy": "sentences"
+			  }
+		  }
 	  }
   }
   const mattermost = await new MattermostContainer()

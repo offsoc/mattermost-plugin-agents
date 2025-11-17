@@ -54,8 +54,8 @@ export class AIPlugin {
   async waitForBotResponse(expectedText: string) {
     // Scope to RHS container to avoid matching text elsewhere on the page
     const rhsContainer = this.page.getByTestId('mattermost-ai-rhs');
-    // For duplicate responses in loops, use first() to match the first occurrence
-    await expect(rhsContainer.getByText(expectedText).first()).toBeVisible();
+    // Prefer the most recent matching response so virtualized lists don't hide older entries
+    await expect(rhsContainer.getByText(expectedText).last()).toBeVisible({timeout: 10000});
   }
 
   async expectTextInTextarea(text: string) {

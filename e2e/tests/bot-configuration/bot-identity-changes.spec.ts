@@ -100,6 +100,9 @@ function createTestSuite() {
             displayName: 'Assistant v1'
         });
 
+        await page.reload();
+        await page.waitForLoadState('domcontentloaded');
+
         await aiPlugin.openRHS();
         let botSelector = page.getByTestId('bot-selector-rhs');
         await expect(botSelector).toContainText('Assistant v1');

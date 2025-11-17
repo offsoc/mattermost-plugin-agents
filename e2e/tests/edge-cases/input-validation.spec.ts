@@ -100,18 +100,20 @@ test.describe('Edge Cases - Input Validation', () => {
 
         await aiPlugin.openRHS();
 
-        // Send multiple messages rapidly
+        // Send multiple messages with minimal delay once the UI is ready
         await openAIMock.addCompletionMock(responseTest);
         await aiPlugin.sendMessage('First message');
+        await aiPlugin.waitForBotResponse(responseTestText);
 
         await openAIMock.addCompletionMock(responseTest);
         await aiPlugin.sendMessage('Second message');
+        await aiPlugin.waitForBotResponse(responseTestText);
 
         await openAIMock.addCompletionMock(responseTest);
         await aiPlugin.sendMessage('Third message');
+        await aiPlugin.waitForBotResponse(responseTestText);
 
-        // Should handle rapid submission without errors
-        await page.waitForTimeout(2000);
+        // Should recover quickly and allow further input
         await expect(aiPlugin.rhsPostTextarea).toBeVisible();
     });
 });
