@@ -4,7 +4,13 @@ import MattermostContainer from 'helpers/mmcontainer';
 import { MattermostPage } from 'helpers/mm';
 import { AIPlugin } from 'helpers/ai-plugin';
 import { LLMBotPostHelper } from 'helpers/llmbot-post';
-import { getAPIConfig, getSkipMessage, logAPIConfig } from 'helpers/api-config';
+import {
+    getAPIConfig,
+    getSkipMessage,
+    logAPIConfig,
+    getAvailableProviders,
+    ProviderBundle,
+} from 'helpers/api-config';
 
 /**
  * Test Suite: Edge Cases
@@ -13,8 +19,8 @@ import { getAPIConfig, getSkipMessage, logAPIConfig } from 'helpers/api-config';
  * Runs once per configured provider (OpenAI and/or Anthropic).
  *
  * Environment Variables Required:
- * - ANTHROPIC_API_KEY: To run tests with Anthropic (claude-3-5-haiku)
- * - OPENAI_API_KEY: To run tests with OpenAI (gpt-4o-mini)
+ * - ANTHROPIC_API_KEY: To run tests with Anthropic (claude-3-7-sonnet)
+ * - OPENAI_API_KEY: To run tests with OpenAI (gpt-5)
  *
  * Tests:
  * 1. Empty Reasoning Response
@@ -35,18 +41,17 @@ const password = 'regularuser';
 const config = getAPIConfig();
 const skipMessage = getSkipMessage();
 
-async function setupTestPage(page, mattermost, provider) {
+async function setupTestPage(page, mattermost, provider: ProviderBundle) {
     const mmPage = new MattermostPage(page);
     const aiPlugin = new AIPlugin(page);
     const llmBotHelper = new LLMBotPostHelper(page);
 
-    // Get bot username based on provider
-    const botUsername = provider.type === 'anthropic' ? 'claude' : 'mockbot';
+    const botUsername = provider.bot.name;
 
     return { mmPage, aiPlugin, llmBotHelper, botUsername };
 }
 
-function createProviderTestSuite(provider) {
+function createProviderTestSuite(provider: ProviderBundle) {
     test.describe(`Edge Cases - ${provider.name}`, () => {
         let mattermost: MattermostContainer;
 
@@ -96,7 +101,8 @@ function createProviderTestSuite(provider) {
 
             await aiPlugin.openRHS();
 
-            const prompt = provider.type === 'anthropic'
+            const isAnthropic = provider.service.type === 'anthropic';
+            const prompt = isAnthropic
                 ? 'Analyze in extreme detail all aspects of TypeScript: history, features, type system, interfaces, generics, decorators, compilation, tooling, ecosystem, and future. Think through each aspect carefully'
                 : 'Think very carefully and thoroughly about all aspects of TypeScript including its history, features, type system, interfaces, generics, decorators, compilation process, tooling ecosystem, and future direction. Consider each aspect in great detail';
 
@@ -247,7 +253,8 @@ function createProviderTestSuite(provider) {
 
             await aiPlugin.openRHS();
 
-            const prompt = provider.type === 'anthropic'
+            const isAnthropic = provider.service.type === 'anthropic';
+            const prompt = isAnthropic
                 ? 'Write a comprehensive guide to TypeScript covering all major features in detail. Think through the structure carefully'
                 : 'Think carefully about how to structure a comprehensive guide to TypeScript. Write detailed explanations of all major features';
 
@@ -328,6 +335,7 @@ function createProviderTestSuite(provider) {
     });
 }
 
-config.providers.forEach(provider => {
+const providers = getAvailableProviders();
+providers.forEach(provider => {
     createProviderTestSuite(provider);
 });

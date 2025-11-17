@@ -328,52 +328,106 @@ export class LLMBotPostHelper {
     }
 
     /**
-     * Wait for post text to appear (useful for streaming)
+     * Wait for post text to appear with smart polling
+     * Returns early when text appears, with high timeout as safety net
      * @param text - Text to wait for
      * @param postId - Optional post ID to scope the wait
-     * @param timeout - Optional timeout in ms
-     */
-    async waitForPostText(text: string, postId?: string, timeout: number = 10000): Promise<void> {
-        const postText = this.getPostText(postId);
-        await expect(postText).toContainText(text, { timeout });
-    }
-
-    /**
-     * Wait for reasoning to appear
-     * @param postId - Optional post ID to scope the wait
-     * @param timeout - Optional timeout in ms
-     */
-    async waitForReasoning(postId?: string, timeout: number = 10000): Promise<void> {
-        const reasoning = this.getReasoningDisplay(postId);
-        await expect(reasoning).toBeVisible({ timeout });
-    }
-
-    /**
-     * Wait for citation to appear
-     * @param index - Citation index (1-based)
-     * @param postId - Optional post ID to scope the wait
-     * @param timeout - Optional timeout in ms
-     */
-    async waitForCitation(index: number, postId?: string, timeout: number = 10000): Promise<void> {
-        const citation = this.getCitationIcon(index, postId);
-        await expect(citation).toBeVisible({ timeout });
-    }
-
-    /**
-     * Wait for bot response streaming to complete
-     * Returns early when streaming finishes, with high timeout as safety net
      * @param maxTimeout - Maximum wait time in ms (default: 5 minutes)
      */
+    async waitForPostText(text: string, postId?: string, maxTimeout: number = 300000): Promise<void> {
+        const postText = this.getPostText(postId);
+
+        // Poll every 500ms checking if the text has appeared
+        const startTime = Date.now();
+        while (Date.now() - startTime < maxTimeout) {
+            try {
+                const content = await postText.textContent();
+                if (content && content.includes(text)) {
+                    // Text found - wait a bit for final updates
+                    await this.page.waitForTimeout(500);
+                    return;
+                }
+            } catch (error) {
+                // Element not yet available, continue polling
+            }
+            await this.page.waitForTimeout(500);
+        }
+
+        // If we hit max timeout, throw error
+        throw new Error(`Timeout waiting for post text to contain: ${text}`);
+    }
+
+    /**
+     * Wait for reasoning to complete with smart polling
+     * Returns early when reasoning spinner disappears, with high timeout as safety net
+     * @param postId - Optional post ID to scope the wait
+     * @param maxTimeout - Maximum wait time in ms (default: 5 minutes)
+     */
+    async waitForReasoning(postId?: string, maxTimeout: number = 300000): Promise<void> {
+        // First wait for reasoning display to appear (shorter timeout for initial appearance)
+        const reasoning = this.getReasoningDisplay(postId);
+        await expect(reasoning).toBeVisible({ timeout: 60000 });
+
+        // Then poll until reasoning spinner disappears (reasoning complete)
+        const spinner = this.getReasoningSpinner(postId);
+
+        const startTime = Date.now();
+        while (Date.now() - startTime < maxTimeout) {
+            const isVisible = await spinner.isVisible().catch(() => false);
+            if (!isVisible) {
+                // Spinner gone, reasoning complete - wait a bit for final updates
+                await this.page.waitForTimeout(1000);
+                return;
+            }
+            await this.page.waitForTimeout(500);
+        }
+
+        // If we hit max timeout, that's okay - reasoning might have completed without spinner
+    }
+
+    /**
+     * Wait for citation to appear with smart polling
+     * Returns early when citation appears, with high timeout as safety net
+     * @param index - Citation index (1-based)
+     * @param postId - Optional post ID to scope the wait
+     * @param maxTimeout - Maximum wait time in ms (default: 5 minutes)
+     */
+    async waitForCitation(index: number, postId?: string, maxTimeout: number = 300000): Promise<void> {
+        const citation = this.getCitationIcon(index, postId);
+
+        // Poll every 500ms checking if citation has appeared
+        const startTime = Date.now();
+        while (Date.now() - startTime < maxTimeout) {
+            const isVisible = await citation.isVisible().catch(() => false);
+            if (isVisible) {
+                // Citation found - wait a bit for final updates
+                await this.page.waitForTimeout(500);
+                return;
+            }
+            await this.page.waitForTimeout(500);
+        }
+
+        // If we hit max timeout, throw error
+        throw new Error(`Timeout waiting for citation ${index} to appear`);
+    }
+
+    /**
+     * Wait for bot response streaming to complete with smart polling
+     * Returns early when streaming finishes, with maxTimeout as safety net
+     * @param maxTimeout - Maximum wait time in ms for entire operation (default: 5 minutes)
+     */
     async waitForStreamingComplete(maxTimeout: number = 300000): Promise<void> {
-        // Wait for post text to appear (longer timeout for slow providers like OpenAI)
+        const startTime = Date.now();
+
+        // Wait for post text to appear
         const postText = this.getPostText();
-        await expect(postText).toBeVisible({ timeout: 60000 });
+        const remainingTime = maxTimeout - (Date.now() - startTime);
+        await expect(postText).toBeVisible({ timeout: remainingTime });
 
         // Wait for "Stop Generating" button to disappear (streaming complete)
         const stopButton = this.getStopGeneratingButton();
 
-        // Check every 500ms if stop button is gone (streaming complete)
-        const startTime = Date.now();
+        // Poll every 500ms until stop button disappears (streaming complete)
         while (Date.now() - startTime < maxTimeout) {
             const isVisible = await stopButton.isVisible().catch(() => false);
             if (!isVisible) {

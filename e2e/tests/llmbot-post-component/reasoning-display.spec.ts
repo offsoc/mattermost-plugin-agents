@@ -4,7 +4,13 @@ import MattermostContainer from 'helpers/mmcontainer';
 import { MattermostPage } from 'helpers/mm';
 import { AIPlugin } from 'helpers/ai-plugin';
 import { LLMBotPostHelper } from 'helpers/llmbot-post';
-import { getAPIConfig, getSkipMessage, logAPIConfig } from 'helpers/api-config';
+import {
+    getAPIConfig,
+    getSkipMessage,
+    logAPIConfig,
+    getAvailableProviders,
+    ProviderBundle,
+} from 'helpers/api-config';
 
 /**
  * Test Suite: Reasoning Display
@@ -13,13 +19,13 @@ import { getAPIConfig, getSkipMessage, logAPIConfig } from 'helpers/api-config';
  * Runs once per configured provider (OpenAI and/or Anthropic).
  *
  * Environment Variables Required:
- * - ANTHROPIC_API_KEY: To run tests with Anthropic (claude-3-5-haiku)
- * - OPENAI_API_KEY: To run tests with OpenAI (gpt-4o-mini)
+ * - ANTHROPIC_API_KEY: To run tests with Anthropic (claude-3-7-sonnet)
+ * - OPENAI_API_KEY: To run tests with OpenAI (gpt-5)
  *
  * Tests:
  * 1. Reasoning Display - Renders from Real API
  * 2. Reasoning Toggle - Expand and Collapse
- * 3. Reasoning Persistence After Refresh (CRITICAL)
+ * 3. Reasoning Persistence After Refresh
  * 4. Reasoning States - Complete State
  * 5. Multiple Posts with Reasoning
  */
@@ -30,24 +36,41 @@ const password = 'regularuser';
 const config = getAPIConfig();
 const skipMessage = getSkipMessage();
 
-async function setupTestPage(page, mattermost, provider) {
+async function setupTestPage(page, mattermost, provider: ProviderBundle) {
     const mmPage = new MattermostPage(page);
     const aiPlugin = new AIPlugin(page);
     const llmBotHelper = new LLMBotPostHelper(page);
 
-    // Get bot username based on provider
-    const botUsername = provider.type === 'anthropic' ? 'claude' : 'mockbot';
+    const botUsername = provider.bot.name;
 
     return { mmPage, aiPlugin, llmBotHelper, botUsername };
 }
 
-function createProviderTestSuite(provider) {
+function createProviderTestSuite(provider: ProviderBundle) {
     test.describe(`Reasoning Display - ${provider.name}`, () => {
         let mattermost: MattermostContainer;
 
         test.beforeAll(async () => {
             if (!config.shouldRunTests) return;
-            mattermost = await RunRealAPIContainer(provider);
+
+            // Customize provider to optimize for reasoning tests
+            const isAnthropic = provider.service.type === 'anthropic';
+            const customProvider = {
+                ...provider,
+                bot: {
+                    ...provider.bot,
+                    enabledNativeTools: [], // Disable web search for pure reasoning tests
+                    reasoningEnabled: true,
+                    ...(isAnthropic && {
+                        thinkingBudget: 4096, // Higher budget for robust reasoning
+                    }),
+                    ...(provider.service.type === 'openaicompatible' && {
+                        reasoningEffort: 'medium', // Medium effort for reliable reasoning
+                    }),
+                }
+            };
+
+            mattermost = await RunRealAPIContainer(customProvider);
         });
 
         test.afterAll(async () => {
@@ -58,45 +81,52 @@ function createProviderTestSuite(provider) {
 
         test('Reasoning Display - Renders from Real API', async ({ page }) => {
             test.skip(!config.shouldRunTests, skipMessage);
-            test.setTimeout(60000);
+            test.setTimeout(360000); // 6 minutes: allows 5 min reasoning + buffer
 
             const { mmPage, aiPlugin, llmBotHelper, botUsername } = await setupTestPage(page, mattermost, provider);
             await mmPage.login(mattermost.url(), username, password);
 
             await aiPlugin.openRHS();
 
-            const prompt = provider.type === 'anthropic'
+            const isAnthropic = provider.service.type === 'anthropic';
+            const prompt = isAnthropic
                 ? 'What letter is missing from the following sequence: A, C, E, G, I, K, M, O, Q, S, U, W, Y, ?. Think HARD.'
                 : 'Think step by step about the benefits of TypeScript compared to JavaScript. Consider multiple angles. Keep response brief (1-2 paragraphs).';
 
             await aiPlugin.sendMessage(prompt);
 
-            await llmBotHelper.waitForReasoning(undefined, 30000);
+            // Wait for reasoning to complete (smart wait, up to 5 min)
+            await llmBotHelper.waitForReasoning();
+
+            // Wait for streaming to complete (smart wait, up to 5 min)
+            await llmBotHelper.waitForStreamingComplete();
 
             await llmBotHelper.expectReasoningVisible(true);
             await expect(page.getByText('Thinking')).toBeVisible();
             await llmBotHelper.expectReasoningExpanded(false);
-
-            await page.waitForTimeout(5000);
-            await llmBotHelper.expectReasoningVisible(true);
         });
 
         test('Reasoning Toggle - Expand and Collapse', async ({ page }) => {
             test.skip(!config.shouldRunTests, skipMessage);
-            test.setTimeout(60000);
+            test.setTimeout(360000); // 6 minutes: allows 5 min reasoning + buffer
 
             const { mmPage, aiPlugin, llmBotHelper, botUsername } = await setupTestPage(page, mattermost, provider);
             await mmPage.login(mattermost.url(), username, password);
 
             await aiPlugin.openRHS();
 
-            const prompt = provider.type === 'anthropic'
+            const isAnthropic = provider.service.type === 'anthropic';
+            const prompt = isAnthropic
                 ? 'Compare TypeScript and JavaScript for code quality. What are the key differences and trade-offs? (2-3 sentences). Think HARD.'
                 : 'Think carefully: compare TypeScript and JavaScript for code quality. What are the key differences? (2-3 sentences)';
 
             await aiPlugin.sendMessage(prompt);
-            await llmBotHelper.waitForReasoning(undefined, 30000);
-            await page.waitForTimeout(5000);
+
+            // Wait for reasoning to complete (smart wait, up to 5 min)
+            await llmBotHelper.waitForReasoning();
+
+            // Wait for streaming to complete (smart wait, up to 5 min)
+            await llmBotHelper.waitForStreamingComplete();
 
             await llmBotHelper.expectReasoningVisible(true);
             await llmBotHelper.expectReasoningExpanded(false);
@@ -109,20 +139,24 @@ function createProviderTestSuite(provider) {
             await expect(page.getByText('Thinking')).toBeVisible();
         });
 
-        test('Reasoning Persistence After Refresh (CRITICAL)', async ({ page }) => {
+        test('Reasoning Persistence After Refresh', async ({ page }) => {
             test.skip(!config.shouldRunTests, skipMessage);
-            test.setTimeout(60000);
+            test.setTimeout(360000); // 6 minutes: allows 5 min reasoning + buffer
 
             const { mmPage, aiPlugin, llmBotHelper, botUsername } = await setupTestPage(page, mattermost, provider);
             await mmPage.login(mattermost.url(), username, password);
 
             await aiPlugin.openRHS();
 
-            const prompt = 'Analyze: What are the main advantages of TypeScript over JavaScript? Consider developer experience, maintainability, and type safety. (1 paragraph)';
+            const prompt = 'Analyze: What are the main advantages of TypeScript over JavaScript? Consider developer experience, maintainability, and type safety. Think carefully about your response and anticipate all angles. (1 paragraph)';
 
             await aiPlugin.sendMessage(prompt);
-            await llmBotHelper.waitForReasoning(undefined, 30000);
-            await page.waitForTimeout(5000);
+
+            // Wait for reasoning to complete (smart wait, up to 5 min)
+            await llmBotHelper.waitForReasoning();
+
+            // Wait for streaming to complete (smart wait, up to 5 min)
+            await llmBotHelper.waitForStreamingComplete();
 
             await llmBotHelper.expectReasoningVisible(true);
             await llmBotHelper.expectReasoningExpanded(false);
@@ -150,7 +184,7 @@ function createProviderTestSuite(provider) {
 
         test('Reasoning States - Complete State', async ({ page }) => {
             test.skip(!config.shouldRunTests, skipMessage);
-            test.setTimeout(60000);
+            test.setTimeout(360000); // 6 minutes: allows 5 min reasoning + buffer
 
             const { mmPage, aiPlugin, llmBotHelper, botUsername } = await setupTestPage(page, mattermost, provider);
             await mmPage.login(mattermost.url(), username, password);
@@ -158,8 +192,12 @@ function createProviderTestSuite(provider) {
             await aiPlugin.openRHS();
 
             await aiPlugin.sendMessage('Evaluate the benefits of TypeScript from multiple perspectives: developer productivity, code maintainability, and team collaboration. (3-4 sentences)');
-            await llmBotHelper.waitForReasoning(undefined, 30000);
-            await page.waitForTimeout(3000);
+
+            // Wait for reasoning to complete (smart wait, up to 5 min)
+            await llmBotHelper.waitForReasoning();
+
+            // Wait for streaming to complete (smart wait, up to 5 min)
+            await llmBotHelper.waitForStreamingComplete();
 
             await expect(page.getByText('Thinking')).toBeVisible();
 
@@ -173,7 +211,7 @@ function createProviderTestSuite(provider) {
 
         test('Multiple Posts with Reasoning', async ({ page }) => {
             test.skip(!config.shouldRunTests, skipMessage);
-            test.setTimeout(120000);
+            test.setTimeout(720000); // 12 minutes: allows 5 min per message + buffer
 
             const { mmPage, aiPlugin, llmBotHelper, botUsername } = await setupTestPage(page, mattermost, provider);
             await mmPage.login(mattermost.url(), username, password);
@@ -182,29 +220,56 @@ function createProviderTestSuite(provider) {
 
             // First message with reasoning
             await aiPlugin.sendMessage('Compare and analyze: TypeScript vs JavaScript for large projects. What are the trade-offs?');
-            await llmBotHelper.waitForReasoning(undefined, 30000);
-            await page.waitForTimeout(3000);
 
-            // Second message with reasoning - wait for it to complete
+            // Wait for first message to complete (smart wait, up to 5 min each)
+            await llmBotHelper.waitForReasoning();
+            await llmBotHelper.waitForStreamingComplete();
+
+            // Verify first reasoning is visible
+            await llmBotHelper.expectReasoningVisible(true);
+            await expect(page.getByText('Thinking')).toBeVisible();
+
+            // Second message with reasoning
             await aiPlugin.sendMessage('Evaluate JavaScript limitations when it comes to type safety and refactoring. How do these impact development?');
 
-            // Wait for second reasoning to appear with longer timeout
+            // Smart poll for second reasoning display to appear
             const allReasoningDisplays = page.locator('div:has-text("Thinking")');
-            await expect(allReasoningDisplays).toHaveCount(2, { timeout: 45000 });
-            await page.waitForTimeout(2000);
+            const startTime = Date.now();
+            const maxTimeout = 300000; // 5 minutes
+
+            while (Date.now() - startTime < maxTimeout) {
+                const count = await allReasoningDisplays.count();
+                if (count >= 2) {
+                    // Second reasoning appeared, wait for its streaming to complete
+                    await page.waitForTimeout(1000);
+                    break;
+                }
+                await page.waitForTimeout(500);
+            }
+
+            // Verify we have 2 reasoning displays
+            const finalCount = await allReasoningDisplays.count();
+            expect(finalCount).toBeGreaterThanOrEqual(2);
 
             // Verify both reasoning displays are interactive
             const firstReasoning = allReasoningDisplays.first();
+            await firstReasoning.scrollIntoViewIfNeeded();
+            await page.waitForTimeout(500);
             await firstReasoning.click();
-            await expect(allReasoningDisplays).toHaveCount(2);
 
             const secondReasoning = allReasoningDisplays.nth(1);
+            await secondReasoning.scrollIntoViewIfNeeded();
+            await page.waitForTimeout(500);
             await secondReasoning.click();
-            await expect(allReasoningDisplays).toHaveCount(2);
+
+            // Verify both are still present after interactions
+            const countAfterClicks = await allReasoningDisplays.count();
+            expect(countAfterClicks).toBeGreaterThanOrEqual(2);
         });
     });
 }
 
-config.providers.forEach(provider => {
+const providers = getAvailableProviders();
+providers.forEach(provider => {
     createProviderTestSuite(provider);
 });

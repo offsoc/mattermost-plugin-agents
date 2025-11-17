@@ -4,7 +4,13 @@ import MattermostContainer from 'helpers/mmcontainer';
 import { MattermostPage } from 'helpers/mm';
 import { AIPlugin } from 'helpers/ai-plugin';
 import { LLMBotPostHelper } from 'helpers/llmbot-post';
-import { getAPIConfig, getSkipMessage, logAPIConfig } from 'helpers/api-config';
+import {
+    getAPIConfig,
+    getSkipMessage,
+    logAPIConfig,
+    getAvailableProviders,
+    ProviderBundle,
+} from 'helpers/api-config';
 
 /**
  * Test Suite: Streaming and Persistence
@@ -13,8 +19,8 @@ import { getAPIConfig, getSkipMessage, logAPIConfig } from 'helpers/api-config';
  * Runs once per configured provider (OpenAI and/or Anthropic).
  *
  * Environment Variables Required:
- * - ANTHROPIC_API_KEY: To run tests with Anthropic (claude-3-5-haiku)
- * - OPENAI_API_KEY: To run tests with OpenAI (gpt-4o-mini)
+ * - ANTHROPIC_API_KEY: To run tests with Anthropic (claude-3-7-sonnet)
+ * - OPENAI_API_KEY: To run tests with OpenAI (gpt-5)
  *
  * Tests:
  * 1. Streaming Cursor Display
@@ -30,18 +36,17 @@ const password = 'regularuser';
 const config = getAPIConfig();
 const skipMessage = getSkipMessage();
 
-async function setupTestPage(page, mattermost, provider) {
+async function setupTestPage(page, mattermost, provider: ProviderBundle) {
     const mmPage = new MattermostPage(page);
     const aiPlugin = new AIPlugin(page);
     const llmBotHelper = new LLMBotPostHelper(page);
 
-    // Get bot username based on provider
-    const botUsername = provider.type === 'anthropic' ? 'claude' : 'mockbot';
+    const botUsername = provider.bot.name;
 
     return { mmPage, aiPlugin, llmBotHelper, botUsername };
 }
 
-function createProviderTestSuite(provider) {
+function createProviderTestSuite(provider: ProviderBundle) {
     test.describe(`Streaming and Persistence - ${provider.name}`, () => {
         let mattermost: MattermostContainer;
 
@@ -58,7 +63,7 @@ function createProviderTestSuite(provider) {
 
         test('Streaming Cursor Display', async ({ page }) => {
             test.skip(!config.shouldRunTests, skipMessage);
-            test.setTimeout(90000);
+            test.setTimeout(360000); // 6 minutes: allows 5 min streaming + buffer
 
             const { mmPage, aiPlugin, llmBotHelper, botUsername } = await setupTestPage(page, mattermost, provider);
             await mmPage.login(mattermost.url(), username, password);
@@ -69,14 +74,11 @@ function createProviderTestSuite(provider) {
 
             await aiPlugin.sendMessage(prompt);
 
-            // Wait for post to appear
-            const postText = llmBotHelper.getPostText();
-            await expect(postText).toBeVisible({ timeout: 15000 });
-
-            // Wait for streaming to complete
+            // Wait for streaming to complete (smart wait, up to 5 min)
             await llmBotHelper.waitForStreamingComplete();
 
             // Verify content is present
+            const postText = llmBotHelper.getPostText();
             const content = await postText.textContent();
             expect(content).toBeTruthy();
             expect(content.length).toBeGreaterThan(20);
@@ -84,33 +86,31 @@ function createProviderTestSuite(provider) {
 
         test('Streaming Complete Lifecycle', async ({ page }) => {
             test.skip(!config.shouldRunTests, skipMessage);
-            test.setTimeout(120000);
+            test.setTimeout(360000); // 6 minutes: allows 5 min streaming + buffer
 
             const { mmPage, aiPlugin, llmBotHelper, botUsername } = await setupTestPage(page, mattermost, provider);
             await mmPage.login(mattermost.url(), username, password);
 
             await aiPlugin.openRHS();
 
-            const prompt = provider.type === 'anthropic'
+            const isAnthropic = provider.service.type === 'anthropic';
+            const prompt = isAnthropic
                 ? 'Briefly analyze the benefits of using TypeScript over JavaScript (1 paragraph)'
                 : 'Think carefully and briefly explain the benefits of using TypeScript over JavaScript (1 paragraph)';
 
             await aiPlugin.sendMessage(prompt);
 
-            // Wait for post to appear
-            const postText = llmBotHelper.getPostText();
-            await expect(postText).toBeVisible({ timeout: 30000 });
+            // Wait for reasoning to complete (smart wait, up to 5 min)
+            await llmBotHelper.waitForReasoning();
 
-            // Wait for reasoning to appear
-            await llmBotHelper.waitForReasoning(undefined, 40000);
-
-            // Wait for streaming to complete
+            // Wait for streaming to complete (smart wait, up to 5 min)
             await llmBotHelper.waitForStreamingComplete();
 
             // Verify reasoning is visible
             await llmBotHelper.expectReasoningVisible(true);
 
             // Verify content is present and substantial
+            const postText = llmBotHelper.getPostText();
             const postTextContent = await postText.textContent();
             expect(postTextContent).toBeTruthy();
             expect(postTextContent.length).toBeGreaterThan(50);
@@ -118,7 +118,7 @@ function createProviderTestSuite(provider) {
 
         test('Navigation Persistence', async ({ page }) => {
             test.skip(!config.shouldRunTests, skipMessage);
-            test.setTimeout(90000);
+            test.setTimeout(360000); // 6 minutes: allows 5 min streaming + buffer
 
             const { mmPage, aiPlugin, llmBotHelper, botUsername } = await setupTestPage(page, mattermost, provider);
             await mmPage.login(mattermost.url(), username, password);
@@ -129,7 +129,7 @@ function createProviderTestSuite(provider) {
 
             await aiPlugin.sendMessage(prompt);
 
-            // Wait for streaming to complete before capturing content
+            // Wait for streaming to complete (smart wait, up to 5 min)
             await llmBotHelper.waitForStreamingComplete();
 
             const postTextBefore = llmBotHelper.getPostText();
@@ -153,7 +153,7 @@ function createProviderTestSuite(provider) {
 
         test('Thread View Persistence', async ({ page }) => {
             test.skip(!config.shouldRunTests, skipMessage);
-            test.setTimeout(90000);
+            test.setTimeout(360000); // 6 minutes: allows 5 min streaming + buffer
 
             const { mmPage, aiPlugin, llmBotHelper, botUsername } = await setupTestPage(page, mattermost, provider);
             await mmPage.login(mattermost.url(), username, password);
@@ -164,7 +164,7 @@ function createProviderTestSuite(provider) {
 
             await aiPlugin.sendMessage(prompt);
 
-            // Wait for streaming to complete before capturing content
+            // Wait for streaming to complete (smart wait, up to 5 min)
             await llmBotHelper.waitForStreamingComplete();
 
             const postTextBefore = llmBotHelper.getPostText();
@@ -192,7 +192,7 @@ function createProviderTestSuite(provider) {
 
         test('Stop Generating Button', async ({ page }) => {
             test.skip(!config.shouldRunTests, skipMessage);
-            test.setTimeout(90000);
+            test.setTimeout(360000); // 6 minutes: allows 5 min streaming + buffer
 
             const { mmPage, aiPlugin, llmBotHelper, botUsername } = await setupTestPage(page, mattermost, provider);
             await mmPage.login(mattermost.url(), username, password);
@@ -205,7 +205,7 @@ function createProviderTestSuite(provider) {
 
             // Wait for post to appear
             const postText = llmBotHelper.getPostText();
-            await expect(postText).toBeVisible({ timeout: 15000 });
+            await expect(postText).toBeVisible({ timeout: 60000 });
 
             // Check for stop button with retry logic
             const stopButton = llmBotHelper.getStopGeneratingButton();
@@ -238,6 +238,7 @@ function createProviderTestSuite(provider) {
     });
 }
 
-config.providers.forEach(provider => {
+const providers = getAvailableProviders();
+providers.forEach(provider => {
     createProviderTestSuite(provider);
 });

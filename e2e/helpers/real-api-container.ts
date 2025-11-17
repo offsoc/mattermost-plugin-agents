@@ -1,13 +1,18 @@
 import fs from 'fs';
 import MattermostContainer from './mmcontainer';
-import { ProviderConfig } from './api-config';
+import { LLMService, LLMBotConfig } from './api-config';
 
 /**
  * Container setup for LLMBot tests using REAL APIs
  * No mock containers - plugin calls OpenAI/Anthropic directly
  */
 
-export async function RunRealAPIContainer(provider: ProviderConfig): Promise<MattermostContainer> {
+export interface ContainerConfig {
+    service: LLMService;
+    bot: LLMBotConfig;
+}
+
+export async function RunRealAPIContainer(config: ContainerConfig): Promise<MattermostContainer> {
     let filename = "";
     fs.readdirSync("../dist/").forEach(file => {
         if (file.endsWith(".tar.gz")) {
@@ -15,54 +20,16 @@ export async function RunRealAPIContainer(provider: ProviderConfig): Promise<Mat
         }
     });
 
-    const botName = provider.type === 'anthropic' ? 'claude' : 'mockbot';
-    const serviceConfig: any = {
-        "id": `${provider.name.toLowerCase()}-service`,
-        "name": `${provider.name} Service`,
-        "type": provider.type,
-        "apiKey": provider.apiKey,
-        "apiURL": provider.apiURL,
-        "defaultModel": provider.defaultModel,
-    };
-
-    // Add OpenAI-specific config
-    if (provider.type === 'openaicompatible') {
-        // Use Responses API for reasoning support with o3/o4 models
-        serviceConfig.useResponsesAPI = true;
-        if (provider.reasoningEffort) {
-            serviceConfig.reasoningEffort = provider.reasoningEffort;
-        }
-    }
-
-    const botConfig: any = {
-        "id": `${provider.name.toLowerCase()}-bot-id`,
-        "name": botName,
-        "displayName": `${provider.name} Bot`,
-        "customInstructions": "",
-        "serviceID": serviceConfig.id,
-        "reasoningEnabled": provider.reasoningEnabled,
-        "enabledNativeTools": ["web_search"],
-    };
-
-    // Add Anthropic-specific config
-    if (provider.type === 'anthropic') {
-        if (provider.thinkingBudget) {
-            botConfig.thinkingBudget = provider.thinkingBudget;
-        }
-        // Set maxTokens to ensure it's greater than thinkingBudget
-        serviceConfig.maxTokens = 16384;
-    }
-
     const pluginConfig = {
         "config": {
             "allowPrivateChannels": true,
             "disableFunctionCalls": false,
             "enableLLMTrace": true,
             "enableUserRestrictions": false,
-            "defaultBotName": botName,
+            "defaultBotName": config.bot.name,
             "enableVectorIndex": true,
-            "services": [serviceConfig],
-            "bots": [botConfig],
+            "services": [config.service],
+            "bots": [config.bot],
         }
     };
 

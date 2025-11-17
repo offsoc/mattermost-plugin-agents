@@ -35,3 +35,5 @@ mcpserver/data/
 .mcp.json
 
 node_modules/
+
+specs/
