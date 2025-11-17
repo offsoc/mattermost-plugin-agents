@@ -208,8 +208,16 @@ export default class MattermostContainer {
                     this.logStream.write(data + '\n');
 
                     // Still maintain special console logging for AI plugin
+                    // SECURITY: Sanitize sensitive data before logging
                     if (data.includes('"plugin_id":"mattermost-ai"')) {
-                        console.log(data);
+                        // Remove API keys and sensitive tokens from logs
+                        let sanitized = data
+                            .replace(/"apiKey":"[^"]+"/g, '"apiKey":"[REDACTED]"')
+                            .replace(/"api_key":"[^"]+"/g, '"api_key":"[REDACTED]"')
+                            .replace(/Authorization:\s*Bearer\s+\S+/gi, 'Authorization: Bearer [REDACTED]')
+                            .replace(/sk-[a-zA-Z0-9]{20,}/g, '[REDACTED_API_KEY]')
+                            .replace(/sk-ant-[a-zA-Z0-9_-]{95,}/g, '[REDACTED_ANTHROPIC_KEY]');
+                        console.log(sanitized);
                     }
                 });
             })

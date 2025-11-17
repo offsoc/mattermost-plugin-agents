@@ -37,7 +37,10 @@ export default defineConfig({
     // baseURL: 'http://127.0.0.1:3000',
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
-    trace: 'retain-on-failure',
+    /* SECURITY: Disable traces in CI to prevent leaking API keys in network requests */
+    trace: process.env.CI ? 'off' : 'retain-on-failure',
+    /* SECURITY: Disable screenshots in CI for sensitive tests */
+    screenshot: process.env.CI ? 'off' : 'only-on-failure',
   },
 
   /* Configure projects for major browsers */
