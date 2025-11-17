@@ -7,7 +7,6 @@ import { LLMBotPostHelper } from 'helpers/llmbot-post';
 import {
     getAPIConfig,
     getSkipMessage,
-    logAPIConfig,
     getAvailableProviders,
     ProviderBundle,
 } from 'helpers/api-config';
@@ -52,7 +51,20 @@ function createProviderTestSuite(provider: ProviderBundle) {
 
         test.beforeAll(async () => {
             if (!config.shouldRunTests) return;
-            mattermost = await RunRealAPIContainer(provider);
+
+            // Customize provider to disable web search for streaming tests
+            const customProvider = {
+                ...provider,
+                bot: {
+                    ...provider.bot,
+                    enabledNativeTools: [], // Disable web search - not needed for streaming tests
+                    ...(provider.service.type === 'openaicompatible' && {
+                        reasoningEffort: 'low', // Low effort for more consistent reasoning
+                    }),
+                }
+            };
+
+            mattermost = await RunRealAPIContainer(customProvider);
         });
 
         test.afterAll(async () => {
