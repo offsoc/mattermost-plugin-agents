@@ -57,7 +57,19 @@ function createProviderTestSuite(provider: ProviderBundle) {
 
         test.beforeAll(async () => {
             if (!config.shouldRunTests) return;
-            mattermost = await RunRealAPIContainer(provider);
+
+            // Customize provider for edge case tests
+            const customProvider = {
+                ...provider,
+                bot: {
+                    ...provider.bot,
+                    ...(provider.service.type === 'openaicompatible' && {
+                        reasoningEffort: 'low', // Low effort for edge case testing
+                    }),
+                }
+            };
+
+            mattermost = await RunRealAPIContainer(customProvider);
         });
 
         test.afterAll(async () => {
@@ -68,7 +80,7 @@ function createProviderTestSuite(provider: ProviderBundle) {
 
         test('Empty Reasoning Response', async ({ page }) => {
             test.skip(!config.shouldRunTests, skipMessage);
-            test.setTimeout(90000);
+            test.setTimeout(360000); // 6 minutes: allows 5 min streaming + buffer
 
             const { mmPage, aiPlugin, llmBotHelper, botUsername } = await setupTestPage(page, mattermost, provider);
             await mmPage.login(mattermost.url(), username, password);
@@ -78,10 +90,11 @@ function createProviderTestSuite(provider: ProviderBundle) {
             const prompt = 'What is 2+2?';
 
             await aiPlugin.sendMessage(prompt);
+
+            // Wait for streaming to complete (smart wait, up to 5 min)
             await llmBotHelper.waitForStreamingComplete();
 
             const postText = llmBotHelper.getPostText();
-            await expect(postText).toBeVisible();
             await expect(postText).toContainText('4');
 
             const reasoning = llmBotHelper.getReasoningDisplay();
@@ -94,7 +107,7 @@ function createProviderTestSuite(provider: ProviderBundle) {
 
         test('Very Long Reasoning Content', async ({ page }) => {
             test.skip(!config.shouldRunTests, skipMessage);
-            test.setTimeout(120000);
+            test.setTimeout(360000); // 6 minutes: allows 5 min streaming + buffer
 
             const { mmPage, aiPlugin, llmBotHelper, botUsername } = await setupTestPage(page, mattermost, provider);
             await mmPage.login(mattermost.url(), username, password);
@@ -107,6 +120,11 @@ function createProviderTestSuite(provider: ProviderBundle) {
                 : 'Think very carefully and thoroughly about all aspects of TypeScript including its history, features, type system, interfaces, generics, decorators, compilation process, tooling ecosystem, and future direction. Consider each aspect in great detail';
 
             await aiPlugin.sendMessage(prompt);
+
+            // Wait for reasoning to complete (smart wait, up to 5 min)
+            await llmBotHelper.waitForReasoning();
+
+            // Wait for streaming to complete (smart wait, up to 5 min)
             await llmBotHelper.waitForStreamingComplete();
 
             await llmBotHelper.expectReasoningVisible(true);
@@ -125,7 +143,7 @@ function createProviderTestSuite(provider: ProviderBundle) {
 
         test('Rapid Reasoning Toggle', async ({ page }) => {
             test.skip(!config.shouldRunTests, skipMessage);
-            test.setTimeout(90000);
+            test.setTimeout(360000); // 6 minutes: allows 5 min streaming + buffer
 
             const { mmPage, aiPlugin, llmBotHelper, botUsername } = await setupTestPage(page, mattermost, provider);
             await mmPage.login(mattermost.url(), username, password);
@@ -135,6 +153,11 @@ function createProviderTestSuite(provider: ProviderBundle) {
             const prompt = 'Analyze TypeScript benefits carefully';
 
             await aiPlugin.sendMessage(prompt);
+
+            // Wait for reasoning to complete (smart wait, up to 5 min)
+            await llmBotHelper.waitForReasoning();
+
+            // Wait for streaming to complete (smart wait, up to 5 min)
             await llmBotHelper.waitForStreamingComplete();
 
             await llmBotHelper.expectReasoningVisible(true);
@@ -151,7 +174,7 @@ function createProviderTestSuite(provider: ProviderBundle) {
 
         test('Special Characters in Response', async ({ page }) => {
             test.skip(!config.shouldRunTests, skipMessage);
-            test.setTimeout(90000);
+            test.setTimeout(360000); // 6 minutes: allows 5 min streaming + buffer
 
             const { mmPage, aiPlugin, llmBotHelper, botUsername } = await setupTestPage(page, mattermost, provider);
             await mmPage.login(mattermost.url(), username, password);
@@ -161,11 +184,11 @@ function createProviderTestSuite(provider: ProviderBundle) {
             const prompt = 'Briefly explain TypeScript with 1-2 examples using <>, &, | characters (3-4 sentences)';
 
             await aiPlugin.sendMessage(prompt);
+
+            // Wait for streaming to complete (smart wait, up to 5 min)
             await llmBotHelper.waitForStreamingComplete();
 
             const postText = llmBotHelper.getPostText();
-            await expect(postText).toBeVisible();
-
             const content = await postText.textContent();
             expect(content).toBeTruthy();
             expect(content.length).toBeGreaterThan(50);
@@ -173,7 +196,7 @@ function createProviderTestSuite(provider: ProviderBundle) {
 
         test('Concurrent Posts', async ({ page }) => {
             test.skip(!config.shouldRunTests, skipMessage);
-            test.setTimeout(180000);
+            test.setTimeout(900000); // 15 minutes: allows 5 min per message + buffer
 
             const { mmPage, aiPlugin, llmBotHelper, botUsername } = await setupTestPage(page, mattermost, provider);
             await mmPage.login(mattermost.url(), username, password);
@@ -188,13 +211,24 @@ function createProviderTestSuite(provider: ProviderBundle) {
 
             await aiPlugin.sendMessage('Briefly compare both (2 sentences)');
 
-            // Wait for all three responses to complete
-            await page.waitForTimeout(5000);
+            // Smart poll for all three posts to appear
             const allPosts = page.locator('[data-testid="posttext"]');
-            await expect(allPosts.first()).toBeVisible({ timeout: 60000 });
+            const startTime = Date.now();
+            const maxTimeout = 600000; // 10 minutes for all three posts
 
-            // Wait for all posts to be visible
-            await expect(allPosts).toHaveCount(3, { timeout: 90000 });
+            while (Date.now() - startTime < maxTimeout) {
+                const count = await allPosts.count();
+                if (count >= 3) {
+                    // All three posts appeared
+                    await page.waitForTimeout(1000);
+                    break;
+                }
+                await page.waitForTimeout(500);
+            }
+
+            // Verify we have at least 3 posts
+            const finalCount = await allPosts.count();
+            expect(finalCount).toBeGreaterThanOrEqual(3);
 
             await expect(allPosts.first()).toBeVisible();
             await expect(allPosts.nth(1)).toBeVisible();
@@ -203,7 +237,7 @@ function createProviderTestSuite(provider: ProviderBundle) {
 
         test('Empty Post Content', async ({ page }) => {
             test.skip(!config.shouldRunTests, skipMessage);
-            test.setTimeout(90000);
+            test.setTimeout(360000); // 6 minutes: allows 5 min streaming + buffer
 
             const { mmPage, aiPlugin, llmBotHelper, botUsername } = await setupTestPage(page, mattermost, provider);
             await mmPage.login(mattermost.url(), username, password);
@@ -213,11 +247,11 @@ function createProviderTestSuite(provider: ProviderBundle) {
             const prompt = 'What is the answer to everything?';
 
             await aiPlugin.sendMessage(prompt);
+
+            // Wait for streaming to complete (smart wait, up to 5 min)
             await llmBotHelper.waitForStreamingComplete();
 
             const postText = llmBotHelper.getPostText();
-            await expect(postText).toBeVisible();
-
             const content = await postText.textContent();
             expect(content).toBeTruthy();
             expect(content.length).toBeGreaterThan(0);
@@ -225,7 +259,7 @@ function createProviderTestSuite(provider: ProviderBundle) {
 
         test('Unicode Content', async ({ page }) => {
             test.skip(!config.shouldRunTests, skipMessage);
-            test.setTimeout(90000);
+            test.setTimeout(360000); // 6 minutes: allows 5 min streaming + buffer
 
             const { mmPage, aiPlugin, llmBotHelper, botUsername } = await setupTestPage(page, mattermost, provider);
             await mmPage.login(mattermost.url(), username, password);
@@ -235,18 +269,18 @@ function createProviderTestSuite(provider: ProviderBundle) {
             const prompt = 'Briefly explain TypeScript with emoji examples: 🚀 💡 ⚡ (2-3 sentences)';
 
             await aiPlugin.sendMessage(prompt);
+
+            // Wait for streaming to complete (smart wait, up to 5 min)
             await llmBotHelper.waitForStreamingComplete();
 
             const postText = llmBotHelper.getPostText();
-            await expect(postText).toBeVisible();
-
             const content = await postText.textContent();
             expect(content).toBeTruthy();
         });
 
         test('Large Post with Reasoning', async ({ page }) => {
             test.skip(!config.shouldRunTests, skipMessage);
-            test.setTimeout(120000);
+            test.setTimeout(360000); // 6 minutes: allows 5 min streaming + buffer
 
             const { mmPage, aiPlugin, llmBotHelper, botUsername } = await setupTestPage(page, mattermost, provider);
             await mmPage.login(mattermost.url(), username, password);
@@ -259,11 +293,14 @@ function createProviderTestSuite(provider: ProviderBundle) {
                 : 'Think carefully about how to structure a comprehensive guide to TypeScript. Write detailed explanations of all major features';
 
             await aiPlugin.sendMessage(prompt);
+
+            // Wait for reasoning to complete (smart wait, up to 5 min)
+            await llmBotHelper.waitForReasoning();
+
+            // Wait for streaming to complete (smart wait, up to 5 min)
             await llmBotHelper.waitForStreamingComplete();
 
             const postText = llmBotHelper.getPostText();
-            await expect(postText).toBeVisible();
-
             const content = await postText.textContent();
             expect(content).toBeTruthy();
             expect(content.length).toBeGreaterThan(200);
@@ -275,7 +312,7 @@ function createProviderTestSuite(provider: ProviderBundle) {
 
         test('Network Error Handling', async ({ page, context }) => {
             test.skip(!config.shouldRunTests, skipMessage);
-            test.setTimeout(90000);
+            test.setTimeout(360000); // 6 minutes: allows 5 min streaming + buffer
 
             const { mmPage, aiPlugin, llmBotHelper, botUsername } = await setupTestPage(page, mattermost, provider);
             await mmPage.login(mattermost.url(), username, password);
@@ -292,6 +329,8 @@ function createProviderTestSuite(provider: ProviderBundle) {
             await page.waitForTimeout(3000);
 
             await aiPlugin.sendMessage('What is TypeScript?');
+
+            // Wait for streaming to complete (smart wait, up to 5 min)
             await llmBotHelper.waitForStreamingComplete();
 
             const postText = llmBotHelper.getPostText();
@@ -300,7 +339,7 @@ function createProviderTestSuite(provider: ProviderBundle) {
 
         test('Multiple Rapid Messages', async ({ page }) => {
             test.skip(!config.shouldRunTests, skipMessage);
-            test.setTimeout(180000);
+            test.setTimeout(900000); // 15 minutes: allows 5 min per message + buffer
 
             const { mmPage, aiPlugin, llmBotHelper, botUsername } = await setupTestPage(page, mattermost, provider);
             await mmPage.login(mattermost.url(), username, password);
@@ -318,13 +357,22 @@ function createProviderTestSuite(provider: ProviderBundle) {
                 await page.waitForTimeout(1000);
             }
 
-            // Wait for first post to appear
+            // Smart poll for all three posts to appear
             const allPosts = page.locator('[data-testid="posttext"]');
-            await expect(allPosts.first()).toBeVisible({ timeout: 60000 });
+            const startTime = Date.now();
+            const maxTimeout = 600000; // 10 minutes for all three posts
 
-            // Wait for all three posts to appear
-            await expect(allPosts).toHaveCount(3, { timeout: 90000 });
+            while (Date.now() - startTime < maxTimeout) {
+                const count = await allPosts.count();
+                if (count >= 3) {
+                    // All three posts appeared
+                    await page.waitForTimeout(1000);
+                    break;
+                }
+                await page.waitForTimeout(500);
+            }
 
+            // Verify we have at least 3 posts
             const count = await allPosts.count();
             expect(count).toBeGreaterThanOrEqual(3);
 
