@@ -45,7 +45,7 @@ jobs:
         retention-days: 30
 
   e2e-llmbot-real-apis:
-    timeout-minutes: 90
+    timeout-minutes: 180
     runs-on: ubuntu-latest
     defaults:
       run:
