@@ -808,6 +808,29 @@ func (s *OpenAI) streamResponsesAPIToChannels(params openai.ChatCompletionNewPar
 			}
 			return
 
+		case "response.incomplete":
+			// Response was incomplete (e.g., max tokens reached before completion)
+			// Emit usage event for tracking, then return an error
+
+			// Emit usage event if available (usage counts regardless of completion)
+			if event.Response.Usage.InputTokens > 0 || event.Response.Usage.OutputTokens > 0 {
+				usage := llm.TokenUsage{
+					InputTokens:  event.Response.Usage.InputTokens,
+					OutputTokens: event.Response.Usage.OutputTokens,
+				}
+				output <- llm.TextStreamEvent{
+					Type:  llm.EventTypeUsage,
+					Value: usage,
+				}
+			}
+
+			// Return an error so the user knows the response was truncated
+			output <- llm.TextStreamEvent{
+				Type:  llm.EventTypeError,
+				Value: errors.New("response incomplete: max tokens reached before completion"),
+			}
+			return
+
 		case "error":
 			// Error event
 			var errorMsg string
@@ -871,8 +894,8 @@ func (s *OpenAI) convertToResponseParams(params openai.ChatCompletionNewParams, 
 	}
 
 	// Add reasoning parameters for models that support it
-	// Check if reasoning is enabled for this bot
-	if s.config.ReasoningEnabled {
+	// Check if reasoning is enabled for this bot and not explicitly disabled for this request
+	if s.config.ReasoningEnabled && !cfg.ReasoningDisabled {
 		// Determine reasoning effort
 		var effort shared.ReasoningEffort
 		switch s.config.ReasoningEffort {
