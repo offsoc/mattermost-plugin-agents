@@ -151,6 +151,7 @@ func modifyCompletionRequestWithRequest(params openai.ChatCompletionNewParams, i
 	if !cfg.ToolsDisabled && internalRequest.Context.Tools != nil {
 		params.Tools = toolsToOpenAITools(internalRequest.Context.Tools.GetTools())
 	}
+
 	return params
 }
 
