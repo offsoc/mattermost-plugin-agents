@@ -126,6 +126,8 @@ func IsValidService(service ServiceConfig) bool {
 		return service.APIKey != ""
 	case ServiceTypeCohere:
 		return service.APIKey != ""
+	case ServiceTypeMistral:
+		return service.APIKey != ""
 	default:
 		return false
 	}

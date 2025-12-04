@@ -36,6 +36,7 @@ const mapServiceTypeToDisplayName = new Map<string, string>([
     ['azure', 'Azure'],
     ['anthropic', 'Anthropic'],
     ['cohere', 'Cohere'],
+    ['mistral', 'Mistral'],
     ['asage', 'asksage (Experimental)'],
 ]);
 
@@ -56,8 +57,9 @@ type ServiceFieldsProps = {
 const ServiceFields = (props: ServiceFieldsProps) => {
     const type = props.service.type;
     const intl = useIntl();
-    const isOpenAIType = type === 'openai' || type === 'openaicompatible' || type === 'azure' || type === 'cohere';
+    const isOpenAIType = type === 'openai' || type === 'openaicompatible' || type === 'azure' || type === 'cohere' || type === 'mistral';
     const isCohere = type === 'cohere';
+    const isMistral = type === 'mistral';
 
     const [availableModels, setAvailableModels] = useState<ModelInfo[]>([]);
     const [loadingModels, setLoadingModels] = useState(false);
@@ -136,6 +138,7 @@ const ServiceFields = (props: ServiceFieldsProps) => {
                 <SelectionItemOption value='openaicompatible'>{'OpenAI Compatible'}</SelectionItemOption>
                 <SelectionItemOption value='azure'>{'Azure'}</SelectionItemOption>
                 <SelectionItemOption value='cohere'>{'Cohere'}</SelectionItemOption>
+                <SelectionItemOption value='mistral'>{'Mistral'}</SelectionItemOption>
                 <SelectionItemOption value='asage'>{'asksage (Experimental)'}</SelectionItemOption>
             </SelectionItem>
             {(type === 'openaicompatible' || type === 'azure' || type === 'asage') && (
@@ -153,7 +156,7 @@ const ServiceFields = (props: ServiceFieldsProps) => {
             />
             {isOpenAIType && (
                 <>
-                    {!isCohere && (
+                    {!isCohere && !isMistral && (
                         <TextItem
                             label={intl.formatMessage({defaultMessage: 'Organization ID'})}
                             value={props.service.orgId}
