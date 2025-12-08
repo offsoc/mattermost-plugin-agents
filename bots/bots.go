@@ -11,6 +11,7 @@ import (
 
 	"github.com/mattermost/mattermost-plugin-ai/anthropic"
 	"github.com/mattermost/mattermost-plugin-ai/asage"
+	"github.com/mattermost/mattermost-plugin-ai/bedrock"
 	"github.com/mattermost/mattermost-plugin-ai/config"
 	"github.com/mattermost/mattermost-plugin-ai/enterprise"
 	"github.com/mattermost/mattermost-plugin-ai/llm"
@@ -189,6 +190,12 @@ func (b *MMBots) getLLM(serviceConfig llm.ServiceConfig, botConfig llm.BotConfig
 		result = openai.NewAzure(config.OpenAIConfigFromServiceConfig(serviceConfig, botConfig), b.llmUpstreamHTTPClient)
 	case llm.ServiceTypeAnthropic:
 		result = anthropic.New(serviceConfig, botConfig, b.llmUpstreamHTTPClient)
+	case llm.ServiceTypeBedrock:
+		var err error
+		result, err = bedrock.New(serviceConfig, b.llmUpstreamHTTPClient)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Bedrock client: %w", err)
+		}
 	case llm.ServiceTypeASage:
 		result = asage.New(serviceConfig, b.llmUpstreamHTTPClient)
 	case llm.ServiceTypeCohere:
