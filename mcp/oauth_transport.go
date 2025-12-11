@@ -17,6 +17,7 @@ type authenticationTransport struct {
 	serverName string
 	serverURL  string
 	manager    *OAuthManager
+	base       http.RoundTripper
 }
 
 type mcpUnauthorized struct {
@@ -53,7 +54,7 @@ func (t *authenticationTransport) RoundTrip(req *http.Request) (*http.Response, 
 		return nil, fmt.Errorf("failed to load token: %w", err)
 	}
 
-	transport := http.DefaultTransport
+	transport := t.base
 
 	// Include the token if found
 	if token != nil {
